@@ -250,6 +250,36 @@ final class ActivityLog
         return $result;
     }
 
+    /**
+     * Purge ciblée (administration) : supprime les entrées correspondant aux filtres (mêmes clés que paginate)
+     * et éventuellement plus anciennes que $olderThanDays. Retourne le nombre d'entrées supprimées.
+     *
+     * @param array<string, mixed> $filters
+     */
+    public function purgeBy(array $filters, ?int $olderThanDays = null): int
+    {
+        [$whereSql, $params] = $this->where($filters);
+        if ($olderThanDays !== null && $olderThanDays > 0) {
+            $whereSql .= ' AND occurred_at < :older';
+            $params['older'] = Clock::utc(Clock::now()->modify('-' . $olderThanDays . ' days'));
+        }
+        if ($whereSql === '1 = 1') {
+            $whereSql = '1 = 1'; // purge totale explicite : autorisée mais journalisée par l'appelant
+        }
+        return $this->db->delete('activity_log', $whereSql, $params);
+    }
+
+    /** Nombre d'entrées correspondant aux filtres (aperçu avant purge). @param array<string, mixed> $filters */
+    public function countBy(array $filters, ?int $olderThanDays = null): int
+    {
+        [$whereSql, $params] = $this->where($filters);
+        if ($olderThanDays !== null && $olderThanDays > 0) {
+            $whereSql .= ' AND occurred_at < :older';
+            $params['older'] = Clock::utc(Clock::now()->modify('-' . $olderThanDays . ' days'));
+        }
+        return $this->db->count("SELECT COUNT(*) FROM activity_log WHERE $whereSql", $params);
+    }
+
     /** Purge des entrées plus anciennes que la rétention ; les entrées debug ont une rétention propre (jours). */
     public function purge(int $retentionMonths, int $debugRetentionDays = 7): int
     {

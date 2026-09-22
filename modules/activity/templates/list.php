@@ -118,6 +118,60 @@ $pageQuery = $filters->toQuery(true);
         </div>
     </form>
 
+    <?php if (!empty($canPurge)): ?>
+        <details class="card card--compact activity__purge">
+            <summary class="card__header activity__purge-summary">
+                <span class="card__title"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Purger des entrées (administration)</span>
+            </summary>
+            <form class="card__body" data-action="purge-entries" novalidate>
+                <p class="text-muted text-small mb-2">Suppression définitive et journalisée. Indépendante des filtres ci-dessus : choisissez ici les critères. Les rétentions automatiques (12 mois, 7 jours pour le débogage) continuent de s’appliquer.</p>
+                <div class="activity__filters-grid">
+                    <div class="field">
+                        <label class="field__label" for="purge-category">Catégorie</label>
+                        <select class="select select--sm" id="purge-category" name="purge_category">
+                            <option value="">Toutes</option>
+                            <?php foreach (\Atelier\Activity\ActivityLog::categoryLabels() as $code => $label): ?>
+                                <option value="<?= $e($code) ?>"<?= $code === 'debug' ? ' selected' : '' ?>><?= $e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="purge-result">Résultat</label>
+                        <select class="select select--sm" id="purge-result" name="purge_result">
+                            <option value="">Tous</option>
+                            <?php foreach ($results as $code => [$label]): ?>
+                                <option value="<?= $e($code) ?>"><?= $e($label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="purge-module">Module</label>
+                        <select class="select select--sm" id="purge-module" name="purge_module">
+                            <option value="">Tous</option>
+                            <?php foreach ($modules as $moduleId): ?>
+                                <option value="<?= $e($moduleId) ?>"><?= $e($moduleId) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="purge-older">Plus anciennes que (jours)</label>
+                        <input class="input input--sm" type="number" id="purge-older" name="older_than" min="0" max="3650" placeholder="ex. 30">
+                        <span class="field__error"></span>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="purge-confirm">Confirmation</label>
+                        <input class="input input--sm" type="text" id="purge-confirm" name="confirm" placeholder="Tapez PURGER" autocomplete="off">
+                        <span class="field__error"></span>
+                    </div>
+                </div>
+                <div class="toolbar mb-0">
+                    <button type="button" class="btn btn--sm" data-action="purge-preview" data-params="{}" title="Compter les entrées concernées sans rien supprimer"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg> Compter</button>
+                    <button type="submit" class="btn btn--sm btn--danger"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Purger</button>
+                </div>
+            </form>
+        </details>
+    <?php endif; ?>
+
     <?php if ($rows === []): ?>
         <?= $module->renderCore('state', [
             'type' => 'empty',

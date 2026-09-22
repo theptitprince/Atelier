@@ -10,6 +10,16 @@ Référentiel de points géographiques nommés (WGS 84), partagé entre les util
 - Rattachement d'une information : recherche dans les jeux de données partagés que l'utilisateur peut lire, relation typée `located_at` (information → point).
 - Import CSV (en-têtes reconnus sans accent ni casse, coordonnées en deux colonnes ou une seule), export CSV, corbeille avec restauration et purge automatique (`trash.retention_days`).
 
+## Corbeille
+
+Un point supprimé (`deleted_at`) reste `trash.retention_days` jours (30 par défaut) en corbeille ; ses tags, relations et rattachements de pièces jointes sont conservés jusqu'à la purge. Le hook `purge()` (`console maintenance:purge`) le supprime physiquement ensuite et le retire du registre commun.
+
+- **Vue du module** (`trash`, droit `delete`) : liste des points en corbeille avec « Restaurer » (action `restore`) et « Supprimer » (action `purge`) ; bouton « Voir toute la corbeille » vers le module Corbeille s'il est actif.
+- **Corbeille globale** : la classe d'entrée implémente `Atelier\Modules\TrashProviderInterface`. `trashItems()` expose les points non expirés (jeu `geo.point`, libellé « Nom [code] », `purge_at` = suppression + rétention, `deleted_by` inconnu → `null`) ; `restoreTrashItem()` et `purgeTrashItem()` réutilisent exactement la logique des actions du module (revérification du droit `delete`, `NotFoundException` si le point n'est pas en corbeille, retrait du registre commun à la purge). Les points étant communs à tous les utilisateurs autorisés, restaurer comme purger exigent `delete`, comme dans la vue du module.
+- Journal d'activité : `geo.delete`, `geo.restore`, `geo.purge` (le message précise « depuis la corbeille globale » le cas échéant).
+
+Le module ne dépend pas du module `trash` : sa propre corbeille fonctionne sans lui.
+
 ## Droits
 
 | Permission | Effet |

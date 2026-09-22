@@ -16,6 +16,7 @@ final class SharedServices
         public readonly RelationService $relations,
         public readonly AttachmentService $attachments,
         public readonly DatasetCatalog $catalog,
+        public readonly ?AttachmentFolderService $folders = null,
     ) {
     }
 }

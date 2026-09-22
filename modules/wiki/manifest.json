@@ -1,7 +1,7 @@
 {
   "id": "wiki",
   "name": "Pages",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Pages de type wiki reliées entre elles, avec images et fichiers joints, tags partagés, lieux GPS et historique des versions",
   "author": "Atelier",
   "icon": "book",

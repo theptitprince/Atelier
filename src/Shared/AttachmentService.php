@@ -74,7 +74,7 @@ final class AttachmentService
      * @param array<string, mixed> $upload
      * @return array<string, mixed> métadonnées enregistrées
      */
-    public function store(array $upload, ?string $infoId, ?int $userId, ?string $description = null): array
+    public function store(array $upload, ?string $infoId, ?int $userId, ?string $description = null, ?string $label = null): array
     {
         $this->assertUploadOk($upload);
         $tmp = (string) $upload['tmp_name'];
@@ -118,9 +118,32 @@ final class AttachmentService
             'description' => $description !== null && $description !== '' ? $description : null,
             'downloads' => 0,
             'last_downloaded_at' => null,
+            'label' => self::cleanLabel($label),
         ];
         $this->db->insert('attachments', $record);
         return $record;
+    }
+
+    /** Nom d'affichage : libellé libre s'il existe, sinon nom de fichier d'origine. @param array<string, mixed> $attachment */
+    public static function displayName(array $attachment): string
+    {
+        $label = trim((string) ($attachment['label'] ?? ''));
+        return $label !== '' ? $label : (string) ($attachment['original_name'] ?? 'fichier');
+    }
+
+    public static function cleanLabel(?string $label): ?string
+    {
+        if ($label === null) {
+            return null;
+        }
+        $label = trim(preg_replace('/\s+/u', ' ', $label) ?? $label);
+        return $label === '' ? null : mb_substr($label, 0, 200, 'UTF-8');
+    }
+
+    /** Modifie le nom d'affichage seul. */
+    public function setLabel(string $id, ?string $label): void
+    {
+        $this->db->update('attachments', ['label' => self::cleanLabel($label)], 'id = :id', ['id' => $id]);
     }
 
     /**
@@ -311,8 +334,11 @@ final class AttachmentService
         $this->db->update('attachments', ['info_id' => $infoId], 'id = :id', ['id' => $id]);
     }
 
-    public function rename(string $id, string $originalName, ?string $description): void
+    public function rename(string $id, string $originalName, ?string $description, ?string $label = null): void
     {
+        if ($label !== null) {
+            $this->setLabel($id, $label);
+        }
         $originalName = Files::sanitizeFilename($originalName);
         $this->db->update('attachments', ['original_name' => $originalName, 'description' => $description !== null && $description !== '' ? $description : null], 'id = :id', ['id' => $id]);
     }
@@ -464,9 +490,32 @@ final class AttachmentService
         if (isset($filters['linked'])) {
             $where[] = $filters['linked'] ? 'a.info_id IS NOT NULL' : 'a.info_id IS NULL';
         }
+        // Dossiers virtuels : 'root' = fichiers non rangés, un identifiant = ce dossier seul, folder_ids = dossier et sous-dossiers.
+        if (isset($filters['folder_id']) && $filters['folder_id'] !== '') {
+            if ($filters['folder_id'] === 'root') {
+                $where[] = 'a.folder_id IS NULL';
+            } else {
+                $where[] = 'a.folder_id = :folder_id';
+                $params['folder_id'] = (int) $filters['folder_id'];
+            }
+        }
+        if (!empty($filters['folder_ids']) && is_array($filters['folder_ids'])) {
+            $placeholders = [];
+            foreach (array_values($filters['folder_ids']) as $i => $folderId) {
+                $placeholders[] = ':fid' . $i;
+                $params['fid' . $i] = (int) $folderId;
+            }
+            $where[] = 'a.folder_id IN (' . implode(', ', $placeholders) . ')';
+        }
+        // Tag partagé porté par le fichier lui-même (le fichier est inscrit au registre sous attachments.file / son identifiant).
+        if (!empty($filters['tag'])) {
+            $where[] = "EXISTS (SELECT 1 FROM info_registry fr INNER JOIN info_tags fit ON fit.info_id = fr.id INNER JOIN tags ft ON ft.id = fit.tag_id
+                        WHERE fr.dataset_code = 'attachments.file' AND fr.local_key = a.id AND ft.scope = 'shared' AND ft.normalized = :ftag)";
+            $params['ftag'] = \Atelier\Support\Str::normalizeTag((string) $filters['tag']);
+        }
         $search = trim((string) ($filters['search'] ?? ''));
         if ($search !== '') {
-            $where[] = '(' . $this->db->lower('a.original_name') . ' LIKE :search OR ' . $this->db->lower("COALESCE(a.description, '')") . ' LIKE :search OR ' . $this->db->lower("COALESCE(r.label, '')") . ' LIKE :search)';
+            $where[] = '(' . $this->db->lower('a.original_name') . ' LIKE :search OR ' . $this->db->lower("COALESCE(a.label, '')") . ' LIKE :search OR ' . $this->db->lower("COALESCE(a.description, '')") . ' LIKE :search OR ' . $this->db->lower("COALESCE(r.label, '')") . ' LIKE :search)';
             $params['search'] = '%' . mb_strtolower($search, 'UTF-8') . '%';
         }
         $kind = (string) ($filters['kind'] ?? '');

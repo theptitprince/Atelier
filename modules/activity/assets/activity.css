@@ -8,3 +8,9 @@
 .module-activity .activity__cell-message { max-width: 420px; }
 .module-activity .activity__detail dd { min-width: 0; overflow-wrap: anywhere; }
 .module-activity .activity__details { margin: 0; padding: var(--sp-2) var(--sp-3); background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--radius); font-size: var(--fs-xs); max-height: 420px; overflow: auto; white-space: pre-wrap; }
+
+/* Purge ciblée (administration) */
+.module-activity .activity__purge { margin-bottom: var(--sp-3); }
+.module-activity .activity__purge-summary { cursor: pointer; list-style: none; }
+.module-activity .activity__purge-summary::-webkit-details-marker { display: none; }
+.module-activity .activity__purge[open] .activity__purge-summary { border-bottom: 1px solid var(--c-border); }
