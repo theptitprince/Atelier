@@ -180,6 +180,8 @@ Le manifeste peut déclarer `"keepAlive": true` si un module a réellement besoi
 3. activation depuis l’administration des modules (ou `console modules:set <id> active`) ;
 4. attribution des droits dans le module Utilisateurs et ACL.
 
-Hooks optionnels de la classe : `install(ModuleContext $ctx)`, `seed(): string` (données de démonstration), `purge(): string` (rétention), `service(): ?object`.
+Hooks optionnels de la classe : `install(ModuleContext $ctx)`, `seed(): string` (données de démonstration), `purge(): string` (rétention), `cron(): string` (tâche de fond appelée par `console cron:run`, à planifier toutes les 5 à 15 minutes avec `cron.sh` / `cron.bat` ; chaque module y borne lui-même son travail en nombre et en durée), `service(): ?object`.
+
+Un module qui dépend du cron peut lire la date de la dernière exécution (`$this->ctx->settings->get('cron.last_run', null, 'core')`) pour signaler une planification absente.
 
 Un manifeste invalide n’empêche que le module concerné : il apparaît en erreur dans la colonne et dans l’administration avec le détail des erreurs.

@@ -1,0 +1,21 @@
+/* Styles propres au module Pages, limités à sa racine. */
+.module-wiki .wiki__layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-wiki .wiki__side .card { margin-bottom: var(--sp-3); }
+.module-wiki .wiki__article { margin-bottom: 0; }
+.module-wiki .wiki__content { font-size: var(--fs-lg); line-height: 1.6; overflow-wrap: anywhere; }
+.module-wiki .wiki__content h1, .module-wiki .wiki__content h2, .module-wiki .wiki__content h3 { margin-top: var(--sp-4); }
+.module-wiki .wiki__link { border-bottom: 1px dotted currentColor; }
+.module-wiki .wiki__link--missing { color: var(--c-danger); }
+.module-wiki .wiki__image { max-width: 100%; height: auto; border-radius: var(--radius); border: 1px solid var(--c-border); display: block; margin: var(--sp-2) 0; }
+.module-wiki .wiki__figure { display: inline-block; max-width: 100%; }
+.module-wiki .wiki__file { display: inline-flex; align-items: center; gap: var(--sp-1); padding: 2px var(--sp-2); border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-surface-2); }
+.module-wiki .wiki__point { display: inline-flex; align-items: center; gap: 2px; }
+.module-wiki .wiki__missing-file { color: var(--c-warning); font-style: italic; }
+.module-wiki .wiki__title { font-weight: 500; }
+.module-wiki .wiki__cell-excerpt { max-width: 420px; }
+.module-wiki .wiki__title-input { font-size: var(--fs-xl); font-weight: 600; }
+.module-wiki .wiki__content-input { font-family: inherit; }
+.module-wiki .wiki__picker { border: 1px solid var(--c-border); border-radius: var(--radius); max-height: 220px; overflow: auto; margin-top: var(--sp-2); }
+.module-wiki .wiki__picker .list__item { cursor: pointer; font-size: var(--fs-sm); }
+.module-wiki .wiki__picker .list__item:hover { background: var(--c-accent-soft); }
+.module-wiki .wiki__points .list__item { font-size: var(--fs-sm); padding: var(--sp-1) var(--sp-2); }

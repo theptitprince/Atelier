@@ -36,6 +36,7 @@ final class Console
         'backup:list' => ['backupList', 'Liste les sauvegardes disponibles'],
         'backup:restore' => ['backupRestore', 'Restaure une sauvegarde : backup:restore <nom> (--force requis)'],
         'maintenance:purge' => ['purge', 'Applique les rétentions (journal d’activité, journaux techniques, corbeille)'],
+        'cron:run' => ['cronRun', 'Exécute les tâches de fond des modules (hook cron()) ; à planifier toutes les 5 à 15 minutes'],
         'attachments:verify' => ['attachmentsVerify', 'Vérifie l’intégrité de toutes les pièces jointes (authentification du chiffré, empreinte SHA-256)'],
         'attachments:encrypt' => ['attachmentsEncrypt', 'Chiffre les pièces jointes encore stockées en clair'],
         'mariadb:export' => ['mariadbExport', 'Exporte les données SQLite vers une base MariaDB configurée : mariadb:export --to=config/env.mariadb.php'],
@@ -352,6 +353,56 @@ final class Console
             }
         }
         return 0;
+    }
+
+    /**
+     * Tâches de fond : chaque module actif exposant cron(): string est appelé à tour de rôle
+     * (récupération de flux, envois, calculs différés). Un verrou évite deux exécutions simultanées ;
+     * la date et le compte rendu de la dernière exécution sont conservés dans les paramètres
+     * (cron.last_run, cron.last_report, portée core) pour que les modules puissent signaler
+     * une planification absente.
+     */
+    private function cronRun(): int
+    {
+        $lockFile = $this->app->config->path('tmp') . '/cron.lock';
+        Files::ensureDirectory(dirname($lockFile));
+        $lock = @fopen($lockFile, 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+            $this->error('Une exécution cron:run est déjà en cours (verrou ' . $lockFile . ').');
+            return 1;
+        }
+        $start = microtime(true);
+        $this->app->synchronizer()->syncIfNeeded();
+        $report = [];
+        $failures = 0;
+        foreach ($this->app->modules->all() as $descriptor) {
+            if (!$descriptor->isUsable()) {
+                continue;
+            }
+            $module = $this->app->modules->instance($descriptor->id);
+            if (!method_exists($module, 'cron') || (new \ReflectionMethod($module, 'cron'))->getNumberOfRequiredParameters() !== 0) {
+                continue;
+            }
+            $moduleStart = microtime(true);
+            try {
+                $module->boot($this->app->context(\Atelier\Http\Request::create('GET', '/')));
+                $summary = (string) $module->cron();
+                $report[$descriptor->id] = ['ok' => true, 'summary' => $summary, 'seconds' => round(microtime(true) - $moduleStart, 1)];
+                $this->line(sprintf('  %-14s %s (%.1f s)', $descriptor->id, $summary, microtime(true) - $moduleStart));
+            } catch (Throwable $e) {
+                $failures++;
+                $report[$descriptor->id] = ['ok' => false, 'summary' => $e->getMessage(), 'seconds' => round(microtime(true) - $moduleStart, 1)];
+                $this->app->logger->exception($e, 'CRON-' . strtoupper($descriptor->id));
+                $this->error(sprintf('  %-14s %s', $descriptor->id, $e->getMessage()));
+            }
+        }
+        $this->app->settings->set('cron.last_run', Clock::utc(), 'core');
+        $this->app->settings->set('cron.last_report', Json::encode($report), 'core');
+        $this->app->activity->record('core', 'console.cron', $failures === 0 ? ActivityLog::SUCCESS : ActivityLog::FAILURE, null, sprintf('cron:run : %d module(s), %d échec(s), %.1f s', count($report), $failures, microtime(true) - $start), ['modules' => array_keys($report), 'failures' => $failures]);
+        flock($lock, LOCK_UN);
+        fclose($lock);
+        $this->info(sprintf('Tâches de fond terminées : %d module(s), %d échec(s).', count($report), $failures));
+        return $failures === 0 ? 0 : 1;
     }
 
     private function attachmentsVerify(): int

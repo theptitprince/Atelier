@@ -1,0 +1,42 @@
+{
+  "id": "wiki",
+  "name": "Pages",
+  "version": "1.0.0",
+  "description": "Pages de type wiki reliées entre elles, avec images et fichiers joints, tags partagés, lieux GPS et historique des versions",
+  "author": "Atelier",
+  "icon": "book",
+  "group": "tools",
+  "order": 15,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Wiki",
+  "entry": "WikiModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [],
+  "navigation": [
+    { "id": "list", "label": "Toutes les pages", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste et recherche des pages" },
+    { "id": "new", "label": "Nouvelle page", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Rédiger une nouvelle page" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 3, "permission": "delete", "icon": "trash", "description": "Pages supprimées, restauration" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/wiki.css"],
+    "js": ["assets/wiki.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "wiki.page",
+      "name": "Pages",
+      "description": "Pages de connaissance (titre, contenu BBCode) reliées entre elles et aux autres modules",
+      "visibility": "shared",
+      "tables": ["wiki_page", "wiki_revision", "wiki_link"],
+      "fields": { "id": "Identifiant", "slug": "Identifiant lisible (URL)", "title": "Titre", "content": "Contenu (BBCode et syntaxe wiki)", "updated_at": "Dernière modification" },
+      "operations": ["read"],
+      "version": 1
+    }
+  ],
+  "consumes": ["geo.point"],
+  "migrations": "migrations"
+}

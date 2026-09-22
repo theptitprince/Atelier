@@ -397,10 +397,17 @@ final class GeoModule extends AbstractModule
     public function tagAdd(Request $request, array $params): ActionResult
     {
         $point = $this->requirePoint($this->requireId($request));
-        $name = $request->string('tag');
-        $tag = $this->ctx->shared->tags->attach($this->geoService()->infoId((int) $point['id']), $name, \Atelier\Shared\TagService::SHARED, $this->ctx->userId());
-        $this->log('geo.tag_add', 'success', 'geo_point:' . $point['id'], 'Tag ajouté : ' . $tag['name']);
-        return ActionResult::ok(['tag' => $tag], 'Tag « ' . $tag['name'] . ' » ajouté.')->refresh();
+        $names = array_values(array_filter(array_map('trim', explode(',', $request->string('tag'))), static fn (string $n): bool => $n !== ''));
+        if ($names === []) {
+            throw ValidationException::single('tag', 'Indiquez au moins un tag.');
+        }
+        $infoId = $this->geoService()->infoId((int) $point['id']);
+        $added = [];
+        foreach (array_slice($names, 0, 5) as $name) {
+            $added[] = $this->ctx->shared->tags->attach($infoId, $name, \Atelier\Shared\TagService::SHARED, $this->ctx->userId())['name'];
+        }
+        $this->log('geo.tag_add', 'success', 'geo_point:' . $point['id'], 'Tag(s) ajouté(s) : ' . implode(', ', $added));
+        return ActionResult::ok(['tags' => $added], 'Tag(s) ajouté(s) : ' . implode(', ', $added) . '.')->refresh();
     }
 
     public function tagRemove(Request $request, array $params): ActionResult
