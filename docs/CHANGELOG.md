@@ -2,11 +2,25 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.5.1 — 22/09/2026
+
+### Noyau
+- Les badges de la colonne (corbeille, tags inutilisés, rappels…) se rafraîchissent après chaque action et chaque chargement de vue, au retour sur l’onglet du navigateur, et toutes les 30 s.
+- Boîtes de dialogue : la confirmation se résout à la fermeture sans dépendre de l’événement `close` du navigateur (certains navigateurs ne l’émettent pas), ce qui bloquait les actions à confirmation.
+
 ## 0.5.0 — 22/09/2026
 
 ### Noyau
 - Onglets réorganisables par glisser-déposer et au clavier (Ctrl+←/→ sur l’onglet actif).
 - Bouton « Tout fermer » dans la barre d’onglets et menu contextuel d’onglet (clic droit ou Maj+F10) : page de base du module, fermer, fermer les autres, fermer ceux de droite, tout fermer. Chaque fermeture respecte la confirmation des modifications non enregistrées.
+
+## 0.4.1 — 22/09/2026
+
+### Noyau
+- Tâches de fond : commande `cron:run` (verrou, compte rendu et date de dernière exécution dans les paramètres `cron.*`, journalisation) appelant le hook `cron()` des modules ; lanceurs `cron.bat` et `cron.sh` à planifier toutes les 5 à 15 minutes.
+
+### Modules
+- Actualités 1.1.0 : récupération des flux en tâche de fond selon une fréquence propre à chaque flux (15 minutes à 7 jours), copie locale du texte des articles (option par flux, extraction du contenu principal, lecture hors source, téléchargement immédiat à l’archivage), écran « Flux suivis » signalant l’absence de planification.
 
 ## 0.4.0 — 22/09/2026
 
