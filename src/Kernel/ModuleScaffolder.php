@@ -150,15 +150,69 @@ final class ModuleScaffolder
         return ActionResult::ok(['id' => \$id], 'Élément enregistré.')->navigate('edit/' . \$id)->dirty(false);
     }
 
+    /** Suppression logique : l'élément part dans la corbeille (module Corbeille) pendant trash.retention_days. */
     public function delete(Request \$request, array \$params): ActionResult
     {
         \$id = (int) \$request->input('id');
         if (\$this->repo()->find(\$id) === null) {
             throw new NotFoundException('Élément introuvable.');
         }
-        \$this->repo()->delete(\$id);
-        \$this->log('{$id}.delete', 'success', 'item:' . \$id, 'Élément supprimé');
-        return ActionResult::ok(null, 'Élément supprimé.')->navigate('index');
+        \$this->repo()->softDelete(\$id);
+        \$this->log('{$id}.delete', 'success', 'item:' . \$id, 'Élément placé dans la corbeille');
+        return ActionResult::ok(null, 'Élément placé dans la corbeille.')->navigate('index');
+    }
+
+    // ----- Corbeille globale (TrashProviderInterface) -----
+
+    public function trashItems(): array
+    {
+        \$days = \$this->ctx->config->int('trash.retention_days', 30);
+        \$rights = \$this->rights(['update', 'delete']);
+        \$items = [];
+        foreach (\$this->repo()->trashed(\$days) as \$row) {
+            \$purgeAt = \Atelier\Support\Clock::parseUtc((string) \$row['deleted_at'])?->modify('+' . \$days . ' days');
+            \$items[] = [
+                'id' => (string) \$row['id'],
+                'label' => (string) \$row['title'],
+                'dataset' => '{$id}.item',
+                'deleted_at' => (string) \$row['deleted_at'],
+                'deleted_by' => null,
+                'purge_at' => \$purgeAt === null ? null : \Atelier\Support\Clock::utc(\$purgeAt),
+                'can_restore' => \$rights['update'],
+                'can_purge' => \$rights['delete'],
+            ];
+        }
+        return \$items;
+    }
+
+    public function restoreTrashItem(string \$id): void
+    {
+        \$this->require('update');
+        if (!\$this->repo()->restore((int) \$id)) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille.');
+        }
+        \$this->log('{$id}.restore', 'success', 'item:' . \$id, 'Élément restauré');
+    }
+
+    public function purgeTrashItem(string \$id): void
+    {
+        \$this->require('delete');
+        if (!\$this->repo()->purge((int) \$id)) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille.');
+        }
+        \$this->log('{$id}.purge', 'success', 'item:' . \$id, 'Élément supprimé définitivement');
+    }
+
+    /** Hook de rétention (console maintenance:purge) : purge physique des éléments expirés. */
+    public function purge(): string
+    {
+        \$days = \$this->ctx->config->int('trash.retention_days', 30);
+        \$count = 0;
+        foreach (\$this->repo()->expiredTrashIds(\$days) as \$expired) {
+            \$this->repo()->purge(\$expired);
+            \$count++;
+        }
+        return \$count . ' élément(s) purgé(s) de la corbeille (> ' . \$days . ' jours)';
     }
 
     /** Écran d'édition (création et modification). */
@@ -170,6 +224,7 @@ final class ModuleScaffolder
     }
 PHP : '';
         $uses = $withTable ? "use Atelier\\Error\\NotFoundException;\nuse Atelier\\Error\\ValidationException;\n" : '';
+        $implements = $withTable ? ' implements \\Atelier\\Modules\\TrashProviderInterface' : '';
 
         return <<<PHP
 <?php
@@ -188,7 +243,7 @@ use Atelier\\Modules\\RouteCollection;
  * Module « {$name} » : point d'entrée généré par `console module:create`.
  * Voir docs/contrat-module.md et docs/developpeur-module.md.
  */
-final class {$entry} extends AbstractModule
+final class {$entry} extends AbstractModule{$implements}
 {{$repoUse}
     public function routes(RouteCollection \$r): void
     {
@@ -231,16 +286,49 @@ final class ItemRepository
     {
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<array<string, mixed>> éléments actifs (hors corbeille) */
     public function all(): array
     {
-        return \$this->db->select('SELECT * FROM {$table} ORDER BY updated_at DESC');
+        return \$this->db->select('SELECT * FROM {$table} WHERE deleted_at IS NULL ORDER BY updated_at DESC');
     }
 
     /** @return array<string, mixed>|null */
     public function find(int \$id): ?array
     {
-        return \$this->db->selectOne('SELECT * FROM {$table} WHERE id = :id', ['id' => \$id]);
+        return \$this->db->selectOne('SELECT * FROM {$table} WHERE id = :id AND deleted_at IS NULL', ['id' => \$id]);
+    }
+
+    // ----- Corbeille (suppression logique) -----
+
+    public function softDelete(int \$id): bool
+    {
+        return \$this->db->update('{$table}', ['deleted_at' => Clock::utc()], 'id = :id AND deleted_at IS NULL', ['id' => \$id]) > 0;
+    }
+
+    public function restore(int \$id): bool
+    {
+        return \$this->db->update('{$table}', ['deleted_at' => null], 'id = :id AND deleted_at IS NOT NULL', ['id' => \$id]) > 0;
+    }
+
+    /** Suppression physique d'un élément en corbeille. */
+    public function purge(int \$id): bool
+    {
+        return \$this->db->delete('{$table}', 'id = :id AND deleted_at IS NOT NULL', ['id' => \$id]) > 0;
+    }
+
+    /** @return list<array<string, mixed>> éléments en corbeille non expirés */
+    public function trashed(int \$retentionDays): array
+    {
+        \$limit = Clock::utc(Clock::now()->modify('-' . \$retentionDays . ' days'));
+        return \$this->db->select('SELECT * FROM {$table} WHERE deleted_at IS NOT NULL AND deleted_at >= :l ORDER BY deleted_at DESC', ['l' => \$limit]);
+    }
+
+    /** @return list<int> */
+    public function expiredTrashIds(int \$retentionDays): array
+    {
+        \$limit = Clock::utc(Clock::now()->modify('-' . \$retentionDays . ' days'));
+        \$rows = \$this->db->select('SELECT id FROM {$table} WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => \$limit]);
+        return array_map(static fn (array \$r): int => (int) \$r['id'], \$rows);
     }
 
     public function create(string \$title, string \$content, ?int \$userId): int
@@ -254,10 +342,6 @@ final class ItemRepository
         \$this->db->update('{$table}', ['title' => \$title, 'content' => \$content, 'updated_at' => Clock::utc()], 'id = :id', ['id' => \$id]);
     }
 
-    public function delete(int \$id): void
-    {
-        \$this->db->delete('{$table}', 'id = :id', ['id' => \$id]);
-    }
 }
 
 PHP;
@@ -281,7 +365,8 @@ return static function (Database \$db): void {
             content %s NULL,
             created_by %s NULL,
             created_at %s NOT NULL,
-            updated_at %s NOT NULL
+            updated_at %s NOT NULL,
+            deleted_at %s NULL
         )%s',
         \$db->primaryKey(),
         \$db->varchar(200),
@@ -289,9 +374,11 @@ return static function (Database \$db): void {
         \$db->integer(),
         \$db->datetime(),
         \$db->datetime(),
+        \$db->datetime(),
         \$db->tableOptions()
     ));
     \$db->execute('CREATE INDEX idx_{$table}_updated ON {$table} (updated_at)');
+    \$db->execute('CREATE INDEX idx_{$table}_deleted ON {$table} (deleted_at)');
 };
 
 PHP;
