@@ -1,0 +1,17 @@
+# Anciens essais et documents de travail non versionnés
+/_OLD/
+/_tools/
+
+# Données locales (base SQLite, pièces jointes, journaux, cache, sauvegardes)
+/var/*
+!/var/.gitkeep
+!/var/*/.gitkeep
+
+# Configuration locale et secrets
+/config/env.local.php
+
+
+# Divers
+.DS_Store
+Thumbs.db
+*.log

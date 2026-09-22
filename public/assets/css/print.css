@@ -1,0 +1,16 @@
+/* Impression : seule la zone de travail du module actif est imprimée. */
+@page { margin: 15mm; }
+body.app-body { height: auto; overflow: visible; background: #fff; }
+.app { display: block; min-width: 0; }
+.sidebar, .tabs, .statusbar, .toaster, .dialog, .banner__actions, .btn, .pagination, .toolbar, .panel__loader, .no-print { display: none !important; }
+.main { display: block; height: auto; }
+.banner { border: 0; height: auto; }
+.banner__module[hidden] { display: none !important; }
+.workspace { position: static; overflow: visible; background: #fff; }
+.panel { position: static; display: none; }
+.panel.is-active { display: block; }
+.panel__content { overflow: visible; padding: 0; }
+.table-wrap { overflow: visible; border: 0; }
+.table th { position: static; }
+.card { box-shadow: none; break-inside: avoid; }
+a { color: inherit; text-decoration: none; }
