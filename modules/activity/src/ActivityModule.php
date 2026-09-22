@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atelier\Modules\Activity;
 
 use Atelier\Error\NotFoundException;
+use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
 use Atelier\Http\Response;
 use Atelier\Modules\AbstractModule;
@@ -22,6 +23,7 @@ final class ActivityModule extends AbstractModule
 {
     private const EXPORT_LIMIT = 10000;
     private const EXPORT_RESOURCE = 'action/export';
+    private const PURGE_RESOURCE = 'action/purge';
 
     /** Libellés et couleurs des résultats. */
     public const RESULT_LABELS = [
@@ -37,6 +39,8 @@ final class ActivityModule extends AbstractModule
         $r->view('detail/{id}', [$this, 'detail'], permission: 'open');
         $r->action('filter', [$this, 'filter'], permission: 'open');
         $r->raw('export.csv', [$this, 'export'], permission: 'export', resource: self::EXPORT_RESOURCE);
+        $r->action('purge-entries', [$this, 'purgeEntries'], permission: 'admin', resource: self::PURGE_RESOURCE);
+        $r->action('purge-preview', [$this, 'purgePreview'], permission: 'admin', resource: self::PURGE_RESOURCE);
     }
 
     // ----- Vues -----
@@ -63,6 +67,7 @@ final class ActivityModule extends AbstractModule
             'actions' => $this->ctx->activity->distinctActions(),
             'results' => self::RESULT_LABELS,
             'perPageOptions' => ActivityFilters::PER_PAGE_OPTIONS,
+            'canPurge' => $this->can('admin', self::PURGE_RESOURCE),
         ]);
 
         $actions = '';
@@ -128,6 +133,56 @@ final class ActivityModule extends AbstractModule
     // ----- Actions -----
 
     /** Soumission du formulaire de filtres : redirige vers la liste avec la chaîne de requête correspondante. */
+    /**
+     * Purge ciblée (administration) : les critères du formulaire de purge (catégorie, résultat, module,
+     * ancienneté minimale en jours) ; les filtres courants de la liste ne sont pas utilisés pour éviter
+     * une purge accidentelle. Le mot « PURGER » doit être saisi. La purge est elle-même journalisée.
+     */
+    public function purgeEntries(Request $request, array $params): ActionResult
+    {
+        $this->require('admin', self::PURGE_RESOURCE, 'Vous n’êtes pas autorisé à purger le journal.');
+        [$filters, $days] = $this->purgeCriteria($request);
+        if (strtoupper($request->string('confirm')) !== 'PURGER') {
+            throw new ValidationException(['confirm' => 'Tapez PURGER pour confirmer la suppression définitive.']);
+        }
+        if ($filters === [] && $days === null) {
+            throw new ValidationException(['older_than' => 'Indiquez au moins un critère (catégorie, résultat, module ou ancienneté).']);
+        }
+        $count = $this->ctx->activity->purgeBy($filters, $days);
+        $this->log('activity.purge', 'success', 'activity_log', sprintf('%d entrée(s) du journal purgée(s)', $count), ['criteria' => $filters, 'older_than_days' => $days, 'deleted' => $count], 'admin');
+        return ActionResult::ok(['deleted' => $count], sprintf('%d entrée(s) supprimée(s) du journal.', $count))->refresh();
+    }
+
+    /** Aperçu du nombre d'entrées concernées par les critères de purge. */
+    public function purgePreview(Request $request, array $params): ActionResult
+    {
+        $this->require('admin', self::PURGE_RESOURCE);
+        [$filters, $days] = $this->purgeCriteria($request);
+        $count = $filters === [] && $days === null ? 0 : $this->ctx->activity->countBy($filters, $days);
+        return ActionResult::info(['count' => $count], sprintf('%d entrée(s) correspondent à ces critères.', $count));
+    }
+
+    /** @return array{0: array<string, mixed>, 1: ?int} */
+    private function purgeCriteria(Request $request): array
+    {
+        $filters = [];
+        $category = $request->string('purge_category');
+        if (in_array($category, \Atelier\Activity\ActivityLog::CATEGORIES, true)) {
+            $filters['category'] = $category;
+        }
+        $result = $request->string('purge_result');
+        if (in_array($result, ActivityFilters::RESULTS, true)) {
+            $filters['result'] = $result;
+        }
+        $module = $request->string('purge_module');
+        if ($module !== '' && \Atelier\Support\Str::isSlug($module)) {
+            $filters['module_id'] = $module;
+        }
+        $days = $request->int('older_than');
+        $days = $days !== null && $days > 0 ? min(3650, $days) : null;
+        return [$filters, $days];
+    }
+
     public function filter(Request $request, array $params): ActionResult
     {
         $input = $request->all();

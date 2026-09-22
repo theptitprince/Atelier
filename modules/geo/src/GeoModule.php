@@ -13,6 +13,7 @@ use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Support\Clock;
 use Atelier\Support\Str;
 
@@ -23,8 +24,10 @@ use Atelier\Support\Str;
  * Chaque point est inscrit au registre commun des informations : il peut recevoir des tags,
  * des pièces jointes et des relations, et sert de clé de rattachement (relation « located_at »)
  * aux informations des autres modules.
+ *
+ * Les points supprimés (corbeille du module) sont exposés à la corbeille globale (TrashProviderInterface).
  */
-final class GeoModule extends AbstractModule
+final class GeoModule extends AbstractModule implements TrashProviderInterface
 {
     private const PER_PAGE_CHOICES = [25, 50, 100];
     private const NEAR_RADIUS_KM = 25.0;
@@ -121,7 +124,7 @@ final class GeoModule extends AbstractModule
     /** Rétention de la corbeille (trash.retention_days). */
     public function purge(): string
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
+        $days = $this->retentionDays();
         $count = 0;
         foreach ($this->repository()->expiredTrashIds($days) as $id) {
             $this->ctx->shared->registry->unregister(GeoService::DATASET, (string) $id);
@@ -259,14 +262,18 @@ final class GeoModule extends AbstractModule
 
     public function trash(Request $request, array $params): ModuleView
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
+        $days = $this->retentionDays();
         $rows = array_map([$this, 'decorate'], $this->repository()->trashed($days));
         $content = $this->render('trash', ['rows' => $rows, 'retentionDays' => $days]);
+        $actions = '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Liste</span></a>';
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-open-module="trash" title="Corbeille globale : tous les modules et les pièces jointes">' . $this->icon('trash') . '<span>Voir toute la corbeille</span></a>';
+        }
         $banner = $this->renderCore('banner', [
             'icon' => 'trash',
             'title' => 'Corbeille des points GPS',
             'subtitle' => count($rows) . ' point(s) · purge automatique après ' . $days . ' jours',
-            'actions' => '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Liste</span></a>',
+            'actions' => $actions,
         ]);
         return ModuleView::make('Corbeille · points GPS')->banner($banner)->content($content)->status(count($rows) . ' point(s) en corbeille');
     }
@@ -326,25 +333,14 @@ final class GeoModule extends AbstractModule
     public function restore(Request $request, array $params): ActionResult
     {
         $id = $this->requireId($request);
-        $point = $this->repository()->find($id, true);
-        if ($point === null || $point['deleted_at'] === null || !$this->repository()->restore($id)) {
-            throw new NotFoundException('Ce point n’est pas dans la corbeille.');
-        }
-        $this->log('geo.restore', 'success', 'geo_point:' . $id, 'Point restauré : ' . $point['name']);
+        $point = $this->restoreTrashed($id, 'Point restauré');
         return ActionResult::ok(['id' => $id], 'Point « ' . $point['name'] . ' » restauré.')->refresh();
     }
 
     /** Suppression définitive d'un point de la corbeille (action « purge »). */
     public function destroy(Request $request, array $params): ActionResult
     {
-        $id = $this->requireId($request);
-        $point = $this->repository()->find($id, true);
-        if ($point === null || $point['deleted_at'] === null) {
-            throw new NotFoundException('Ce point n’est pas dans la corbeille.');
-        }
-        $this->ctx->shared->registry->unregister(GeoService::DATASET, (string) $id);
-        $this->repository()->purge($id);
-        $this->log('geo.purge', 'success', 'geo_point:' . $id, 'Point supprimé définitivement : ' . $point['name']);
+        $point = $this->purgeTrashed($this->requireId($request), 'Point supprimé définitivement');
         return ActionResult::ok(null, 'Point « ' . $point['name'] . ' » supprimé définitivement.')->refresh();
     }
 
@@ -531,6 +527,45 @@ final class GeoModule extends AbstractModule
     }
 
     // =====================================================================
+    // Corbeille globale (TrashProviderInterface) : les points sont communs, la règle du module
+    // s'applique (restaurer comme purger exigent « delete », comme la vue « trash »)
+    // =====================================================================
+
+    public function trashItems(): array
+    {
+        $retention = $this->retentionDays();
+        $canDelete = $this->can('delete');
+        $items = [];
+        foreach ($this->repository()->trashed($retention) as $point) {
+            $deletedAt = (string) $point['deleted_at'];
+            $purgeAt = Clock::parseUtc($deletedAt)?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => (string) $point['id'],
+                'label' => GeoService::labelOf($point),
+                'dataset' => GeoService::DATASET,
+                'deleted_at' => $deletedAt,
+                'deleted_by' => null, // la table ne conserve pas l'auteur de la suppression
+                'purge_at' => $purgeAt === null ? null : Clock::utc($purgeAt),
+                'can_restore' => $canDelete,
+                'can_purge' => $canDelete,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->require('delete');
+        $this->restoreTrashed((int) $id, 'Point restauré depuis la corbeille globale');
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete');
+        $this->purgeTrashed((int) $id, 'Point supprimé définitivement depuis la corbeille globale');
+    }
+
+    // =====================================================================
     // Helpers publics (gabarits)
     // =====================================================================
 
@@ -547,6 +582,44 @@ final class GeoModule extends AbstractModule
     // =====================================================================
     // Interne
     // =====================================================================
+
+    /** Restaure un point en corbeille (action « restore » et corbeille globale). @return array<string, mixed> le point */
+    private function restoreTrashed(int $id, string $message): array
+    {
+        $point = $this->requireTrashed($id);
+        if (!$this->repository()->restore($id)) {
+            throw new NotFoundException('Ce point n’est pas dans la corbeille.');
+        }
+        $this->log('geo.restore', 'success', 'geo_point:' . $id, $message . ' : ' . $point['name']);
+        return $point;
+    }
+
+    /** Supprime définitivement un point en corbeille et le retire du registre commun. @return array<string, mixed> le point */
+    private function purgeTrashed(int $id, string $message): array
+    {
+        $point = $this->requireTrashed($id);
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->ctx->shared->registry->unregister(GeoService::DATASET, (string) $id);
+            $this->repository()->purge($id);
+        });
+        $this->log('geo.purge', 'success', 'geo_point:' . $id, $message . ' : ' . $point['name']);
+        return $point;
+    }
+
+    /** @return array<string, mixed> point en corbeille, NotFoundException sinon */
+    private function requireTrashed(int $id): array
+    {
+        $point = $id > 0 ? $this->repository()->find($id, true) : null;
+        if ($point === null || $point['deleted_at'] === null) {
+            throw new NotFoundException('Ce point n’est pas dans la corbeille.');
+        }
+        return $point;
+    }
+
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
 
     /**
      * Validation d'une saisie (formulaire ou ligne d'import) ; retourne les données prêtes pour le dépôt.

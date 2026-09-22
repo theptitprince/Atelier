@@ -124,6 +124,51 @@ final class GeoModuleTest extends TestCase
         $this->assertNull($this->app->shared->registry->find('geo.point', (string) $id));
     }
 
+    /** Corbeille globale : trashItems() après suppression, restauration puis purge via le contrat TrashProviderInterface. */
+    public function testGlobalTrashProviderListsRestoresAndPurges(): void
+    {
+        $this->allowAll();
+        $this->app->acl->setRule('user', $this->userId, AclService::module('trash'), 'open', 'allow');
+        $this->app->acl->clearCache();
+        $id = (int) $this->app->handle(Request::create('POST', '/m/geo/save', [], ['name' => 'Phare', 'code' => 'PH', 'coordinates' => '48.04, -4.74'], $this->headers()))->decodedJson()['data']['id'];
+
+        $module = $this->app->modules->instance('geo');
+        $module->boot($this->app->context(Request::create('GET', '/')));
+        $this->assertTrue($module instanceof \Atelier\Modules\TrashProviderInterface);
+        $this->assertSame([], $module->trashItems(), 'rien en corbeille avant suppression');
+
+        $this->assertSame(200, $this->app->handle(Request::create('POST', '/m/geo/delete', [], ['id' => $id], $this->headers()))->status());
+        $items = $module->trashItems();
+        $this->assertCount(1, $items);
+        $item = $items[0];
+        $this->assertSame((string) $id, $item['id']);
+        $this->assertSame('Phare [PH]', $item['label']);
+        $this->assertSame('geo.point', $item['dataset']);
+        $this->assertNull($item['deleted_by']);
+        $this->assertTrue($item['can_restore']);
+        $this->assertTrue($item['can_purge']);
+        $this->assertTrue(strtotime($item['purge_at'] . ' UTC') > strtotime($item['deleted_at'] . ' UTC'), 'purge prévue après la suppression');
+
+        // Le module Corbeille agrège le point
+        $list = $this->app->handle(Request::create('GET', '/m/trash/list', ['source' => 'module', 'module' => 'geo'], [], $this->headers()));
+        $this->assertSame(200, $list->status(), $list->body());
+        $this->assertStringContains('Phare [PH]', $list->decodedJson()['data']['content']);
+
+        // Restauration via le contrat : le point redevient visible, la corbeille est vide
+        $module->restoreTrashItem((string) $id);
+        $this->assertSame([], $module->trashItems());
+        $this->assertSame(200, $this->app->handle(Request::create('GET', '/m/geo/show/' . $id, [], [], $this->headers()))->status());
+        $this->assertThrows(\Atelier\Error\NotFoundException::class, fn () => $module->restoreTrashItem((string) $id));
+
+        // Purge via le contrat : point et inscription au registre disparaissent
+        $this->app->handle(Request::create('POST', '/m/geo/delete', [], ['id' => $id], $this->headers()));
+        $module->purgeTrashItem((string) $id);
+        $this->assertSame([], $module->trashItems());
+        $this->assertSame(404, $this->app->handle(Request::create('GET', '/m/geo/show/' . $id, [], [], $this->headers()))->status());
+        $this->assertNull($this->app->shared->registry->find('geo.point', (string) $id));
+        $this->assertThrows(\Atelier\Error\NotFoundException::class, fn () => $module->purgeTrashItem((string) $id));
+    }
+
     public function testServiceChecksDatasetRightsAndLinksInformation(): void
     {
         $this->allowAll();

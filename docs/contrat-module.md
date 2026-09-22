@@ -173,6 +173,12 @@ Le manifeste peut déclarer `"keepAlive": true` si un module a réellement besoi
 - Un module consommateur lit un jeu partagé via le **service** du module propriétaire (`$this->ctx->moduleService('users')->...`) et jamais directement ses tables. Le service vérifie les permissions de l’utilisateur avec `$this->ctx->shared->catalog->canAccess($userId, 'users.account', 'read')`.
 - Identifiants globaux, tags, relations, pièces jointes : `$this->ctx->shared->registry->register('notes.note', (string) $id, $title, $userId)` puis `tags->attach($infoId, 'urgent')`, etc.
 
+## 9 bis. Suppression et corbeille (règle du projet)
+
+Toute suppression d’une donnée métier par un utilisateur est **logique** (colonne `deleted_at`), restaurable pendant `trash.retention_days` (30 jours), puis purgée par le hook `purge()` appelé par `console maintenance:purge`. Les lignes supprimées sont exclues de toutes les listes, comptages, badges, exports et services intermodules.
+
+Le module implémente `\Atelier\Modules\TrashProviderInterface` (`trashItems()`, `restoreTrashItem()`, `purgeTrashItem()`) pour que ses éléments apparaissent dans le module **Corbeille**, qui regroupe toutes les corbeilles au même endroit (recherche, restauration et purge groupées). Un module qui gère plusieurs types d’éléments préfixe l’identifiant (`asset:12`, `log:9`). Une vue `trash` propre au module reste possible ; elle renvoie vers la corbeille globale (`data-open-module="trash"`). La purge physique retire aussi l’entrée du registre commun (`registry->unregister`). Le générateur `console module:create` produit ce squelette.
+
 ## 10. Cycle de vie et installation
 
 1. Dépôt du répertoire dans `modules/` ;

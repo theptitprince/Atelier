@@ -12,6 +12,7 @@ use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
 use Atelier\View\BbCode;
@@ -20,8 +21,10 @@ use Atelier\View\BbCode;
  * Module « Pages » : pages de type wiki rédigées en BBCode (éditeur commun) et syntaxe wiki
  * ([[liens internes]], [file=…] images et fichiers joints, [point=…] lieux GPS), reliées entre
  * elles (rétroliens), aux tags partagés, aux points GPS et aux pièces jointes ; historique des versions.
+ *
+ * Les pages supprimées (corbeille du module) sont exposées à la corbeille globale (TrashProviderInterface).
  */
-final class WikiModule extends AbstractModule
+final class WikiModule extends AbstractModule implements TrashProviderInterface
 {
     private const PER_PAGE_CHOICES = [25, 50, 100];
     private const TITLE_MAX = 200;
@@ -84,7 +87,7 @@ final class WikiModule extends AbstractModule
 
     public function purge(): string
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
+        $days = $this->retentionDays();
         $count = 0;
         foreach ($this->repository()->expiredTrashIds($days) as $id) {
             $this->ctx->shared->registry->unregister(WikiService::DATASET, (string) $id);
@@ -286,10 +289,14 @@ final class WikiModule extends AbstractModule
 
     public function trash(Request $request, array $params): ModuleView
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
+        $days = $this->retentionDays();
         $rows = $this->repository()->trashed($days);
         $content = $this->render('trash', ['rows' => $rows, 'retentionDays' => $days]);
-        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille des pages', 'subtitle' => count($rows) . ' page(s) · purge automatique après ' . $days . ' jours', 'actions' => '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Pages</span></a>']);
+        $actions = '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Pages</span></a>';
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-open-module="trash" title="Corbeille globale : tous les modules et les pièces jointes">' . $this->icon('trash') . '<span>Voir toute la corbeille</span></a>';
+        }
+        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille des pages', 'subtitle' => count($rows) . ' page(s) · purge automatique après ' . $days . ' jours', 'actions' => $actions]);
         return ModuleView::make('Corbeille · pages')->banner($banner)->content($content)->status(count($rows) . ' page(s) en corbeille');
     }
 
@@ -337,26 +344,14 @@ final class WikiModule extends AbstractModule
 
     public function restore(Request $request, array $params): ActionResult
     {
-        $id = $this->requireId($request);
-        $page = $this->repository()->find($id, true);
-        if ($page === null || $page['deleted_at'] === null || !$this->repository()->restore($id)) {
-            throw new NotFoundException('Cette page n’est pas dans la corbeille.');
-        }
-        $this->log('wiki.restore', 'success', 'wiki_page:' . $id, 'Page restaurée : ' . $page['title']);
+        $page = $this->restoreTrashed($this->requireId($request), 'Page restaurée');
         return ActionResult::ok(null, 'Page « ' . $page['title'] . ' » restaurée.')->refresh();
     }
 
     /** Suppression définitive d'une page de la corbeille (action « purge »). */
     public function destroy(Request $request, array $params): ActionResult
     {
-        $id = $this->requireId($request);
-        $page = $this->repository()->find($id, true);
-        if ($page === null || $page['deleted_at'] === null) {
-            throw new NotFoundException('Cette page n’est pas dans la corbeille.');
-        }
-        $this->ctx->shared->registry->unregister(WikiService::DATASET, (string) $id);
-        $this->repository()->purge($id);
-        $this->log('wiki.purge', 'success', 'wiki_page:' . $id, 'Page supprimée définitivement : ' . $page['title']);
+        $page = $this->purgeTrashed($this->requireId($request), 'Page supprimée définitivement');
         return ActionResult::ok(null, 'Page « ' . $page['title'] . ' » supprimée définitivement.')->refresh();
     }
 
@@ -387,6 +382,45 @@ final class WikiModule extends AbstractModule
     }
 
     // =====================================================================
+    // Corbeille globale (TrashProviderInterface) : les pages sont communes, la règle du module
+    // s'applique (restaurer comme purger exigent « delete », comme la vue « trash »)
+    // =====================================================================
+
+    public function trashItems(): array
+    {
+        $retention = $this->retentionDays();
+        $canDelete = $this->can('delete');
+        $items = [];
+        foreach ($this->repository()->trashed($retention) as $page) {
+            $deletedAt = (string) $page['deleted_at'];
+            $purgeAt = Clock::parseUtc($deletedAt)?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => (string) $page['id'],
+                'label' => (string) $page['title'],
+                'dataset' => WikiService::DATASET,
+                'deleted_at' => $deletedAt,
+                'deleted_by' => null, // la table ne conserve pas l'auteur de la suppression
+                'purge_at' => $purgeAt === null ? null : Clock::utc($purgeAt),
+                'can_restore' => $canDelete,
+                'can_purge' => $canDelete,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->require('delete');
+        $this->restoreTrashed((int) $id, 'Page restaurée depuis la corbeille globale');
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete');
+        $this->purgeTrashed((int) $id, 'Page supprimée définitivement depuis la corbeille globale');
+    }
+
+    // =====================================================================
     // Helpers publics (gabarits)
     // =====================================================================
 
@@ -398,6 +432,44 @@ final class WikiModule extends AbstractModule
     // =====================================================================
     // Interne
     // =====================================================================
+
+    /** Restaure une page en corbeille (action « restore » et corbeille globale). @return array<string, mixed> la page */
+    private function restoreTrashed(int $id, string $message): array
+    {
+        $page = $this->requireTrashed($id);
+        if (!$this->repository()->restore($id)) {
+            throw new NotFoundException('Cette page n’est pas dans la corbeille.');
+        }
+        $this->log('wiki.restore', 'success', 'wiki_page:' . $id, $message . ' : ' . $page['title']);
+        return $page;
+    }
+
+    /** Supprime définitivement une page en corbeille et la retire du registre commun. @return array<string, mixed> la page */
+    private function purgeTrashed(int $id, string $message): array
+    {
+        $page = $this->requireTrashed($id);
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->ctx->shared->registry->unregister(WikiService::DATASET, (string) $id);
+            $this->repository()->purge($id);
+        });
+        $this->log('wiki.purge', 'success', 'wiki_page:' . $id, $message . ' : ' . $page['title']);
+        return $page;
+    }
+
+    /** @return array<string, mixed> page en corbeille, NotFoundException sinon */
+    private function requireTrashed(int $id): array
+    {
+        $page = $id > 0 ? $this->repository()->find($id, true) : null;
+        if ($page === null || $page['deleted_at'] === null) {
+            throw new NotFoundException('Cette page n’est pas dans la corbeille.');
+        }
+        return $page;
+    }
+
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
 
     /**
      * @param array<string, mixed> $page @param list<string> $tags @param list<array<string, mixed>> $points @param list<array<string, mixed>> $attachments

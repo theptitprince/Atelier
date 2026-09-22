@@ -103,6 +103,7 @@ final class Application
             new RelationService($this->db),
             new AttachmentService($this->db, $this->config, $this->config->bool('attachments.encryption', true) ? new FileCrypto($this->config->path('attachments_key')) : null),
             new DatasetCatalog($this->db, $this->acl),
+            new \Atelier\Shared\AttachmentFolderService($this->db),
         );
         $this->errors = new ErrorHandler($this->logger, $this->template, $this->config->isDebug(), $this->activity, $this->config->string('app.base_url'));
     }

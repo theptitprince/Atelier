@@ -56,6 +56,9 @@ Relations typées entre deux informations du registre (`related`, `parent`, `chi
 - Limites : 20 Mo par fichier, 500 Mo par utilisateur, 5 Go au total ; types autorisés (PDF, JPEG/PNG/WebP, texte/CSV, bureautique) ; exécutables, scripts et archives refusés.
 - Téléchargement toujours par PHP : `/files/<id>` (et `?inline=1` pour les PDF et images) après contrôle par le noyau du droit `read` sur le jeu de données de l’information rattachée ; un fichier orphelin n’est accessible qu’à son auteur. Un module peut aussi exposer sa propre route `raw` pour un contrôle plus fin.
 - Suppression logique puis purge après 30 jours (`maintenance:purge`).
+- **Nom d’affichage** (`label`) libre, distinct du nom de fichier d’origine conservé pour le téléchargement : `AttachmentService::displayName($attachment)`, `setLabel()`, paramètre `$label` de `store()`.
+- **Dossiers virtuels** (`$ctx->shared->folders`, table `attachment_folders`) : arborescence en base avec chemin matérialisé, création/renommage/déplacement/suppression (les fichiers remontent dans le parent), `moveAttachment()`, filtres `folder_id` (`'root'` = non rangés) et `folder_ids` (sous-arbre) de `paginate()`. Les fichiers ne bougent jamais sur le disque.
+- **Tags sur les fichiers** : un fichier peut être inscrit au registre sous le jeu `attachments.file` (clé = identifiant du fichier) et recevoir des tags partagés ; filtre `tag` de `paginate()`.
 
 ## 8. Bonnes pratiques
 

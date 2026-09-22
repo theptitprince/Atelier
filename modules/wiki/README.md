@@ -21,6 +21,16 @@ Aucun HTML saisi n'est rendu : les compléments sont remplacés par des jetons a
 - **Historique** : versions (50 conservées), lecture d'une version, restauration (crée une nouvelle version).
 - **Corbeille** : suppression logique, restauration, suppression définitive, purge après `trash.retention_days`.
 
+## Corbeille
+
+Une page supprimée (`deleted_at`) reste `trash.retention_days` jours (30 par défaut) en corbeille, avec ses versions ; le hook `purge()` (`console maintenance:purge`) la supprime physiquement ensuite et la retire du registre commun.
+
+- **Vue du module** (`trash`, droit `delete`) : liste des pages en corbeille avec « Restaurer » (action `restore`) et « Supprimer » (action `purge`) ; bouton « Voir toute la corbeille » vers le module Corbeille s'il est actif.
+- **Corbeille globale** : la classe d'entrée implémente `Atelier\Modules\TrashProviderInterface`. `trashItems()` expose les pages non expirées (jeu `wiki.page`, libellé = titre, `purge_at` = suppression + rétention, `deleted_by` inconnu → `null`) ; `restoreTrashItem()` et `purgeTrashItem()` réutilisent exactement la logique des actions du module (revérification du droit `delete`, `NotFoundException` si la page n'est pas en corbeille, retrait du registre commun à la purge). Les pages étant communes à tous les utilisateurs autorisés, restaurer comme purger exigent `delete`, comme dans la vue du module.
+- Journal d'activité : `wiki.delete`, `wiki.restore`, `wiki.purge` (le message précise « depuis la corbeille globale » le cas échéant).
+
+Le module ne dépend pas du module `trash` : sa propre corbeille fonctionne sans lui.
+
 ## Droits
 
 `open` (lire, historique), `create` (nouvelle page), `update` (modifier, restaurer une version, lier des lieux), `delete` (corbeille, restauration, suppression définitive) ; `read` sur `atelier/wiki/data/page` pour l'accès intermodule.

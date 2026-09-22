@@ -131,6 +131,51 @@ final class WikiModuleTest extends TestCase
         $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM wiki_revision WHERE page_id = :p', ['p' => $pageId]));
     }
 
+    /** Corbeille globale : trashItems() après suppression, restauration puis purge via le contrat TrashProviderInterface. */
+    public function testGlobalTrashProviderListsRestoresAndPurges(): void
+    {
+        $this->app->acl->setRule('user', $this->userId, AclService::module('trash'), 'open', 'allow');
+        $this->app->acl->clearCache();
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Compte rendu', 'content' => 'Texte'])->decodedJson()['data']['id'];
+
+        $module = $this->app->modules->instance('wiki');
+        $module->boot($this->app->context(Request::create('GET', '/')));
+        $this->assertTrue($module instanceof \Atelier\Modules\TrashProviderInterface);
+        $this->assertSame([], $module->trashItems(), 'rien en corbeille avant suppression');
+
+        $this->assertSame(200, $this->post('wiki', 'delete', ['id' => $pageId])->status());
+        $items = $module->trashItems();
+        $this->assertCount(1, $items);
+        $item = $items[0];
+        $this->assertSame((string) $pageId, $item['id']);
+        $this->assertSame('Compte rendu', $item['label']);
+        $this->assertSame('wiki.page', $item['dataset']);
+        $this->assertNull($item['deleted_by']);
+        $this->assertTrue($item['can_restore']);
+        $this->assertTrue($item['can_purge']);
+        $this->assertTrue(strtotime($item['purge_at'] . ' UTC') > strtotime($item['deleted_at'] . ' UTC'), 'purge prévue après la suppression');
+
+        // Le module Corbeille agrège la page
+        $list = $this->app->handle(Request::create('GET', '/m/trash/list', ['source' => 'module', 'module' => 'wiki'], [], $this->headers()));
+        $this->assertSame(200, $list->status(), $list->body());
+        $this->assertStringContains('Compte rendu', $list->decodedJson()['data']['content']);
+
+        // Restauration via le contrat : la page redevient lisible, la corbeille est vide
+        $module->restoreTrashItem((string) $pageId);
+        $this->assertSame([], $module->trashItems());
+        $this->view('show/compte-rendu');
+        $this->assertThrows(\Atelier\Error\NotFoundException::class, fn () => $module->restoreTrashItem((string) $pageId));
+
+        // Purge via le contrat : page, versions et inscription au registre disparaissent
+        $this->post('wiki', 'delete', ['id' => $pageId]);
+        $module->purgeTrashItem((string) $pageId);
+        $this->assertSame([], $module->trashItems());
+        $this->assertSame(404, $this->app->handle(Request::create('GET', '/m/wiki/show/compte-rendu', [], [], $this->headers()))->status());
+        $this->assertNull($this->app->shared->registry->find('wiki.page', (string) $pageId));
+        $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM wiki_revision WHERE page_id = :p', ['p' => $pageId]));
+        $this->assertThrows(\Atelier\Error\NotFoundException::class, fn () => $module->purgeTrashItem((string) $pageId));
+    }
+
     public function testReaderCannotEdit(): void
     {
         $bob = $this->app->users->create(['username' => 'bob', 'password_hash' => $this->app->passwords->hash('Mot-de-passe-solide'), 'must_change_password' => 0]);
