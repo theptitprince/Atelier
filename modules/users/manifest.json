@@ -30,6 +30,7 @@
     {
       "code": "users.account",
       "name": "Comptes utilisateurs",
+      "openRoute": "edit/{key}",
       "description": "Identité publique des comptes (identifiant, nom affiché, état) ; jamais le mot de passe ni le courriel",
       "visibility": "shared",
       "tables": ["users", "user_groups"],

@@ -233,11 +233,21 @@ final class Manifest
                 $errors[] = sprintf('Jeu de données "%s" : la classification "visibility" (shared|private) est obligatoire.', $code);
                 continue;
             }
+            $openRoute = null;
+            if (isset($dataset['openRoute']) && $dataset['openRoute'] !== '') {
+                $openRoute = self::normalizeRoute(str_replace('{key}', 'KEY', (string) $dataset['openRoute']));
+                if ($openRoute === null || !str_contains((string) $dataset['openRoute'], '{key}')) {
+                    $errors[] = sprintf('Jeu de données "%s" : "openRoute" doit être une route interne contenant {key}.', $code);
+                    continue;
+                }
+                $openRoute = (string) $dataset['openRoute'];
+            }
             $datasets[] = [
                 'code' => $code,
                 'name' => trim((string) ($dataset['name'] ?? $code)),
                 'description' => isset($dataset['description']) ? (string) $dataset['description'] : null,
                 'visibility' => $visibility,
+                'openRoute' => $openRoute,
                 'tables' => array_map('strval', self::list($dataset['tables'] ?? [])),
                 'fields' => is_array($dataset['fields'] ?? null) ? $dataset['fields'] : [],
                 'operations' => array_values(array_intersect(array_map('strval', self::list($dataset['operations'] ?? ['read'])), ['read', 'create', 'update', 'delete'])),
