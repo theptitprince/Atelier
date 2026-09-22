@@ -1,0 +1,47 @@
+/* Styles propres au module « Tags partagés », limités à sa racine .module-tags. */
+
+/* ---------- Barre d'outils de la liste ---------- */
+.module-tags .tags__search { min-width: 260px; flex: 1 1 260px; }
+.module-tags .tags__sort { margin-bottom: 0; }
+.module-tags .tags__sort .field__label { margin: 0 var(--sp-2) 0 0; }
+.module-tags .tags__legend { margin: var(--sp-3) 0 0; }
+.module-tags .tags__hint { margin: 0; padding: var(--sp-3) var(--sp-4); }
+
+/* ---------- Nuage de tags ---------- */
+.module-tags .tag-cloud { gap: var(--sp-2); align-items: center; }
+.module-tags .tag-cloud__item { height: auto; padding: 2px var(--sp-3); text-decoration: none; line-height: 1.4; transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.module-tags .tag-cloud__item:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow-sm); border-color: var(--c-primary); }
+.module-tags .tag-cloud__item .icon { flex-shrink: 0; }
+.module-tags .tag-cloud__count { font-size: var(--fs-xs); font-weight: 600; opacity: 0.75; margin-left: 2px; }
+
+/* Cinq niveaux de taille selon l'usage relatif (1 = inutilisé ou rare, 5 = le plus utilisé). */
+.module-tags .tag-cloud__item--1 { font-size: var(--fs-xs); opacity: 0.8; }
+.module-tags .tag-cloud__item--2 { font-size: var(--fs-sm); }
+.module-tags .tag-cloud__item--3 { font-size: var(--fs-md, 1rem); }
+.module-tags .tag-cloud__item--4 { font-size: var(--fs-lg); font-weight: 500; }
+.module-tags .tag-cloud__item--5 { font-size: var(--fs-xl, 1.25rem); font-weight: 600; background: var(--c-primary-soft); color: var(--c-primary); }
+.module-tags .tag-cloud__item--4 .icon,
+.module-tags .tag-cloud__item--5 .icon { width: 1em; height: 1em; }
+
+/* ---------- Tableaux ---------- */
+.module-tags .tags__name { display: inline-flex; align-items: center; gap: var(--sp-1); color: inherit; font-weight: 500; }
+.module-tags .tags__col-date { width: 1%; white-space: nowrap; }
+.module-tags .tags__row--unused td { color: var(--c-text-muted); }
+.module-tags .tags__row--unused .tags__name { font-weight: 400; }
+
+/* ---------- Détail ---------- */
+.module-tags .tags__detail { grid-template-columns: minmax(280px, 360px) 1fr; }
+.module-tags .tags__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.module-tags .tags__neighbor { text-decoration: none; }
+.module-tags .tags__neighbor:hover { border-color: var(--c-primary); text-decoration: none; }
+.module-tags .card__footer.text-small { display: flex; align-items: center; gap: var(--sp-2); }
+@media (max-width: 900px) {
+    .module-tags .tags__detail { grid-template-columns: 1fr; }
+}
+
+/* ---------- Gestion : actions groupées ---------- */
+.module-tags .tags__bulk { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.module-tags .tags__bulk-target { margin-bottom: 0; display: flex; align-items: center; gap: var(--sp-2); }
+.module-tags .tags__bulk-target .field__label { margin: 0; white-space: nowrap; }
+.module-tags .tags__bulk-target .tagsinput { min-width: 220px; }
+.module-tags .tags__table tbody tr.is-selected { background: var(--c-accent-soft); }

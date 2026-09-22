@@ -345,7 +345,8 @@ final class Console
                 continue;
             }
             $module = $this->app->modules->instance($descriptor->id);
-            if (method_exists($module, 'purge')) {
+            // Hook purge() sans paramètre uniquement (une action de route homonyme prend Request + params).
+            if (method_exists($module, 'purge') && (new \ReflectionMethod($module, 'purge'))->getNumberOfRequiredParameters() === 0) {
                 $module->boot($this->app->context(\Atelier\Http\Request::create('GET', '/')));
                 $this->line('  Module ' . $descriptor->id . ' : ' . (string) $module->purge());
             }

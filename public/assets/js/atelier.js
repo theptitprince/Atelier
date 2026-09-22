@@ -1090,9 +1090,9 @@
       const roots = [tab.panel, tab.bannerEl];
       roots.forEach((root) => {
         root.addEventListener('click', (e) => {
-          const link = e.target.closest('a[data-route], a[href^="' + BASE + '/m/' + tab.id + '"], a[href^="/m/' + tab.id + '"]');
+          const link = e.target.closest('a[data-route], button[data-route], a[href^="' + BASE + '/m/' + tab.id + '"], a[href^="/m/' + tab.id + '"]');
           if (link && !link.hasAttribute('data-external') && !link.hasAttribute('download') && !link.target) {
-            if (link.getAttribute('aria-disabled') === 'true') { e.preventDefault(); return; }
+            if (link.getAttribute('aria-disabled') === 'true' || link.disabled) { e.preventDefault(); return; }
             e.preventDefault();
             const route = link.dataset.route != null ? link.dataset.route : router.parse(link.pathname, link.search).route;
             tab.ctx.navigate(route);
@@ -1291,7 +1291,7 @@
       if (!source || !String(source).trim()) return '';
       let text = util.escape(String(source).replace(/\r\n?/g, '\n'));
       const codes = [];
-      text = text.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, (m, c) => { codes.push('<pre class="bb-code"><code>' + c.replace(/^\n+|\n+$/g, '') + '</code></pre>'); return ' CODE' + (codes.length - 1) + ' '; });
+      text = text.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, (m, c) => { codes.push('<pre class="bb-code"><code>' + c.replace(/^\n+|\n+$/g, '') + '</code></pre>'); return '\u0000CODE' + (codes.length - 1) + '\u0000'; });
       Object.keys(SIMPLE).forEach((tag) => {
         const html = SIMPLE[tag];
         const close = html.split(' ')[0];
@@ -1308,7 +1308,7 @@
       text = text.replace(/\[hr\]/gi, '<hr>');
       text = text.replace(/\n{3,}/g, '\n\n').replace(/(<\/(?:h2|h3|h4|blockquote|ul|ol|div|pre)>|<hr>)\n+/g, '$1').replace(/\n+(<(?:h2|h3|h4|blockquote|ul|ol|div|pre|hr)\b)/g, '$1');
       text = text.replace(/\n/g, '<br>');
-      text = text.replace(/ CODE(\d+) /g, (m, i) => codes[Number(i)] || '');
+      text = text.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => codes[Number(i)] || '');
       return '<div class="bb">' + text + '</div>';
     }
     return { toHtml };
@@ -1414,12 +1414,17 @@
       const label = input.id ? document.querySelector('label[for="' + input.id + '"]') : null;
       if (label && entry.id) label.setAttribute('for', entry.id);
 
+      function notify() {
+        // Les formulaires data-auto-submit écoutent "change" : le champ caché l'émet à chaque modification.
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       function sync() {
         input.value = tags.join(', ');
         chips.innerHTML = '';
         tags.forEach((tag) => {
           const chip = util.el('span', { class: 'chip' }, [util.icon('tag', 'icon--sm'), tag]);
-          if (!readonly) chip.appendChild(util.el('button', { type: 'button', class: 'chip__remove', 'aria-label': 'Retirer ' + tag, onclick: () => { tags = tags.filter((t) => t !== tag); sync(); input.dispatchEvent(new Event('input', { bubbles: true })); } }, [util.icon('close', 'icon--sm')]));
+          if (!readonly) chip.appendChild(util.el('button', { type: 'button', class: 'chip__remove', 'aria-label': 'Retirer ' + tag, onclick: () => { tags = tags.filter((t) => t !== tag); sync(); notify(); } }, [util.icon('close', 'icon--sm')]));
           chips.appendChild(chip);
         });
       }
@@ -1429,7 +1434,7 @@
         if (tags.some((t) => t.toLowerCase() === value.toLowerCase())) { entry.value = ''; return; }
         if (tags.length >= max) { toast.warning('Au maximum ' + max + ' tags.'); return; }
         tags.push(value); entry.value = ''; sync(); hide();
-        input.dispatchEvent(new Event('input', { bubbles: true }));
+        notify();
       }
       let active = -1; let items = [];
       function hide() { list.hidden = true; list.innerHTML = ''; active = -1; items = []; entry.removeAttribute('aria-activedescendant'); }
@@ -1451,7 +1456,7 @@
         list.hidden = false; active = -1;
       }
       function highlight(index) {
-        const options = list.querelectorAll ? [] : Array.from(list.children);
+        const options = Array.from(list.children);
         options.forEach((o, i) => o.setAttribute('aria-selected', i === index ? 'true' : 'false'));
         active = index;
         if (index >= 0 && options[index]) { entry.setAttribute('aria-activedescendant', options[index].id); options[index].scrollIntoView({ block: 'nearest' }); }
@@ -1475,7 +1480,7 @@
             e.preventDefault();
             if (active >= 0 && items[active]) add(items[active].name); else add(entry.value);
           }
-          else if (e.key === 'Backspace' && !entry.value && tags.length) { tags.pop(); sync(); input.dispatchEvent(new Event('input', { bubbles: true })); }
+          else if (e.key === 'Backspace' && !entry.value && tags.length) { tags.pop(); sync(); notify(); }
           else if (e.key === 'Escape') hide();
         });
         wrap.addEventListener('click', (e) => { if (e.target === wrap || e.target === chips) entry.focus(); });

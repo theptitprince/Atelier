@@ -1,0 +1,40 @@
+/* Styles propres au module Explorateur, limités à sa racine .module-explorer. */
+
+/* Recherche */
+.module-explorer .explorer__filters { margin-bottom: var(--sp-4); }
+.module-explorer .explorer__search { flex: 1 1 260px; min-width: 200px; }
+.module-explorer .explorer__filter { flex: 0 1 220px; min-width: 160px; }
+.module-explorer .explorer__filter--tag { flex: 0 1 240px; }
+.module-explorer .explorer__filter--tag .tagsinput { min-height: 34px; }
+.module-explorer .explorer__results .explorer__col-label { min-width: 240px; }
+.module-explorer .explorer__label { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit; font-weight: 500; max-width: 100%; }
+.module-explorer .explorer__label > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.module-explorer a.explorer__label:hover { color: var(--c-accent); text-decoration: none; }
+.module-explorer .explorer__col-label .text-small { display: block; margin-top: 2px; }
+.module-explorer a.explorer__facet { color: inherit; }
+.module-explorer a.explorer__facet:hover { color: var(--c-accent); }
+.module-explorer a.explorer__chip { text-decoration: none; }
+.module-explorer a.explorer__chip:hover { border-color: var(--c-accent); }
+
+/* Détail */
+.module-explorer .explorer__detail { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.4fr); }
+.module-explorer .explorer__detail .card { margin-bottom: var(--sp-4); }
+.module-explorer .explorer__chip-link { display: inline-flex; align-items: center; gap: 4px; color: inherit; text-decoration: none; }
+.module-explorer .explorer__chip-link:hover { text-decoration: underline; }
+.module-explorer .explorer__history .list__item { align-items: flex-start; }
+.module-explorer .explorer__history .grow { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); align-items: baseline; }
+.module-explorer .explorer__pad { padding: var(--sp-3); margin: 0; }
+.module-explorer .explorer__relate .form-actions { margin-top: var(--sp-2); }
+
+/* Jeux de données */
+.module-explorer .explorer__datasets { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.module-explorer .explorer__dataset { display: flex; flex-direction: column; }
+.module-explorer .explorer__dataset .card__body { flex: 1; }
+.module-explorer .explorer__dataset .card__footer { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.module-explorer .explorer__kpi { margin: var(--sp-3) 0; }
+.module-explorer .explorer__dataset-meta { font-size: var(--fs-sm); }
+.module-explorer .explorer__field { display: inline-block; margin: 0 var(--sp-2) var(--sp-1) 0; }
+
+@media (max-width: 900px) {
+  .module-explorer .explorer__detail { grid-template-columns: 1fr; }
+}

@@ -92,6 +92,8 @@ return ModuleView::make('Bloc-notes')
 
 Le bandeau est **entièrement** produit par le module ; `renderCore('banner')` est une commodité, pas une obligation. Il doit utiliser les composants du CSS commun.
 
+Variables réservées dans les gabarits (injectées par le noyau, interdites dans `$vars` : `LogicException`) : `module`, `moduleId`, `csrfToken`, `baseUrl`, `e`, `date`, `datetime`. Le nom de méthode `purge()` sans paramètre est réservé au hook de rétention : nommer autrement un gestionnaire d’action de route (`purgeItem`, `purgeRetention`…).
+
 ## 5. Action : `ActionResult`
 
 ```php

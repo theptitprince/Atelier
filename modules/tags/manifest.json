@@ -1,0 +1,32 @@
+{
+    "id": "tags",
+    "name": "Tags partagés",
+    "version": "1.0.0",
+    "description": "Nuage et gestion des tags partagés : recherche, informations taguées, renommage, fusion, doublons et tags inutilisés",
+    "author": "Atelier",
+    "icon": "tag",
+    "group": "tools",
+    "order": 30,
+    "status": "active",
+    "namespace": "Atelier\\Modules\\Tags",
+    "entry": "TagsModule",
+    "defaultRoute": "list",
+    "keepAlive": false,
+    "badge": "badge",
+    "permissions": [
+        { "code": "manage", "label": "Gérer les tags", "description": "Gérer les tags : renommer, fusionner, supprimer" }
+    ],
+    "navigation": [
+        { "id": "list", "label": "Tous les tags", "route": "list", "order": 1, "permission": "open", "icon": "tag", "description": "Nuage et tableau des tags partagés" },
+        { "id": "manage", "label": "Gestion", "route": "manage", "order": 2, "permission": "manage", "icon": "sliders", "description": "Fusion, suppression, doublons et tags inutilisés" }
+    ],
+    "resources": [],
+    "assets": {
+        "css": ["assets/tags.css"],
+        "js": ["assets/tags.js"],
+        "vendor": []
+    },
+    "datasets": [],
+    "consumes": [],
+    "migrations": "migrations"
+}

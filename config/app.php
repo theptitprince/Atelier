@@ -14,7 +14,7 @@ return [
     'app' => [
         'name' => 'Atelier',
         'id' => 'atelier',
-        'version' => '0.3.0',
+        'version' => '0.4.0',
         'env' => 'dev',            // dev | test | prod
         'debug' => true,
         'timezone' => 'Europe/Paris',
@@ -61,7 +61,8 @@ return [
             'Referrer-Policy' => 'same-origin',
             'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
         ],
-        'csp' => "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        // img-src : fonds de carte du module Carte (tuiles OpenStreetMap et OpenSeaMap), servis directement par ces serveurs.
+        'csp' => "default-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://tiles.openseamap.org; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     ],
 
     'paths' => [
