@@ -1513,6 +1513,9 @@
     }
     nav.pollBadges();
     setInterval(nav.pollBadges, 60000);
+    if (CONFIG.flash && CONFIG.flash.message) {
+      setTimeout(() => toast.show({ level: CONFIG.flash.level || 'info', message: CONFIG.flash.message }), 300);
+    }
   }
 
   function init() {

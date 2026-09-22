@@ -2,6 +2,11 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.2.2 — 22/09/2026
+
+### Noyau
+- Message de bienvenue dans le toaster après la connexion (message flash de session affiché une seule fois).
+
 ## 0.2.1 — 22/09/2026
 
 ### Noyau
