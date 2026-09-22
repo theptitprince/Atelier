@@ -422,7 +422,10 @@
   // Onglets, panneaux, bandeaux et cycle de vie
   // ---------------------------------------------------------------------------
   const tabs = (function () {
-    const tabsEl = document.getElementById('tabs');
+    const tabsEl = document.getElementById('tabs-list') || document.getElementById('tabs');
+    const closeAllButton = document.getElementById('tabs-close-all');
+    const menuEl = document.getElementById('tab-menu');
+    let menuTarget = null;
     const workspace = document.getElementById('workspace');
     const bannerEl = document.getElementById('banner');
     const emptyEl = document.getElementById('workspace-empty');
@@ -533,12 +536,138 @@
         else activate(id, { push: true });
       });
       tab.tabEl.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); close(id); } });
+      tab.tabEl.addEventListener('contextmenu', (e) => { e.preventDefault(); openMenu(id, e.clientX, e.clientY); });
+      // Réorganisation naturelle : on saisit l'onglet et on le décale, il se réordonne en direct.
+      tab.tabEl.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0 || e.target.closest('.tab__close')) return;
+        startPointerDrag(tab, e);
+      });
+      tab.tabEl.addEventListener('click', (e) => { if (suppressClick) { e.stopImmediatePropagation(); e.preventDefault(); suppressClick = false; } }, true);
       tabsEl.appendChild(tab.tabEl);
       tab.ctx = createContext(tab);
       open.set(id, tab);
       behaviors.bind(tab);
+      updateActions();
       return tab;
     }
+
+    let suppressClick = false;
+    function startPointerDrag(tab, downEvent) {
+      const el = tab.tabEl;
+      const startX = downEvent.clientX;
+      let dragging = false;
+      let moved = false;
+      const onMove = (e) => {
+        const dx = e.clientX - startX;
+        if (!dragging) {
+          if (Math.abs(dx) < 6) return;
+          dragging = true;
+          el.classList.add('is-dragging');
+          try { el.setPointerCapture(downEvent.pointerId); } catch (err) { /* ignoré */ }
+        }
+        // Réordonne en direct : l'onglet suit le pointeur en passant devant/derrière ses voisins.
+        const siblings = Array.from(tabsEl.querySelectorAll('.tab')).filter((s) => s !== el);
+        let placed = false;
+        for (const sibling of siblings) {
+          const rect = sibling.getBoundingClientRect();
+          if (e.clientX < rect.left + rect.width / 2) {
+            if (el.nextElementSibling !== sibling) { tabsEl.insertBefore(el, sibling); moved = true; }
+            placed = true;
+            break;
+          }
+        }
+        if (!placed && tabsEl.lastElementChild !== el) { tabsEl.appendChild(el); moved = true; }
+      };
+      const onUp = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onUp);
+        if (dragging) {
+          el.classList.remove('is-dragging');
+          try { el.releasePointerCapture(downEvent.pointerId); } catch (err) { /* ignoré */ }
+          suppressClick = true; // le relâchement ne doit pas compter comme un clic sur l'onglet
+          setTimeout(() => { suppressClick = false; }, 0);
+          if (moved) { syncOrderFromDom(); announce('Onglet ' + tab.info.name + ' déplacé.'); }
+        }
+      };
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+      document.addEventListener('pointercancel', onUp);
+    }
+
+    /** Reconstruit l'ordre de la Map depuis l'ordre du DOM (la Map sert à la navigation clavier et au repli après fermeture). */
+    function syncOrderFromDom() {
+      const ordered = Array.from(tabsEl.querySelectorAll('.tab')).map((el) => el.dataset.module).filter((id) => open.has(id));
+      const entries = ordered.map((id) => [id, open.get(id)]);
+      open.clear();
+      entries.forEach(([id, tab]) => open.set(id, tab));
+    }
+    function moveTab(id, targetId, before) {
+      const tab = open.get(id), target = open.get(targetId);
+      if (!tab || !target) return;
+      tabsEl.insertBefore(tab.tabEl, before ? target.tabEl : target.tabEl.nextSibling);
+      syncOrderFromDom();
+      announce('Onglet ' + tab.info.name + ' déplacé.');
+    }
+    function moveBy(id, delta) {
+      const ids = Array.from(open.keys());
+      const index = ids.indexOf(id);
+      const targetIndex = index + delta;
+      if (index === -1 || targetIndex < 0 || targetIndex >= ids.length) return;
+      moveTab(id, ids[targetIndex], delta < 0);
+      open.get(id).tabEl.focus();
+    }
+    function updateActions() {
+      if (closeAllButton) closeAllButton.hidden = open.size === 0;
+    }
+
+    /** Ferme plusieurs onglets en séquence (chaque fermeture peut demander confirmation). */
+    async function closeMany(ids) {
+      let closed = 0;
+      for (const id of ids) {
+        if (!open.has(id)) continue;
+        if (await close(id)) closed += 1;
+      }
+      return closed;
+    }
+    function closeAll() { return closeMany(Array.from(open.keys())); }
+    function closeOthers(keepId) { return closeMany(Array.from(open.keys()).filter((id) => id !== keepId)); }
+    function closeRight(fromId) { const ids = Array.from(open.keys()); return closeMany(ids.slice(ids.indexOf(fromId) + 1)); }
+
+    // Menu contextuel d'onglet
+    function openMenu(id, x, y) {
+      if (!menuEl) return;
+      menuTarget = id;
+      menuEl.hidden = false;
+      const width = menuEl.offsetWidth || 220, height = menuEl.offsetHeight || 160;
+      menuEl.style.left = Math.min(x, window.innerWidth - width - 8) + 'px';
+      menuEl.style.top = Math.min(y, window.innerHeight - height - 8) + 'px';
+      const first = menuEl.querySelector('button');
+      if (first) first.focus();
+    }
+    function closeMenu() { if (menuEl) { menuEl.hidden = true; menuTarget = null; } }
+    if (menuEl) {
+      menuEl.addEventListener('click', async (e) => {
+        const item = e.target.closest('[data-tab-menu]');
+        if (!item || !menuTarget) return;
+        const id = menuTarget;
+        closeMenu();
+        const tab = open.get(id);
+        switch (item.dataset.tabMenu) {
+          case 'home': if (tab) navigate(id, tab.info.defaultRoute || null); break;
+          case 'close': close(id); break;
+          case 'close-others': closeOthers(id); break;
+          case 'close-right': closeRight(id); break;
+          case 'close-all': closeAll(); break;
+          default: break;
+        }
+      });
+      menuEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); const t = open.get(menuTarget || ''); if (t) t.tabEl.focus(); } });
+      document.addEventListener('click', (e) => { if (!menuEl.hidden && !menuEl.contains(e.target)) closeMenu(); });
+      document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menuEl.hidden) closeMenu(); });
+      window.addEventListener('blur', closeMenu);
+    }
+    if (closeAllButton) closeAllButton.addEventListener('click', () => closeAll());
 
     function updateTabInfo(tab, info) {
       tab.info = info;
@@ -615,6 +744,7 @@
       tab.bannerEl.remove();
       tab.tabEl.remove();
       open.delete(id);
+      updateActions();
       const wasActive = activeId === id;
       if (wasActive) {
         activeId = null;
@@ -743,17 +873,19 @@
 
     function all() { return Array.from(open.values()); }
 
-    // Navigation clavier entre onglets
+    // Navigation clavier entre onglets ; Ctrl+←/→ déplace l'onglet actif ; Suppr ferme ; Maj+F10 ouvre le menu
     tabsEl.addEventListener('keydown', (e) => {
       const ids = Array.from(open.keys());
       if (!ids.length) return;
       const index = ids.indexOf(activeId);
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && activeId) { e.preventDefault(); moveBy(activeId, e.key === 'ArrowRight' ? 1 : -1); return; }
       if (e.key === 'ArrowRight') { e.preventDefault(); const next = ids[(index + 1) % ids.length]; activate(next, { push: true }); open.get(next).tabEl.focus(); }
       if (e.key === 'ArrowLeft') { e.preventDefault(); const prev = ids[(index - 1 + ids.length) % ids.length]; activate(prev, { push: true }); open.get(prev).tabEl.focus(); }
       if (e.key === 'Delete' && activeId) { e.preventDefault(); close(activeId); }
+      if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') { e.preventDefault(); const t = open.get(activeId); if (t) { const r = t.tabEl.getBoundingClientRect(); openMenu(activeId, r.left, r.bottom); } }
     });
 
-    return { get, active, activate, close, navigate, open: openModule, setDirty, all, mountIfReady, callHook };
+    return { get, active, activate, close, closeAll, closeOthers, closeRight, move: moveBy, navigate, open: openModule, setDirty, all, mountIfReady, callHook };
   })();
 
   // ---------------------------------------------------------------------------
