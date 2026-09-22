@@ -1,5 +1,14 @@
 # Atelier
 
+[![PHP 8.4](https://img.shields.io/badge/PHP-8.4%2B-777BB4?logo=php&logoColor=white)](https://www.php.net/)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![MariaDB prêt](https://img.shields.io/badge/MariaDB-migration%20pr%C3%AAte-003545?logo=mariadb&logoColor=white)](docs/exploitation.md)
+[![JavaScript natif](https://img.shields.io/badge/JavaScript-natif%2C%20sans%20framework-F7DF1E?logo=javascript&logoColor=black)](public/assets/js/atelier.js)
+[![Apache 2.4](https://img.shields.io/badge/Apache-2.4-D22128?logo=apache&logoColor=white)](docs/installation.md)
+[![Version 0.7.1](https://img.shields.io/badge/version-0.7.1-2c3e50)](docs/CHANGELOG.md)
+[![Licence GPL v3](https://img.shields.io/badge/licence-GPL%20v3-blue)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-132%20verts-1f8a4c)](tests/run.php)
+
 Webapplication modulaire, sécurisée et réservée aux utilisateurs authentifiés : un environnement commun (authentification, droits, navigation, interface, données partagées, journalisation) dans lequel des modules métier indépendants s’ajoutent sans toucher au noyau.
 
 - **Technologies** : PHP 8.4 natif, SQLite (évolution prévue vers MariaDB), HTML5/CSS, JavaScript natif (`fetch`). Aucun framework, aucun Composer.
