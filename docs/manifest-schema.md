@@ -74,7 +74,7 @@ Le manifeste est la source de vérité de l’identité d’un module, de sa nav
 | `resources[]` | non | ressources protégées supplémentaires : `path`, `label`, `kind` (`screen`, `dataset`, `action`, `group`), `permissions` |
 | `assets.css[]`, `assets.js[]` | non | chemins relatifs au module, fichiers existants |
 | `assets.vendor[]` | non | `type` (`css`/`js`), `path`, `name`, `version`, `license` |
-| `datasets[]` | non | `code` préfixé `<id>.`, `name`, `visibility` **obligatoire** (`shared`/`private`), `tables`, `fields`, `operations`, `version`, `description` |
+| `datasets[]` | non | `code` préfixé `<id>.`, `name`, `visibility` **obligatoire** (`shared`/`private`), `tables`, `fields`, `operations`, `version`, `description`, `openRoute` (route interne contenant `{key}`, ex. `edit/{key}`, permettant aux modules transversaux — tags, explorateur, corbeille — d’ouvrir l’information dans son module) |
 | `consumes[]` | non | codes de jeux partagés consommés |
 | `migrations` | non | répertoire des migrations (défaut `migrations`) |
 

@@ -20,7 +20,7 @@ use Atelier\Support\Str;
  * tags partagés, corbeille avec rétention, et vue d'assistance (lecture seule, journalisée)
  * pour les utilisateurs disposant de la permission propre « assist ».
  */
-final class NotesModule extends AbstractModule
+final class NotesModule extends AbstractModule implements \Atelier\Modules\TrashProviderInterface
 {
     public const DATASET = 'notes.note';
     public const PER_PAGE = 25;
@@ -306,6 +306,59 @@ final class NotesModule extends AbstractModule
         });
         $this->log('notes.purge', 'success', 'note:' . $id, 'Note supprimée définitivement');
         return ActionResult::ok(['id' => $id], 'Note supprimée définitivement.')->refresh();
+    }
+
+    // =====================================================================
+    // Corbeille globale (TrashProviderInterface) : uniquement les notes de l'utilisateur courant
+    // =====================================================================
+
+    public function trashItems(): array
+    {
+        $userId = $this->ctx->userId();
+        $retention = $this->retentionDays();
+        $canRestore = $this->can('update');
+        $canPurge = $this->can('delete');
+        $items = [];
+        foreach ($this->repo()->trashed($userId, $retention) as $note) {
+            $deletedAt = (string) $note['deleted_at'];
+            $purgeAt = \Atelier\Support\Clock::parseUtc($deletedAt)?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => (string) $note['id'],
+                'label' => (string) ($note['title'] !== '' ? $note['title'] : 'Note sans titre'),
+                'dataset' => self::DATASET,
+                'deleted_at' => $deletedAt,
+                'deleted_by' => $userId,
+                'purge_at' => $purgeAt === null ? null : \Atelier\Support\Clock::utc($purgeAt),
+                'can_restore' => $canRestore,
+                'can_purge' => $canPurge,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->require('update');
+        $userId = $this->ctx->userId();
+        if ($this->repo()->findTrashed((int) $id, $userId) === null) {
+            throw new NotFoundException('Cette note n’est pas dans la corbeille.');
+        }
+        $this->repo()->restore((int) $id, $userId);
+        $this->log('notes.restore', 'success', 'note:' . $id, 'Note restaurée depuis la corbeille globale');
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete');
+        $userId = $this->ctx->userId();
+        if ($this->repo()->findTrashed((int) $id, $userId) === null) {
+            throw new NotFoundException('Cette note n’est pas dans la corbeille.');
+        }
+        $this->ctx->db->transaction(function () use ($id, $userId): void {
+            $this->repo()->purge((int) $id, $userId);
+            $this->ctx->shared->registry->unregister(self::DATASET, $id);
+        });
+        $this->log('notes.purge', 'success', 'note:' . $id, 'Note supprimée définitivement depuis la corbeille globale');
     }
 
     // =====================================================================
