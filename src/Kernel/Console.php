@@ -31,6 +31,7 @@ final class Console
         'modules:list' => ['modulesList', 'Liste les modules installés et leur état'],
         'modules:sync' => ['modulesSync', 'Force la synchronisation des manifestes (ressources, permissions, catalogue)'],
         'modules:set' => ['modulesSet', 'Modifie l’état d’un module : modules:set <id> active|inactive|maintenance'],
+        'module:create' => ['moduleCreate', 'Génère le squelette d’un module : module:create <id> [--name=…] [--group=tools] [--icon=module] [--no-table] [--shared]'],
         'backup:create' => ['backupCreate', 'Sauvegarde cohérente de la base, des pièces jointes et de la configuration'],
         'backup:list' => ['backupList', 'Liste les sauvegardes disponibles'],
         'backup:restore' => ['backupRestore', 'Restaure une sauvegarde : backup:restore <nom> (--force requis)'],
@@ -263,6 +264,35 @@ final class Console
         $this->app->modules->setModuleOverride($id, 'status', $state);
         $this->app->activity->record('core', 'console.module_state', ActivityLog::SUCCESS, 'module:' . $id, 'État modifié depuis la console : ' . $state);
         $this->info("Module $id : $state");
+        return 0;
+    }
+
+    private function moduleCreate(): int
+    {
+        $id = $this->arguments[0] ?? '';
+        if ($id === '') {
+            $this->error('Usage : module:create <id> [--name=Nom affiché] [--description=…] [--group=tools] [--icon=module] [--no-table] [--shared]');
+            return 1;
+        }
+        $scaffolder = new ModuleScaffolder($this->app->config->path('modules'));
+        $files = $scaffolder->create($id, [
+            'name' => is_string($this->options['name'] ?? null) ? $this->options['name'] : null,
+            'description' => is_string($this->options['description'] ?? null) ? $this->options['description'] : null,
+            'group' => is_string($this->options['group'] ?? null) ? $this->options['group'] : 'tools',
+            'icon' => is_string($this->options['icon'] ?? null) ? $this->options['icon'] : 'module',
+            'with_table' => !$this->hasOption('no-table'),
+            'shared' => $this->hasOption('shared'),
+        ]);
+        foreach ($files as $file) {
+            $this->line('  créé  ' . $file);
+        }
+        $this->app->modules->reset();
+        $this->app->synchronizer()->invalidate();
+        foreach ($this->app->synchronizer()->syncAll() as $line) {
+            $this->line('  ' . $line);
+        }
+        $this->app->activity->record('core', 'console.module_create', ActivityLog::SUCCESS, 'module:' . $id, 'Squelette de module généré', ['files' => count($files)]);
+        $this->info("Module « $id » créé et synchronisé. Attribuez ses droits dans Utilisateurs et droits, puis ouvrez-le depuis la colonne de gauche.");
         return 0;
     }
 
