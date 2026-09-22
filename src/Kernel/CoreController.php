@@ -211,6 +211,12 @@ final class CoreController
             case 'ping':
                 return Response::json(['time' => Clock::iso(Clock::utc())]);
 
+            case 'changelog':
+                return Response::json([
+                    'version' => $this->app->config->string('app.version'),
+                    'html' => $this->changelogHtml(),
+                ]);
+
             default:
                 throw new NotFoundException();
         }
@@ -302,6 +308,59 @@ final class CoreController
         }
         $this->app->activity->record('core', 'attachment.download', ActivityLog::SUCCESS, 'attachment:' . $attachmentId, (string) $attachment['original_name']);
         return $this->app->shared->attachments->download($attachmentId, $request->query('inline') === '1');
+    }
+
+    // ----- Journal des versions -----
+
+    /**
+     * Convertit docs/CHANGELOG.md (sous-ensemble de Markdown : titres, listes, paragraphes,
+     * code inline, gras) en HTML échappé.
+     */
+    private function changelogHtml(): string
+    {
+        $file = $this->app->config->rootPath() . '/docs/CHANGELOG.md';
+        if (!is_file($file)) {
+            return '<p class="text-muted">Aucun journal des versions disponible.</p>';
+        }
+        $html = '';
+        $inList = false;
+        $closeList = static function () use (&$html, &$inList): void {
+            if ($inList) {
+                $html .= "</ul>\n";
+                $inList = false;
+            }
+        };
+        $inline = static function (string $text): string {
+            $text = Str::e($text);
+            $text = preg_replace('/`([^`]+)`/', '<code>$1</code>', $text) ?? $text;
+            $text = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $text) ?? $text;
+            return $text;
+        };
+        foreach (preg_split('/\R/', (string) file_get_contents($file)) ?: [] as $line) {
+            $trimmed = trim($line);
+            if ($trimmed === '') {
+                $closeList();
+                continue;
+            }
+            if (preg_match('/^(#{1,4})\s+(.*)$/', $trimmed, $m) === 1) {
+                $closeList();
+                $level = min(4, strlen($m[1]) + 1); // # du fichier devient h2 dans la fenêtre
+                $html .= sprintf("<h%d>%s</h%d>\n", $level, $inline($m[2]), $level);
+                continue;
+            }
+            if (preg_match('/^[-*]\s+(.*)$/', $trimmed, $m) === 1) {
+                if (!$inList) {
+                    $html .= "<ul>\n";
+                    $inList = true;
+                }
+                $html .= '<li>' . $inline($m[1]) . "</li>\n";
+                continue;
+            }
+            $closeList();
+            $html .= '<p>' . $inline($trimmed) . "</p>\n";
+        }
+        $closeList();
+        return $html;
     }
 
     // ----- Utilitaires -----

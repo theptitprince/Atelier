@@ -103,7 +103,7 @@ final class Files
     {
         $name = str_replace(['\\', '/', "\0"], '_', $name);
         $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?? $name;
-        $name = trim($name, " .");
+        $name = trim($name, " ._");
         return $name === '' ? 'fichier' : mb_substr($name, 0, 200, 'UTF-8');
     }
 }

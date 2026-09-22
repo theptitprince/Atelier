@@ -90,7 +90,7 @@
             </div>
             <div class="statusbar__right">
                 <span class="statusbar__item statusbar__module" id="status-module"></span>
-                <span class="statusbar__item statusbar__version" title="Version d’Atelier">v<?= $e($version) ?></span>
+                <button type="button" class="statusbar__item statusbar__version" id="status-version" title="Afficher le journal des versions" aria-haspopup="dialog">v<?= $e($version) ?></button>
             </div>
         </footer>
     </div>
