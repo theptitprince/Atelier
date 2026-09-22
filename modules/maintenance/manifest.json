@@ -1,0 +1,105 @@
+{
+  "id": "maintenance",
+  "name": "Entretien",
+  "version": "1.0.0",
+  "description": "GMAO domestique : équipements (voiture, chaudière…), tâches d’entretien planifiées, pannes, rappels anticipés, fiches d’intervention et historique",
+  "author": "Atelier",
+  "icon": "tool",
+  "group": "tools",
+  "order": 25,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Maintenance",
+  "entry": "MaintenanceModule",
+  "defaultRoute": "dashboard",
+  "keepAlive": false,
+  "badge": "badge",
+  "permissions": [],
+  "navigation": [
+    { "id": "dashboard", "label": "Tableau de bord", "route": "dashboard", "order": 1, "permission": "open", "icon": "home", "description": "Rappels en retard ou à venir, pannes ouvertes, dernières interventions" },
+    { "id": "assets", "label": "Équipements", "route": "assets", "order": 2, "permission": "open", "icon": "layers", "description": "Voiture, chaudière, électroménager… avec leur compteur et leur historique" },
+    { "id": "asset-new", "label": "Nouvel équipement", "route": "asset/new", "order": 1, "permission": "create", "icon": "plus", "description": "Référencer un équipement", "parent": "assets" },
+    { "id": "jobs", "label": "Tâches d’entretien", "route": "jobs", "order": 3, "permission": "open", "icon": "clock", "description": "Entretiens périodiques avec échéance par date ou compteur et rappel anticipé" },
+    { "id": "job-new", "label": "Nouvelle tâche", "route": "job/new", "order": 1, "permission": "create", "icon": "plus", "description": "Planifier un entretien", "parent": "jobs" },
+    { "id": "defects", "label": "Pannes et défauts", "route": "defects", "order": 4, "permission": "open", "icon": "warning", "description": "Défauts constatés à corriger (interventions non planifiées)" },
+    { "id": "history", "label": "Historique", "route": "history", "order": 5, "permission": "open", "icon": "activity", "description": "Interventions réalisées, coûts, factures jointes" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 6, "permission": "delete", "icon": "trash", "description": "Équipements supprimés, restauration" }
+  ],
+  "resources": [
+    { "path": "action/export", "label": "Export CSV et calendrier", "kind": "action", "permissions": ["export"], "description": "Exporter l’historique au format CSV et les rappels au format iCalendar" }
+  ],
+  "assets": {
+    "css": ["assets/maintenance.css"],
+    "js": ["assets/maintenance.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "maintenance.asset",
+      "name": "Équipements",
+      "description": "Biens entretenus (véhicule, chauffage, électroménager, habitation…) avec compteur éventuel (km, heures)",
+      "visibility": "shared",
+      "tables": ["maintenance_asset"],
+      "fields": {
+        "id": "Identifiant",
+        "name": "Nom",
+        "category": "Catégorie",
+        "brand": "Marque",
+        "model": "Modèle",
+        "identifier": "Immatriculation ou numéro de série",
+        "acquired_at": "Date d’acquisition",
+        "meter_unit": "Unité du compteur (km, h)",
+        "meter_value": "Dernier relevé du compteur",
+        "location": "Emplacement",
+        "notes": "Notes (BBCode)"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "maintenance.job",
+      "name": "Tâches d’entretien",
+      "description": "Entretiens planifiés (périodicité par jours ou compteur, rappel anticipé) et pannes à corriger, avec fiche d’intervention (descriptif, pièces, contacts, outillage)",
+      "visibility": "shared",
+      "tables": ["maintenance_job"],
+      "fields": {
+        "id": "Identifiant",
+        "asset_id": "Équipement",
+        "title": "Titre",
+        "kind": "Nature (preventive : entretien planifié, corrective : panne)",
+        "priority": "Priorité",
+        "status": "État (open, closed)",
+        "interval_days": "Périodicité en jours",
+        "interval_meter": "Périodicité en unités de compteur",
+        "next_due_at": "Prochaine échéance (date)",
+        "next_due_meter": "Prochaine échéance (compteur)",
+        "lead_days": "Rappel anticipé (jours)",
+        "lead_meter": "Rappel anticipé (compteur)",
+        "estimated_minutes": "Durée estimée (minutes)",
+        "estimated_cost": "Coût estimé (centimes)"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "maintenance.log",
+      "name": "Interventions",
+      "description": "Historique des interventions réalisées (date, compteur, coût, intervenant, factures jointes)",
+      "visibility": "shared",
+      "tables": ["maintenance_log"],
+      "fields": {
+        "id": "Identifiant",
+        "asset_id": "Équipement",
+        "job_id": "Tâche d’origine",
+        "done_at": "Date de réalisation",
+        "meter_value": "Compteur au moment de l’intervention",
+        "title": "Titre",
+        "cost": "Coût (centimes)",
+        "performed_by": "Intervenant"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    }
+  ],
+  "consumes": [],
+  "migrations": "migrations"
+}

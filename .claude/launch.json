@@ -24,6 +24,18 @@
                 "tools/dev-router.php"
             ],
             "port": 8010
+        },
+        {
+            "name": "atelier-8020",
+            "runtimeExecutable": "D:/_CLAUDE_CODE/_ATELIER/_tools/php84/php.exe",
+            "runtimeArgs": [
+                "-S",
+                "127.0.0.1:8020",
+                "-t",
+                "public",
+                "tools/dev-router.php"
+            ],
+            "port": 8020
         }
     ]
 }
