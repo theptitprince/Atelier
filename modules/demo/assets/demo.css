@@ -1,0 +1,48 @@
+/*
+ * Module Démonstration — styles propres au module.
+ *
+ * Règle : toute règle est préfixée par .module-demo (racine du HTML rendu). Aucun composant du CSS
+ * commun (.btn, .table, .card…) n'est redéfini ; seules les variables du thème sont réutilisées.
+ * Le bandeau étant hors de .module-demo, la seule règle qui le concerne cible [data-module="demo"].
+ */
+
+/* ---- Vue d'ensemble ---- */
+.module-demo .demo-hero { display: grid; grid-template-columns: 1fr 380px; gap: var(--sp-5); align-items: start; }
+.module-demo .demo-hero__aside .card { margin-bottom: 0; }
+.module-demo .demo-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+.module-demo .demo-checklist .list__item { padding: var(--sp-2) var(--sp-4); }
+.module-demo .demo-checklist .badge { min-width: 32px; justify-content: center; }
+.module-demo .demo-code { margin: 0; border: 0; border-radius: 0; max-height: 360px; font-size: var(--fs-xs); line-height: 1.5; }
+.module-demo .demo-code code { background: transparent; padding: 0; }
+
+/* ---- Composant propre : jauge (.demo-gauge) ---- */
+.module-demo .demo-gauge { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-1) var(--sp-3); align-items: center; padding: var(--sp-3); border: 1px solid var(--c-border); border-radius: var(--radius); background: var(--c-surface-2); }
+.module-demo .demo-gauge__label { font-size: var(--fs-sm); font-weight: 500; }
+.module-demo .demo-gauge__value { font-family: var(--font-mono); font-weight: 600; color: var(--c-accent); }
+.module-demo .demo-gauge__bar { grid-column: 1 / -1; height: 10px; background: var(--c-border); border-radius: 5px; overflow: hidden; }
+.module-demo .demo-gauge__fill { height: 100%; background: var(--c-accent); border-radius: 5px; transition: width var(--t-fast) ease-out; }
+.module-demo .demo-gauge--warn .demo-gauge__value { color: var(--c-warning); }
+.module-demo .demo-gauge--warn .demo-gauge__fill { background: var(--c-warning); }
+
+/* ---- États simulés (le vrai :hover reste celui du CSS commun) ---- */
+.module-demo .btn.demo-hover { background: var(--c-primary-hover); border-color: var(--c-primary-hover); }
+.module-demo .list__item.demo-hover { background: var(--c-surface-2); }
+
+/* ---- Squelettes et blocs d'état ---- */
+.module-demo .demo-skeleton-lines { display: flex; flex-direction: column; gap: var(--sp-2); }
+.module-demo .demo-skeleton-lines .skeleton { height: 0.9em; }
+.module-demo .demo-skeleton-block { height: 64px !important; width: 100%; }
+.module-demo .demo-states { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-3); }
+.module-demo .demo-states .state { min-height: 180px; padding: var(--sp-4); }
+.module-demo .demo-states .state .icon--xl { width: 2rem; height: 2rem; }
+.module-demo .demo-states .card__header { padding: var(--sp-2) var(--sp-3); }
+
+/* ---- Tableaux ---- */
+.module-demo .demo-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--c-accent); }
+.module-demo .demo-bulkbar { padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+
+/* ---- Bandeau : libellés des liens d'écran (hors racine .module-demo, donc ciblé par le module) ---- */
+.banner__module[data-module="demo"] .demo-banner-label { display: inline; }
+@media (max-width: 1500px) {
+  .banner__module[data-module="demo"] .demo-banner-label { display: none; }
+}

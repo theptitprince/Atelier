@@ -2,6 +2,14 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.2.1 — 22/09/2026
+
+### Noyau
+- Correctif : la route canonique d’une vue conserve sa chaîne de requête (filtres, page, tri) ; l’URL, l’historique et l’actualisation d’un onglet gardent l’état affiché.
+
+### Modules
+- Démonstration 1.0.0 : module fictif de référence (composants, formulaires, tableaux, notifications, cycle de vie, tags/relations/pièces jointes, cas d’erreur) et guide « Créer un module à partir de demo ».
+
 ## 0.2.0 — 22/09/2026
 
 ### Noyau
