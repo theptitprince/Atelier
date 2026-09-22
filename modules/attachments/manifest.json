@@ -1,0 +1,55 @@
+{
+  "id": "attachments",
+  "name": "Fichiers joints",
+  "version": "1.0.0",
+  "description": "Téléversement, rattachement et téléchargement sécurisé des fichiers joints (chiffrés au repos)",
+  "author": "Atelier",
+  "icon": "paperclip",
+  "group": "tools",
+  "order": 40,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Attachments",
+  "entry": "AttachmentsModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [
+    { "code": "assist", "label": "Assistance", "description": "Voir, télécharger et gérer les fichiers de tous les utilisateurs" }
+  ],
+  "navigation": [
+    { "id": "list", "label": "Mes fichiers", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Fichiers que j’ai téléversés" },
+    { "id": "upload", "label": "Téléverser", "route": "upload", "order": 2, "permission": "create", "icon": "upload", "description": "Ajouter des fichiers, éventuellement rattachés à une information" },
+    { "id": "all", "label": "Tous les fichiers", "route": "all", "order": 3, "permission": "assist", "icon": "users", "description": "Fichiers de tous les utilisateurs (assistance)" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 4, "permission": "delete", "icon": "trash", "description": "Fichiers supprimés, restauration" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/attachments.css"],
+    "js": ["assets/attachments.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "attachments.file",
+      "name": "Fichiers joints",
+      "description": "Métadonnées des pièces jointes (table détenue par le noyau ; contenu chiffré hors base, accessible uniquement par téléchargement contrôlé)",
+      "visibility": "private",
+      "tables": ["attachments"],
+      "fields": {
+        "id": "Identifiant interne",
+        "original_name": "Nom du fichier",
+        "mime": "Type MIME",
+        "size": "Taille (octets)",
+        "sha256": "Empreinte SHA-256 du contenu",
+        "cipher": "Algorithme de chiffrement au repos",
+        "info_id": "Information rattachée (registre commun)",
+        "uploaded_by": "Auteur",
+        "created_at": "Date de téléversement",
+        "deleted_at": "Date de mise à la corbeille"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 2
+    }
+  ],
+  "consumes": ["geo.point"]
+}
