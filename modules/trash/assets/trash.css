@@ -1,0 +1,11 @@
+/* Styles propres au module « Corbeille », limités à sa racine .module-trash. */
+.module-trash .trash__subtabs .badge { margin-left: var(--sp-1); }
+.module-trash .trash__filters { margin-bottom: var(--sp-3); }
+.module-trash .trash__search { width: 300px; }
+.module-trash .trash__col-label { min-width: 260px; }
+.module-trash .trash__col-date { white-space: nowrap; }
+.module-trash .trash__label { display: inline-flex; align-items: center; gap: var(--sp-1); font-weight: 500; }
+.module-trash .trash__context { display: block; margin-top: 2px; }
+.module-trash .trash__bulkbar { margin-top: var(--sp-3); padding: var(--sp-2) var(--sp-3); background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); }
+.module-trash .trash__table .col-check { width: 1%; }
+.module-trash .trash__table td.trash__col-date .badge { margin-right: var(--sp-1); }

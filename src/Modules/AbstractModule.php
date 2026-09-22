@@ -52,8 +52,15 @@ abstract class AbstractModule implements ModuleInterface
      *
      * @param array<string, mixed> $vars
      */
+    /** Noms de variables injectés par le noyau dans chaque gabarit de module. */
+    public const RESERVED_TEMPLATE_VARS = ['module', 'moduleId', 'csrfToken', 'baseUrl', 'e', 'date', 'datetime'];
+
     protected function render(string $template, array $vars = []): string
     {
+        $reserved = array_intersect(array_keys($vars), self::RESERVED_TEMPLATE_VARS);
+        if ($reserved !== []) {
+            throw new \LogicException(sprintf('Variable(s) de gabarit réservée(s) par le noyau : %s (module %s, gabarit %s).', implode(', ', $reserved), $this->id(), $template));
+        }
         return $this->ctx->template->render($this->id() . '::' . $template, $vars + [
             'module' => $this,
             'moduleId' => $this->id(),

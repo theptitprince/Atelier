@@ -1,0 +1,31 @@
+{
+  "id": "trash",
+  "name": "Corbeille",
+  "version": "1.0.0",
+  "description": "Corbeille globale : éléments supprimés par les modules et pièces jointes supprimées, restauration et suppression définitive",
+  "author": "Atelier",
+  "icon": "trash",
+  "group": "tools",
+  "order": 80,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Trash",
+  "entry": "TrashModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": "badge",
+  "permissions": [
+    { "code": "purge-all", "label": "Vider toute la corbeille", "description": "Supprimer définitivement, en une seule action, tous les éléments visibles dans la corbeille" }
+  ],
+  "navigation": [
+    { "id": "list", "label": "Éléments supprimés", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Éléments supprimés par les modules et pièces jointes supprimées : restauration ou suppression définitive" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/trash.css"],
+    "js": ["assets/trash.js"],
+    "vendor": []
+  },
+  "datasets": [],
+  "consumes": [],
+  "migrations": "migrations"
+}

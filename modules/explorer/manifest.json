@@ -1,0 +1,31 @@
+{
+    "id": "explorer",
+    "name": "Explorateur",
+    "version": "1.0.0",
+    "description": "Vue transversale des informations partagées de tous les modules : recherche, tags, relations et pièces jointes",
+    "author": "Atelier",
+    "icon": "layers",
+    "group": "tools",
+    "order": 40,
+    "status": "active",
+    "namespace": "Atelier\\Modules\\Explorer",
+    "entry": "ExplorerModule",
+    "defaultRoute": "search",
+    "keepAlive": false,
+    "badge": null,
+    "permissions": [],
+    "navigation": [
+        { "id": "search", "label": "Rechercher", "route": "search", "order": 1, "permission": "open", "icon": "search", "description": "Rechercher une information partagée par libellé, jeu de données, module ou tag" },
+        { "id": "datasets", "label": "Jeux de données", "route": "datasets", "order": 2, "permission": "open", "icon": "database", "description": "Catalogue des jeux de données partagés lisibles" },
+        { "id": "relations", "label": "Relations", "route": "relations", "order": 3, "permission": "open", "icon": "link", "description": "Toutes les relations entre informations visibles" },
+        { "id": "attachments", "label": "Pièces jointes", "route": "attachments", "order": 4, "permission": "open", "icon": "paperclip", "description": "Pièces jointes rattachées aux informations visibles" }
+    ],
+    "resources": [],
+    "assets": {
+        "css": ["assets/explorer.css"],
+        "js": ["assets/explorer.js"]
+    },
+    "datasets": [],
+    "consumes": [],
+    "migrations": "migrations"
+}

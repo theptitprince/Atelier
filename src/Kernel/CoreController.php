@@ -260,6 +260,11 @@ final class CoreController
             try {
                 [, $routes] = $this->app->modules->boot($descriptor->id, $this->app->context($request));
                 $match = $routes->match($badgeRoute, 'GET');
+                // La permission déclarée par la route "badge" est contrôlée comme pour toute route.
+                $badgeResource = AclService::module($descriptor->id) . ($match['route']['resource'] !== null ? '/' . trim((string) $match['route']['resource'], '/') : '');
+                if (!$this->app->acl->can($userId, $badgeResource, (string) $match['route']['permission'])) {
+                    continue;
+                }
                 $result = ($match['route']['handler'])($request, $match['params']);
                 $badges[$descriptor->id] = $result instanceof \Atelier\Modules\ActionResult ? $result->data() : $result;
             } catch (Throwable $e) {
