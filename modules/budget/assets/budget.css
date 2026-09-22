@@ -1,0 +1,44 @@
+/* Styles propres au module Budget, limités à sa racine. */
+.module-budget .budget__filters { margin-bottom: var(--sp-3); }
+.module-budget .budget__select { width: auto; min-width: 9rem; max-width: 18rem; }
+.module-budget .budget__per-page { width: auto; min-width: 5rem; }
+.module-budget .budget__month { width: auto; }
+.module-budget .budget__nav-label { margin-left: 4px; }
+.module-budget .budget__amount { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.module-budget .budget__block { display: block; }
+.module-budget .budget__note { padding: var(--sp-2) var(--sp-3); margin: 0; border-top: 1px solid var(--c-border); }
+.module-budget .budget__row--uncleared td { font-style: italic; }
+.module-budget .budget__row--parent td { background: var(--c-accent-soft, rgba(0, 0, 0, .03)); }
+.module-budget .budget__row--detail td { background: var(--c-bg-muted, rgba(0, 0, 0, .02)); }
+.module-budget .budget__indent { padding-left: 1.4em; }
+.module-budget .col-check { width: 2rem; }
+.module-budget .budget__bulk { border: 1px solid var(--c-border); border-radius: var(--radius); padding: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-2); align-items: center; }
+
+/* Indicateurs et tableaux de bord */
+.module-budget .budget__stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.module-budget .budget__stats--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.module-budget .budget__dashboard,
+.module-budget .budget__forecast-layout,
+.module-budget .budget__savings-layout,
+.module-budget .budget__form-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-budget .budget__categories { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: start; }
+.module-budget .budget__month-nav { align-items: center; margin-bottom: var(--sp-3); }
+
+/* Barres de consommation */
+.module-budget .budget__col-bar { min-width: 160px; }
+.module-budget .budget__col-form { min-width: 260px; }
+.module-budget .budget__bar { display: inline-block; vertical-align: middle; width: 110px; height: 8px; border-radius: 4px; background: var(--c-border); overflow: hidden; margin-right: 6px; }
+.module-budget .budget__bar-fill { display: block; height: 100%; background: var(--c-success, #2e8b57); }
+.module-budget .budget__bar.is-warning .budget__bar-fill { background: var(--c-warning, #d68910); }
+.module-budget .budget__bar.is-over .budget__bar-fill { background: var(--c-danger, #c0392b); }
+.module-budget .budget__bar.is-full .budget__bar-fill { background: var(--c-success, #2e8b57); }
+.module-budget .budget__goal { padding: var(--sp-2) 0; border-bottom: 1px solid var(--c-border); position: relative; }
+.module-budget .budget__goal:last-child { border-bottom: 0; }
+.module-budget .budget__goal .budget__bar { width: 100%; margin: 4px 0; }
+.module-budget .budget__goal-delete { position: absolute; right: 0; bottom: var(--sp-2); }
+
+/* Formulaires */
+.module-budget .budget__envelope-form { display: flex; gap: 4px; align-items: center; }
+.module-budget .budget__envelope-amount { width: 6.5rem; text-align: right; }
+.module-budget .budget__prefix { width: auto; flex: none; background: var(--c-accent-soft, transparent); }
+.module-budget .budget__count { width: 4.5rem; text-align: right; }

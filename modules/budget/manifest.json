@@ -1,0 +1,92 @@
+{
+  "id": "budget",
+  "name": "Budget",
+  "version": "1.0.0",
+  "description": "Comptabilité domestique : comptes, opérations, budgets par catégorie, prévisionnel (récurrences, échéances d’entretien), objectifs d’épargne et économies réalisées",
+  "author": "Atelier",
+  "icon": "book",
+  "group": "tools",
+  "order": 26,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Budget",
+  "entry": "BudgetModule",
+  "defaultRoute": "dashboard",
+  "keepAlive": false,
+  "badge": "badge",
+  "permissions": [],
+  "navigation": [
+    { "id": "dashboard", "label": "Tableau de bord", "route": "dashboard", "order": 1, "permission": "open", "icon": "home", "description": "Soldes, dépenses du mois, budget restant, échéances à poster, objectifs" },
+    { "id": "transactions", "label": "Opérations", "route": "transactions", "order": 2, "permission": "open", "icon": "list", "description": "Livre des opérations : recherche, filtres, pointage, justificatifs" },
+    { "id": "transaction-new", "label": "Nouvelle opération", "route": "transaction/new", "order": 1, "permission": "create", "icon": "plus", "description": "Saisir une dépense ou une recette", "parent": "transactions" },
+    { "id": "import", "label": "Importer un relevé", "route": "import", "order": 2, "permission": "import", "icon": "upload", "description": "Import CSV d’un relevé bancaire, sans doublons", "parent": "transactions", "resource": "action/import" },
+    { "id": "envelopes", "label": "Budget du mois", "route": "envelopes", "order": 3, "permission": "open", "icon": "grid", "description": "Réalisé par rapport au budget de chaque catégorie" },
+    { "id": "forecast", "label": "Prévisionnel", "route": "forecast", "order": 4, "permission": "open", "icon": "calendar", "description": "Récurrences (loyer, salaire, abonnements), échéances d’entretien et projection du solde" },
+    { "id": "savings", "label": "Épargne et économies", "route": "savings", "order": 5, "permission": "open", "icon": "archive", "description": "Objectifs d’épargne et économies réalisées (budget non dépensé, gains enregistrés)" },
+    { "id": "accounts", "label": "Comptes", "route": "accounts", "order": 6, "permission": "open", "icon": "database", "description": "Comptes courants, épargne, espèces et leurs soldes" },
+    { "id": "categories", "label": "Catégories", "route": "categories", "order": 7, "permission": "open", "icon": "tag", "description": "Catégories de dépenses et de recettes, budgets mensuels ou annuels" },
+    { "id": "settings", "label": "Réglages", "route": "settings", "order": 8, "permission": "admin", "icon": "settings", "description": "Compte et catégorie utilisés pour les coûts venant du module Entretien" }
+  ],
+  "resources": [
+    { "path": "action/import", "label": "Import CSV", "kind": "action", "permissions": ["import"], "description": "Importer des opérations depuis un relevé CSV" },
+    { "path": "action/export", "label": "Export CSV", "kind": "action", "permissions": ["export"], "description": "Exporter les opérations au format CSV" }
+  ],
+  "assets": {
+    "css": ["assets/budget.css"],
+    "js": ["assets/budget.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "budget.account",
+      "name": "Comptes",
+      "description": "Comptes bancaires, d’épargne ou en espèces avec solde initial",
+      "visibility": "shared",
+      "tables": ["budget_account"],
+      "fields": { "id": "Identifiant", "name": "Nom", "kind": "Nature (checking, savings, cash, other)", "initial_balance": "Solde initial (centimes)", "opened_at": "Date d’ouverture", "archived": "Archivé" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "budget.category",
+      "name": "Catégories",
+      "description": "Catégories hiérarchiques de dépenses et de recettes, avec budgets (enveloppes) mensuels ou annuels",
+      "visibility": "shared",
+      "tables": ["budget_category", "budget_envelope"],
+      "fields": { "id": "Identifiant", "parent_id": "Catégorie parente", "name": "Nom", "kind": "Nature (expense, income)" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "budget.transaction",
+      "name": "Opérations",
+      "description": "Opérations datées (montant signé en centimes, négatif pour une dépense) avec catégorie, tiers, pointage, origine (saisie, import, récurrence, module Entretien) et justificatifs joints",
+      "visibility": "shared",
+      "tables": ["budget_transaction"],
+      "fields": { "id": "Identifiant", "account_id": "Compte", "category_id": "Catégorie", "done_at": "Date", "amount": "Montant signé (centimes)", "label": "Libellé", "payee": "Tiers", "cleared": "Pointée", "source": "Origine", "source_ref": "Référence d’origine" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "budget.recurring",
+      "name": "Opérations récurrentes",
+      "description": "Loyers, salaires, abonnements : périodicité, prochaine échéance, fin éventuelle",
+      "visibility": "private",
+      "tables": ["budget_recurring"],
+      "fields": { "id": "Identifiant", "label": "Libellé", "amount": "Montant signé (centimes)", "interval_unit": "Unité", "interval_count": "Nombre d’unités", "next_at": "Prochaine échéance" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "budget.saving",
+      "name": "Épargne et économies",
+      "description": "Objectifs d’épargne et registre des économies réalisées",
+      "visibility": "private",
+      "tables": ["budget_goal", "budget_saving"],
+      "fields": { "id": "Identifiant", "name": "Nom", "target": "Cible (centimes)", "amount": "Gain (centimes)" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    }
+  ],
+  "consumes": ["maintenance.job"],
+  "migrations": "migrations"
+}

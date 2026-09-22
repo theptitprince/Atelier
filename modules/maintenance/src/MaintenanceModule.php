@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atelier\Modules\Maintenance;
 
 use Atelier\Error\ForbiddenException;
+use Atelier\Error\ModuleUnavailableException;
 use Atelier\Error\NotFoundException;
 use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
@@ -639,15 +640,16 @@ final class MaintenanceModule extends AbstractModule
         });
         $this->registerLog($id, $data['title'], $data['done_at'], (string) $asset['name']);
         $this->log('maintenance.log_' . ($isNew ? 'create' : 'update'), 'success', 'maintenance_log:' . $id, 'Intervention ' . ($isNew ? 'enregistrée' : 'modifiée') . ' : ' . $data['title'], ['asset_id' => $asset['id'], 'job_id' => $data['job_id'], 'cost' => $data['cost']]);
+        $budgetTransactionId = $this->reportCostToBudget($id, $data, (string) $asset['name']);
 
-        $message = 'Intervention « ' . $data['title'] . ' » enregistrée.';
+        $message = 'Intervention « ' . $data['title'] . ' » enregistrée' . ($budgetTransactionId !== null ? ' et reportée dans le budget' : '') . '.';
         if ($rescheduled !== null) {
             $message .= $rescheduled['status'] === 'closed'
                 ? ' La tâche est clôturée.'
                 : ' Prochaine échéance : ' . $this->dueLabel($rescheduled['next_due_at'], $rescheduled['next_due_meter'], $asset['meter_unit']) . '.';
         }
         $target = $job !== null ? 'job/' . $job['id'] : 'asset/' . $asset['id'];
-        return ActionResult::ok(['id' => $id, 'rescheduled' => $rescheduled], $message)->dirty(false)->navigate($target);
+        return ActionResult::ok(['id' => $id, 'rescheduled' => $rescheduled, 'budget_transaction_id' => $budgetTransactionId], $message)->dirty(false)->navigate($target);
     }
 
     public function logDelete(Request $request, array $params): ActionResult
@@ -655,6 +657,7 @@ final class MaintenanceModule extends AbstractModule
         $log = $this->requireLog($this->requireId($request));
         $this->ctx->shared->registry->unregister(self::DATASET_LOG, (string) $log['id']);
         $this->logRepo()->delete($log['id']);
+        $this->removeCostFromBudget($log['id']);
         $this->log('maintenance.log_delete', 'success', 'maintenance_log:' . $log['id'], 'Intervention supprimée : ' . $log['title']);
         return ActionResult::ok(null, 'Intervention supprimée.')->refresh();
     }
@@ -1371,6 +1374,50 @@ final class MaintenanceModule extends AbstractModule
         return $this->ctx->shared->registry->register(self::DATASET_JOB, (string) $id, $title . ($assetName !== '' ? ' — ' . $assetName : ''), $this->ctx->auth->userId());
     }
 
+    /**
+     * Reporte le coût réel d'une intervention dans le module Budget (opération d'origine « Entretien »,
+     * référence maintenance_log:<id>), ou retire l'opération si le coût est effacé. Silencieux si le
+     * module Budget est absent, désactivé ou si l'utilisateur n'y a pas le droit d'écriture.
+     *
+     * @param array<string, mixed> $data données validées de l'intervention
+     */
+    private function reportCostToBudget(int $logId, array $data, string $assetName): ?int
+    {
+        if (!$this->ctx->modules()->has('budget')) {
+            return null;
+        }
+        $sourceRef = 'maintenance_log:' . $logId;
+        try {
+            $budget = $this->ctx->moduleService('budget');
+            if ($data['cost'] === null || $data['cost'] <= 0) {
+                $budget->removeExternal($this->ctx->userId(), $sourceRef);
+                return null;
+            }
+            return $budget->recordExternal($this->ctx->userId(), $sourceRef, 'maintenance', [
+                'label' => $data['title'] . ' — ' . $assetName,
+                'amount' => -(int) $data['cost'],
+                'done_at' => (string) $data['done_at'],
+                'payee' => $data['performed_by'] !== '' ? $data['performed_by'] : null,
+                'notes' => null,
+            ]);
+        } catch (ModuleUnavailableException | ForbiddenException $e) {
+            $this->debug('Report du coût dans le budget impossible', ['log_id' => $logId, 'reason' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    private function removeCostFromBudget(int $logId): void
+    {
+        if (!$this->ctx->modules()->has('budget')) {
+            return;
+        }
+        try {
+            $this->ctx->moduleService('budget')->removeExternal($this->ctx->userId(), 'maintenance_log:' . $logId);
+        } catch (ModuleUnavailableException | ForbiddenException) {
+            // le module Budget est absent ou l'utilisateur n'y a pas de droit : l'opération éventuelle y reste
+        }
+    }
+
     private function registerLog(int $id, string $title, string $doneAt, string $assetName): string
     {
         return $this->ctx->shared->registry->register(self::DATASET_LOG, (string) $id, $title . ' (' . $this->day($doneAt) . ')' . ($assetName !== '' ? ' — ' . $assetName : ''), $this->ctx->auth->userId());
@@ -1398,6 +1445,7 @@ final class MaintenanceModule extends AbstractModule
             $registry = $this->ctx->shared->registry;
             foreach ($this->logRepo()->idsForAsset($id) as $logId) {
                 $registry->unregister(self::DATASET_LOG, (string) $logId);
+                $this->removeCostFromBudget($logId);
             }
             foreach ($this->jobRepo()->idsForAsset($id) as $jobId) {
                 $registry->unregister(self::DATASET_JOB, (string) $jobId);

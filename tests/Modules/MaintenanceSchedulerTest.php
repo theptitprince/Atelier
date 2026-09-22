@@ -17,6 +17,7 @@ final class MaintenanceSchedulerTest extends TestCase
 
     public function setUp(): void
     {
+        $this->application()->modules->discover(); // autoloader du module
         $this->today = new DateTimeImmutable('2026-09-22');
     }
 

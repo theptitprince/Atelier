@@ -84,6 +84,35 @@ final class MaintenanceService
         return array_slice($rows, 0, max(1, $limit));
     }
 
+    /**
+     * Coûts estimés des tâches ouvertes dont l'échéance datée tombe dans les prochains mois
+     * (prévisionnel du module Budget) : une ligne par tâche, montant positif en centimes.
+     *
+     * @return list<array{day: string, label: string, amount: int, job_id: int}>
+     */
+    public function upcomingCosts(int $viewerUserId, int $months = 12): array
+    {
+        $this->assertReadable($viewerUserId, self::DATASET_JOB);
+        $from = $this->today->format('Y-m-d');
+        $to = $this->today->modify('+' . max(1, $months) . ' months')->format('Y-m-d');
+        $rows = [];
+        foreach ($this->jobs->open() as $job) {
+            $due = $job['next_due_at'];
+            $cost = $job['estimated_cost'];
+            if ($due === null || $cost === null || $cost <= 0 || $due > $to) {
+                continue;
+            }
+            $rows[] = [
+                'day' => max($due, $from),
+                'label' => ($job['kind'] === 'corrective' ? 'Réparation : ' : 'Entretien : ') . $job['title'] . ' (' . $job['asset_name'] . ')',
+                'amount' => (int) $cost,
+                'job_id' => $job['id'],
+            ];
+        }
+        usort($rows, static fn (array $a, array $b): int => strcmp($a['day'], $b['day']) ?: $a['job_id'] <=> $b['job_id']);
+        return $rows;
+    }
+
     /** Nombre de rappels actifs (sans contrôle de droit : utilisé par le badge du module). */
     public function reminderCount(): int
     {
