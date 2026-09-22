@@ -284,28 +284,37 @@
     let resolver = null;
     let currentOpts = null;
 
+    /** Résout la promesse en cours (idempotent) : appelé à la fermeture, sans dépendre de l'événement "close". */
+    function settle(value) {
+      const opts = currentOpts;
+      currentOpts = null;
+      root.classList.remove('dialog--wide');
+      if (resolver) { const r = resolver; resolver = null; r(opts && opts.resolveWith ? opts.resolveWith(value) : value); }
+    }
     function close(value) {
       if (!root || !root.open) return;
-      root.close(typeof value === 'string' ? value : 'cancel');
+      const result = typeof value === 'string' ? value : 'cancel';
+      root.close(result);
+      settle(result);
     }
     if (root) {
-      root.addEventListener('close', () => {
-        const value = root.returnValue || 'cancel';
-        const opts = currentOpts;
-        currentOpts = null;
-        root.classList.remove('dialog--wide');
-        if (resolver) { const r = resolver; resolver = null; r(opts && opts.resolveWith ? opts.resolveWith(value) : value); }
-      });
+      // Fermeture native (Échap) : "cancel" précède "close" ; on résout nous-mêmes car certains
+      // navigateurs n'émettent pas "close" de façon fiable.
       root.addEventListener('cancel', (e) => {
-        if (currentOpts && currentOpts.closable === false) e.preventDefault();
+        if (currentOpts && currentOpts.closable === false) { e.preventDefault(); return; }
+        e.preventDefault();
+        close('cancel');
       });
+      root.addEventListener('close', () => settle(root.returnValue || 'cancel'));
       root.addEventListener('click', (e) => {
         if (e.target.closest('[data-dialog-close]')) { e.preventDefault(); if (!currentOpts || currentOpts.closable !== false) close('cancel'); }
       });
       document.getElementById('dialog-form').addEventListener('submit', (e) => {
-        // La soumission par Entrée dans un formulaire de dialogue déclenche le bouton principal.
+        // La soumission (clic sur un bouton ou Entrée) ferme explicitement la boîte : certains navigateurs
+        // ferment un <form method="dialog"> sans émettre l'événement "close" qui résout la promesse.
+        e.preventDefault();
         const submitter = e.submitter;
-        if (submitter && submitter.value) root.returnValue = submitter.value;
+        close(submitter && submitter.value ? submitter.value : 'ok');
       });
     }
 
@@ -851,6 +860,7 @@
         if (view.status && view.status.message) status.message(view.status.message, view.status.level || '');
         ui.enhance(content);
         ui.enhance(tab.bannerEl);
+        nav.refreshBadgesSoon();
         if (!tab.mounted) mountIfReady(tab); else callHook(tab, 'render', view);
         behaviors.autofocus(content);
       } catch (err) {
@@ -1074,14 +1084,18 @@
       } catch (err) { toast.fromError(err); }
     }
 
+    let badgesInFlight = false;
     async function pollBadges() {
-      if (document.hidden) return;
+      if (document.hidden || badgesInFlight) return;
+      badgesInFlight = true;
       try {
         const envelope = await api.get('/core/badges');
         badges = envelope.data.badges || {};
         applyBadges();
-      } catch (e) { /* silencieux */ }
+      } catch (e) { /* silencieux */ } finally { badgesInFlight = false; }
     }
+    /** Rafraîchissement groupé des badges après une action ou un chargement de vue. */
+    const refreshBadgesSoon = util.debounce(pollBadges, 400);
 
     // Clavier : flèches, Entrée, Home/End
     if (container) {
@@ -1130,7 +1144,7 @@
     if (toggle) toggle.addEventListener('click', () => setCollapsed(!app.classList.contains('sidebar-collapsed')));
     try { if (local && local.getItem('atelier.sidebar.collapsed') === '1') setCollapsed(true); } catch (e) { /* ignoré */ }
 
-    return { render, refresh, highlight, moduleInfo, pollBadges, setCollapsed, tree: () => tree };
+    return { render, refresh, highlight, moduleInfo, pollBadges, refreshBadgesSoon, setCollapsed, tree: () => tree };
   })();
 
   // ---------------------------------------------------------------------------
@@ -1139,6 +1153,7 @@
   const behaviors = (function () {
     function applyDirectives(tab, envelope) {
       const d = envelope.directives || {};
+      nav.refreshBadgesSoon(); // une action peut changer les compteurs de la colonne (corbeille, tags…)
       if (envelope.message) toast.show({ level: envelope.level || 'success', message: envelope.message });
       if (d.status) tab.ctx.status(d.status);
       if (d.dirty !== undefined) tab.ctx.setDirty(!!d.dirty);
@@ -1649,7 +1664,8 @@
       }
     }
     nav.pollBadges();
-    setInterval(nav.pollBadges, 60000);
+    setInterval(nav.pollBadges, 30000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) nav.refreshBadgesSoon(); });
     if (CONFIG.flash && CONFIG.flash.message) {
       setTimeout(() => toast.show({ level: CONFIG.flash.level || 'info', message: CONFIG.flash.message }), 300);
     }
