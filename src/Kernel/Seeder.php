@@ -56,7 +56,7 @@ final class Seeder
         // Règles ACL de départ
         $acl->setRule('group', $adminsId, AclService::ROOT, 'admin', 'allow', null, 'Administration complète');
         $acl->setRule('all', null, AclService::ROOT, 'view', 'allow', null, 'Tous les connectés voient les modules');
-        foreach (['home', 'notes', 'profile', 'demo'] as $moduleId) {
+        foreach (['home', 'notes', 'profile', 'demo', 'geo', 'attachments'] as $moduleId) {
             if ($this->app->modules->has($moduleId)) {
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'open', 'allow', null, 'Accès de base');
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'read', 'allow');

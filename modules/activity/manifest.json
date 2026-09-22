@@ -1,7 +1,7 @@
 {
   "id": "activity",
   "name": "Journal d'activité",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Consultation et export du journal d'activité fonctionnel et de sécurité",
   "author": "Atelier",
   "icon": "activity",

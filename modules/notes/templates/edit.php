@@ -28,7 +28,7 @@ $contentLength = mb_strlen((string) ($note['content'] ?? ''), 'UTF-8');
 
             <div class="field">
                 <label class="field__label" for="note-content">Contenu</label>
-                <textarea class="textarea notes__content" id="note-content" name="content" rows="16" maxlength="<?= (int) $contentMax ?>" data-counted placeholder="Rédigez votre note…"<?= $readonly ? ' readonly' : '' ?>><?= $e($note['content'] ?? '') ?></textarea>
+                <textarea class="textarea notes__content" id="note-content" name="content" rows="16" maxlength="<?= (int) $contentMax ?>" data-counted data-editor="bbcode" placeholder="Rédigez votre note… (mise en forme BBCode : [b]gras[/b], [i]italique[/i], listes, liens)"<?= $readonly ? ' readonly' : '' ?>><?= $e($note['content'] ?? '') ?></textarea>
                 <span class="field__help notes__counter" data-counter aria-live="polite"><?= number_format($contentLength, 0, ',', ' ') ?> / <?= number_format((int) $contentMax, 0, ',', ' ') ?> caractères</span>
             </div>
 
@@ -36,8 +36,8 @@ $contentLength = mb_strlen((string) ($note['content'] ?? ''), 'UTF-8');
                 <label class="field__label" for="note-tags">
                     <svg class="icon icon--sm" aria-hidden="true"><use href="#i-tag"></use></svg> Tags partagés
                 </label>
-                <input class="input" type="text" id="note-tags" name="tags" value="<?= $e(implode(', ', $tags)) ?>" placeholder="ex. projet, urgent" autocomplete="off"<?= $readonly ? ' readonly' : '' ?>>
-                <span class="field__help">Séparés par des virgules ; les tags sont communs à toute l’application (60 caractères maximum chacun).</span>
+                <input class="input" type="text" id="note-tags" name="tags" value="<?= $e(implode(', ', $tags)) ?>" placeholder="Ajouter un tag…" autocomplete="off" data-tags-input data-tags-max="20"<?= $readonly ? ' readonly' : '' ?>>
+                <span class="field__help">Les tags existants sont proposés pendant la saisie ; Entrée ou virgule ajoute le tag. Ils sont communs à toute l’application (60 caractères maximum chacun).</span>
             </div>
 
             <?php if (!$isNew): ?>

@@ -80,7 +80,8 @@ final class ModuleContext
         if ($descriptor === null || !$descriptor->isUsable()) {
             throw new ModuleUnavailableException('Le module « ' . $moduleId . ' » est indisponible.', $moduleId, $descriptor?->state());
         }
-        $service = $this->modules->instance($moduleId)->service();
+        [$module] = $this->modules->boot($moduleId, $this);
+        $service = $module->service();
         if ($service === null) {
             throw new ModuleUnavailableException('Le module « ' . $moduleId . ' » n’expose aucun service.', $moduleId);
         }
@@ -104,5 +105,16 @@ final class ModuleContext
     public function baseUrl(): string
     {
         return $this->config->string('app.base_url');
+    }
+
+    /**
+     * Trace de diagnostic dans le journal d'activité (catégorie debug, ignorée hors niveau debug).
+     * Corrélée à la requête courante par son identifiant.
+     *
+     * @param array<string, mixed> $details
+     */
+    public function debug(string $moduleId, string $message, array $details = []): void
+    {
+        $this->activity->debug($moduleId, 'debug.' . $moduleId, $message, $details);
     }
 }

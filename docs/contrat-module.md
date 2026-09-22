@@ -123,6 +123,21 @@ Dans le contenu et le bandeau d’un module, le noyau interprète :
 
 Attributs générés par le bandeau standard : `[data-banner-busy]` (indicateur d’action en cours), `[data-banner-subtitle]`.
 
+### Composants de saisie communs (activés automatiquement dans tout contenu inséré)
+
+| Attribut | Composant |
+|---|---|
+| `<textarea data-editor="bbcode">` | Éditeur de texte riche BBCode : barre d’outils (gras, italique, souligné, barré, titres, citation, code, liste, lien, séparateur), raccourcis Ctrl+B/I/U, aperçu, aide. La valeur reste du BBCode ; le rendu HTML côté serveur passe par `\Atelier\View\BbCode::toHtml($texte)` (sécurisé, liste blanche) et `BbCode::toText()` pour les extraits. |
+| `<input data-tags-input data-tags-max="20" data-tags-scope="shared">` | Saisie de tags avec puces et suggestions des tags existants (`/core/tags`), création libre. La valeur du champ reste une liste séparée par des virgules ; `data-tags-scope` permet une portée privée au module. |
+
+Tout champ de texte long destiné à être affiché doit utiliser l’éditeur commun, et tout champ de tags le composant commun.
+
+### Journal d’activité et débogage
+
+- `$this->log('note.create', 'success', 'note:12', 'Note créée', [...])` : la catégorie (`security`, `data`, `admin`, `technical`) est déduite du préfixe de l’action (`auth.`, `access.`, `user.`, `acl.`, `module.`, `settings.`, `backup.`, `error.`, `route.`…) ou passée en 6ᵉ argument.
+- `$this->debug('Filtre appliqué', ['filtre' => ...])` : trace de diagnostic (catégorie `debug`), enregistrée seulement si `logging.activity_level = debug`, corrélée aux autres entrées de la requête par `request_id`.
+- Le noyau trace lui-même chaque vue et action (`debug.view`, `debug.action`, `debug.raw`) avec route, paramètres, permission et durée, ainsi que les erreurs (`error.server`, `route.not_found`, `access.denied`, `csrf.rejected`, `session.expired`), les manifestes invalides et les synchronisations. Le module « Journal d’activité » filtre par catégorie et par requête.
+
 ## 7. JavaScript optionnel
 
 Déclarer le fichier dans `assets.js` du manifeste, puis :

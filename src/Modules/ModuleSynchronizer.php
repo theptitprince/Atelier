@@ -26,6 +26,7 @@ final class ModuleSynchronizer
         private readonly ModuleManager $modules,
         private readonly string $coreMigrationsDirectory,
         private readonly string $cacheDirectory,
+        private readonly ?\Atelier\Activity\ActivityLog $activity = null,
     ) {
     }
 
@@ -79,6 +80,21 @@ final class ModuleSynchronizer
         $this->syncPermissions();
         $this->syncDatasets();
         $log[] = 'Ressources, permissions et catalogue synchronisés.';
+
+        if ($this->activity !== null) {
+            $applied = array_values(array_filter($log, static fn (string $l): bool => str_starts_with($l, 'Migration appliquée')));
+            foreach ($applied as $line) {
+                $this->activity->technical('core', 'module.migration', \Atelier\Activity\ActivityLog::SUCCESS, $line);
+            }
+            $invalid = [];
+            foreach ($this->modules->all() as $descriptor) {
+                if (!$descriptor->isValid()) {
+                    $invalid[] = $descriptor->id;
+                    $this->activity->technical($descriptor->id, 'module.manifest_invalid', \Atelier\Activity\ActivityLog::ERROR, 'Manifeste invalide : ' . implode(' ', $descriptor->errors), ['errors' => $descriptor->errors], 'module:' . $descriptor->id);
+                }
+            }
+            $this->activity->technical('core', 'module.sync', \Atelier\Activity\ActivityLog::SUCCESS, sprintf('Synchronisation des manifestes : %d module(s), %d migration(s), %d invalide(s)', count($this->modules->all()), count($applied), count($invalid)), ['modules' => array_keys($this->modules->all()), 'invalid' => $invalid]);
+        }
         return $log;
     }
 

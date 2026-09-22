@@ -439,7 +439,8 @@ final class NotesModule extends AbstractModule
 
     private function excerpt(string $content): string
     {
-        $flat = trim(preg_replace('/\s+/u', ' ', $content) ?? $content);
+        $plain = \Atelier\View\BbCode::toText($content);
+        $flat = trim(preg_replace('/\s+/u', ' ', $plain) ?? $plain);
         return Str::truncate($flat, self::EXCERPT_LENGTH);
     }
 

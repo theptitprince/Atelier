@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atelier\Kernel;
 
+use Atelier\Persistence\Database;
 use Atelier\Support\Clock;
 use Atelier\Support\Files;
 use Atelier\Support\Json;
@@ -16,19 +17,24 @@ use RuntimeException;
  */
 final class Backup
 {
-    public function __construct(private readonly Application $app)
+    public function __construct(private readonly Database $db, private readonly Config $config)
     {
+    }
+
+    public static function forApplication(Application $app): self
+    {
+        return new self($app->db, $app->config);
     }
 
     public function directory(): string
     {
-        return $this->app->config->path('backups');
+        return $this->config->path('backups');
     }
 
     /** Crée une sauvegarde et retourne son nom. */
     public function create(string $suffix = ''): string
     {
-        if (!$this->app->db->isSqlite()) {
+        if (!$this->db->isSqlite()) {
             throw new RuntimeException('La sauvegarde intégrée ne prend en charge que SQLite ; utilisez mysqldump pour MariaDB.');
         }
         $name = Clock::now()->format('Ymd-His') . ($suffix !== '' ? '-' . preg_replace('/[^a-z0-9_-]/i', '', $suffix) : '');
@@ -37,28 +43,35 @@ final class Backup
 
         // Base : VACUUM INTO produit une copie cohérente même en mode WAL.
         $dbCopy = $target . '/atelier.sqlite';
-        $this->app->db->execute('VACUUM INTO ' . $this->app->db->pdo()->quote(str_replace('\\', '/', $dbCopy)));
+        $this->db->execute('VACUUM INTO ' . $this->db->pdo()->quote(str_replace('\\', '/', $dbCopy)));
 
         // Pièces jointes
-        $attachments = $this->app->config->path('attachments');
+        $attachments = $this->config->path('attachments');
         if (is_dir($attachments)) {
             Files::copyDirectory($attachments, $target . '/attachments');
         }
 
+        // Clé de chiffrement des pièces jointes : indispensable pour relire les fichiers restaurés.
+        $keyFile = $this->config->path('attachments_key');
+        if ($keyFile !== '' && is_file($keyFile)) {
+            copy($keyFile, $target . '/attachments.key');
+            @chmod($target . '/attachments.key', 0600);
+        }
+
         // Configuration des modules
-        $modulesConfig = $this->app->config->path('modules_config');
+        $modulesConfig = $this->config->path('modules_config');
         if (is_file($modulesConfig)) {
             copy($modulesConfig, $target . '/modules.json');
         }
 
         $counts = [];
-        foreach ($this->app->db->tables() as $table) {
-            $counts[$table] = $this->app->db->count('SELECT COUNT(*) FROM ' . $this->app->db->quoteIdentifier($table));
+        foreach ($this->db->tables() as $table) {
+            $counts[$table] = $this->db->count('SELECT COUNT(*) FROM ' . $this->db->quoteIdentifier($table));
         }
         Json::writeFile($target . '/manifest.json', [
             'name' => $name,
             'created_at' => Clock::utc(),
-            'app_version' => $this->app->config->string('app.version'),
+            'app_version' => $this->config->string('app.version'),
             'database_sha256' => hash_file('sha256', $dbCopy),
             'tables' => $counts,
             'attachments_size' => Files::directorySize($target . '/attachments'),
@@ -101,11 +114,11 @@ final class Backup
             throw new RuntimeException('Empreinte de la base incohérente : sauvegarde corrompue.');
         }
 
-        $path = $this->app->db->sqlitePath();
+        $path = $this->db->sqlitePath();
         if ($path === null) {
             throw new RuntimeException('Restauration disponible uniquement pour SQLite.');
         }
-        $this->app->db->close();
+        $this->db->close();
         foreach ([$path, $path . '-wal', $path . '-shm'] as $file) {
             if (is_file($file)) {
                 @unlink($file);
@@ -115,7 +128,7 @@ final class Backup
         copy($source . '/atelier.sqlite', $path);
         $report[] = 'Base restaurée.';
 
-        $attachments = $this->app->config->path('attachments');
+        $attachments = $this->config->path('attachments');
         if (is_dir($attachments)) {
             $this->removeDirectory($attachments);
         }
@@ -126,20 +139,30 @@ final class Backup
             Files::ensureDirectory($attachments);
         }
 
+        if (is_file($source . '/attachments.key')) {
+            $keyFile = $this->config->path('attachments_key');
+            Files::ensureDirectory(dirname($keyFile));
+            copy($source . '/attachments.key', $keyFile);
+            @chmod($keyFile, 0600);
+            $report[] = 'Clé de chiffrement des pièces jointes restaurée.';
+        } elseif (is_dir($source . '/attachments')) {
+            $report[] = 'ATTENTION : la sauvegarde ne contient pas de clé de chiffrement ; les pièces jointes chiffrées avec une autre clé seront illisibles.';
+        }
+
         if (is_file($source . '/modules.json')) {
-            Files::ensureDirectory(dirname($this->app->config->path('modules_config')));
-            copy($source . '/modules.json', $this->app->config->path('modules_config'));
+            Files::ensureDirectory(dirname($this->config->path('modules_config')));
+            copy($source . '/modules.json', $this->config->path('modules_config'));
             $report[] = 'Configuration des modules restaurée.';
         }
 
         foreach (($manifest['tables'] ?? []) as $table => $expected) {
-            $actual = $this->app->db->count('SELECT COUNT(*) FROM ' . $this->app->db->quoteIdentifier((string) $table));
+            $actual = $this->db->count('SELECT COUNT(*) FROM ' . $this->db->quoteIdentifier((string) $table));
             if ($actual !== (int) $expected) {
                 $report[] = sprintf('ATTENTION : table %s, %d enregistrements attendus, %d trouvés.', $table, $expected, $actual);
             }
         }
         $report[] = 'Vérification des tables effectuée.';
-        $this->app->synchronizer()->invalidate();
+        @unlink($this->config->path('cache') . '/manifests.hash');
         return $report;
     }
 

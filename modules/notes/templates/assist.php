@@ -54,7 +54,7 @@ $targetId = $target === null ? 0 : (int) $target['id'];
                 <?php if (trim((string) ($note['content'] ?? '')) === ''): ?>
                     <p class="text-muted"><em>Cette note ne contient aucun texte.</em></p>
                 <?php else: ?>
-                    <pre class="notes__reader-content"><?= $e($note['content']) ?></pre>
+                    <div class="notes__reader-content prose"><?= \Atelier\View\BbCode::toHtml((string) $note['content']) ?></div>
                 <?php endif; ?>
                 <dl class="dl notes__meta">
                     <dt>Propriétaire</dt><dd><?= $e($target['display_name']) ?> (<?= $e($target['username']) ?>)</dd>

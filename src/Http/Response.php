@@ -20,6 +20,9 @@ final class Response
     private ?string $filePath = null;
     private bool $deleteFileAfterSend = false;
 
+    /** @var (callable(resource): void)|null producteur de contenu écrit directement dans le flux de sortie */
+    private $streamWriter = null;
+
     /** @var list<array{name: string, value: string, options: array<string, mixed>}> */
     private array $cookies = [];
 
@@ -97,15 +100,59 @@ final class Response
         $response = new self('', 200);
         $response->filePath = $path;
         $response->deleteFileAfterSend = $deleteAfterSend;
+        return $response
+            ->withHeader('Content-Length', (string) filesize($path))
+            ->withDownloadHeaders($downloadName, $mime, $inline);
+    }
+
+    /**
+     * Téléchargement produit à la volée (déchiffrement, génération) : $writer reçoit le flux de sortie.
+     *
+     * @param callable(resource): void $writer
+     */
+    public static function stream(callable $writer, string $downloadName, string $mime = 'application/octet-stream', ?int $size = null, bool $inline = false): self
+    {
+        $response = new self('', 200);
+        $response->streamWriter = $writer;
+        if ($size !== null) {
+            $response->withHeader('Content-Length', (string) $size);
+        }
+        return $response->withDownloadHeaders($downloadName, $mime, $inline);
+    }
+
+    /** En-têtes communs aux téléchargements : type, disposition (nom ASCII et UTF-8), nosniff, pas de cache. */
+    private function withDownloadHeaders(string $downloadName, string $mime, bool $inline): self
+    {
         $disposition = $inline ? 'inline' : 'attachment';
         $ascii = preg_replace('/[^\x20-\x7E]/', '_', $downloadName) ?? 'fichier';
         $ascii = str_replace(['"', '\\'], '_', $ascii);
-        return $response
+        return $this
             ->withHeader('Content-Type', $mime)
-            ->withHeader('Content-Length', (string) filesize($path))
             ->withHeader('Content-Disposition', sprintf("%s; filename=\"%s\"; filename*=UTF-8''%s", $disposition, $ascii, rawurlencode($downloadName)))
             ->withHeader('X-Content-Type-Options', 'nosniff')
             ->withHeader('Cache-Control', 'private, no-store');
+    }
+
+    public function isStream(): bool
+    {
+        return $this->streamWriter !== null;
+    }
+
+    /** Contenu d'une réponse en flux, capturé en mémoire (tests, vérifications). */
+    public function streamToString(): string
+    {
+        if ($this->streamWriter === null) {
+            return $this->filePath !== null ? (string) file_get_contents($this->filePath) : $this->body;
+        }
+        $buffer = fopen('php://temp', 'w+b');
+        if ($buffer === false) {
+            throw new \RuntimeException('Impossible d’allouer un tampon.');
+        }
+        ($this->streamWriter)($buffer);
+        rewind($buffer);
+        $content = (string) stream_get_contents($buffer);
+        fclose($buffer);
+        return $content;
     }
 
     public function withHeader(string $name, string $value): self
@@ -174,6 +221,17 @@ final class Response
             foreach ($this->cookies as $cookie) {
                 setcookie($cookie['name'], $cookie['value'], $cookie['options']);
             }
+        }
+        if ($this->streamWriter !== null) {
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            $out = fopen('php://output', 'wb');
+            if ($out !== false) {
+                ($this->streamWriter)($out);
+                fclose($out);
+            }
+            return;
         }
         if ($this->filePath !== null) {
             if (ob_get_level() > 0) {

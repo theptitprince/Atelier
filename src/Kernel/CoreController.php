@@ -211,6 +211,20 @@ final class CoreController
             case 'ping':
                 return Response::json(['time' => Clock::iso(Clock::utc())]);
 
+            case 'tags':
+                // Suggestions de tags partagés pour le composant commun de saisie (data-tags-input).
+                $term = trim((string) $request->query('q', ''));
+                $scope = (string) $request->query('scope', \Atelier\Shared\TagService::SHARED);
+                if (!Str::isSlug($scope, 64) && $scope !== \Atelier\Shared\TagService::SHARED) {
+                    $scope = \Atelier\Shared\TagService::SHARED;
+                }
+                $tags = $term === '' ? array_slice($this->app->shared->tags->all($scope), 0, 20) : $this->app->shared->tags->search($term, $scope, 20);
+                return Response::json(['tags' => array_map(static fn (array $t): array => [
+                    'id' => (int) $t['id'],
+                    'name' => (string) $t['name'],
+                    'count' => (int) ($t['usage_count'] ?? 0),
+                ], $tags)]);
+
             case 'changelog':
                 return Response::json([
                     'version' => $this->app->config->string('app.version'),

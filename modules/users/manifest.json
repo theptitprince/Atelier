@@ -8,7 +8,7 @@
   "group": "administration",
   "order": 10,
   "status": "active",
-  "namespace": "Atelier\Modules\Users",
+  "namespace": "Atelier\\Modules\\Users",
   "entry": "UsersModule",
   "defaultRoute": "list",
   "keepAlive": false,

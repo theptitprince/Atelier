@@ -18,10 +18,11 @@ final class ActivityFilters
 {
     public const RESULTS = ['success', 'failure', 'denied', 'error'];
     public const PER_PAGE_OPTIONS = [25, 50, 100];
-    public const SORTS = ['occurred_at', 'username', 'module_id', 'action', 'result'];
+    public const SORTS = ['occurred_at', 'username', 'module_id', 'action', 'result', 'category', 'duration_ms'];
+    public const CATEGORIES = ['security', 'data', 'admin', 'technical', 'debug'];
 
     /** Clés de la chaîne de requête correspondant aux filtres (hors pagination et tri). */
-    private const FILTER_KEYS = ['from', 'to', 'user_id', 'module', 'action', 'result', 'resource', 'q'];
+    private const FILTER_KEYS = ['from', 'to', 'user_id', 'module', 'action', 'result', 'category', 'request', 'resource', 'q'];
 
     /** @var array<string, string> valeurs saisies, normalisées, sans les vides */
     private array $values = [];
@@ -71,6 +72,12 @@ final class ActivityFilters
         }
         if (isset($filters->values['result']) && !in_array($filters->values['result'], self::RESULTS, true)) {
             unset($filters->values['result']);
+        }
+        if (isset($filters->values['category']) && !in_array($filters->values['category'], self::CATEGORIES, true)) {
+            unset($filters->values['category']);
+        }
+        if (isset($filters->values['request']) && preg_match('/^[a-f0-9]{6,32}$/', $filters->values['request']) !== 1) {
+            unset($filters->values['request']);
         }
 
         $filters->page = max(1, (int) ($input['page'] ?? 1));
@@ -140,6 +147,12 @@ final class ActivityFilters
         }
         if (isset($this->values['result'])) {
             $repo['result'] = $this->values['result'];
+        }
+        if (isset($this->values['category'])) {
+            $repo['category'] = $this->values['category'];
+        }
+        if (isset($this->values['request'])) {
+            $repo['request_id'] = $this->values['request'];
         }
         if (isset($this->values['resource'])) {
             $repo['resource_ref'] = $this->values['resource'];
