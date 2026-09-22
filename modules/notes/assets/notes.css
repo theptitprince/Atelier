@@ -1,0 +1,28 @@
+/* Styles propres au module Bloc-notes, limités à sa racine .module-notes. */
+
+/* Liste */
+.module-notes .notes__toolbar { margin-bottom: var(--sp-4); }
+.module-notes .notes__search { flex: 0 1 420px; min-width: 240px; }
+.module-notes .notes__table { table-layout: fixed; }
+.module-notes .notes__col-title { width: 28%; }
+.module-notes .notes__col-tags { width: 20%; }
+.module-notes .notes__col-date { width: 140px; }
+.module-notes .notes__title { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit; font-weight: 500; max-width: 100%; }
+.module-notes .notes__title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.module-notes a.notes__title:hover { color: var(--c-accent); text-decoration: none; }
+.module-notes .notes__excerpt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-sm); }
+.module-notes .notes__table .chip { max-width: 100%; }
+
+/* Éditeur */
+.module-notes .notes__editor { max-width: 960px; margin: 0 auto var(--sp-4); }
+.module-notes .notes__editor .card__footer { display: flex; align-items: center; gap: var(--sp-2); margin-top: 0; padding-top: var(--sp-3); border-top: 1px solid var(--c-border); }
+.module-notes .notes__title-input { font-size: var(--fs-lg); font-weight: 600; }
+.module-notes .notes__content { min-height: 320px; font-family: var(--font); line-height: 1.6; resize: vertical; }
+.module-notes .notes__counter { text-align: right; }
+.module-notes .notes__counter.is-near-limit { color: var(--c-warning); font-weight: 600; }
+.module-notes .notes__meta { margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px dashed var(--c-border); }
+
+/* Assistance (lecture seule) */
+.module-notes .notes__user-select { min-width: 320px; }
+.module-notes .notes__reader { max-width: 960px; }
+.module-notes .notes__reader-content { white-space: pre-wrap; word-break: break-word; font-family: var(--font); line-height: 1.6; background: var(--c-surface-2); border: 1px solid var(--c-border); border-radius: var(--radius); padding: var(--sp-4); }

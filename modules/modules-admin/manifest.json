@@ -1,0 +1,24 @@
+{
+  "id": "modules-admin",
+  "name": "Gestion des modules",
+  "version": "1.0.0",
+  "description": "Administration des modules installés : états, ordre d’affichage et catalogue des jeux de données",
+  "author": "Atelier",
+  "icon": "puzzle",
+  "group": "administration",
+  "order": 20,
+  "status": "active",
+  "namespace": "Atelier\Modules\ModulesAdmin",
+  "entry": "ModulesAdminModule",
+  "defaultRoute": "list",
+  "permissions": [],
+  "navigation": [
+    { "id": "list", "label": "Modules installés", "route": "list", "order": 1, "permission": "open", "icon": "puzzle", "description": "Liste des modules et de leur état" },
+    { "id": "order", "label": "Ordre d’affichage", "route": "order", "order": 2, "permission": "admin", "icon": "sort", "description": "Groupes, ordre des modules et des accès directs" },
+    { "id": "datasets", "label": "Catalogue des jeux de données", "route": "datasets", "order": 3, "permission": "open", "icon": "database", "description": "Jeux de données déclarés par les modules" }
+  ],
+  "resources": [],
+  "assets": { "css": ["assets/modules-admin.css"], "js": ["assets/modules-admin.js"] },
+  "datasets": [],
+  "consumes": []
+}

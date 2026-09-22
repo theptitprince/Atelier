@@ -1,0 +1,23 @@
+{
+  "id": "profile",
+  "name": "Mon profil",
+  "version": "1.0.0",
+  "description": "Informations du compte, changement de mot de passe et préférences personnelles",
+  "author": "Atelier",
+  "icon": "user",
+  "group": "general",
+  "order": 90,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Profile",
+  "entry": "ProfileModule",
+  "defaultRoute": "index",
+  "permissions": [],
+  "navigation": [
+    { "id": "index", "label": "Profil", "route": "index", "order": 1, "permission": "open", "icon": "user", "description": "Informations du compte et mot de passe" },
+    { "id": "preferences", "label": "Préférences", "route": "preferences", "order": 2, "permission": "open", "icon": "sliders", "description": "Préférences d'affichage et de comportement" }
+  ],
+  "resources": [],
+  "assets": { "css": ["assets/profile.css"], "js": ["assets/profile.js"] },
+  "datasets": [],
+  "consumes": []
+}

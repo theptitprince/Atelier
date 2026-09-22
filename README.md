@@ -4,7 +4,7 @@ Webapplication modulaire, sécurisée et réservée aux utilisateurs authentifi�
 
 - **Technologies** : PHP 8.4 natif, SQLite (évolution prévue vers MariaDB), HTML5/CSS, JavaScript natif (`fetch`). Aucun framework, aucun Composer.
 - **Cible** : ordinateurs de bureau (largeur ≥ 1280 px), navigateurs récents (Firefox, Chrome, Edge).
-- **Cahier des charges** : `Cahier_des_charges_webapplication_modulaire.md` (v0.8).
+- **Cahier des charges** : [docs/cahier-des-charges.md](docs/cahier-des-charges.md) (v0.8).
 
 ## Démarrage rapide
 
@@ -63,3 +63,7 @@ docs/              documentation : installation, exploitation, contrat de module
 ```bash
 _tools/php84/php.exe tests/run.php          # ou : console.bat test
 ```
+
+## Licence
+
+Atelier est distribué sous licence [GNU GPL v3](LICENSE). Vous pouvez l’utiliser, l’étudier, le modifier et le redistribuer, à condition que les versions dérivées restent sous la même licence.

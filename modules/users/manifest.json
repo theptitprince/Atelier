@@ -1,0 +1,42 @@
+{
+  "id": "users",
+  "name": "Utilisateurs et droits",
+  "version": "1.0.0",
+  "description": "Comptes utilisateurs, groupes et droits d’accès (ACL)",
+  "author": "Atelier",
+  "icon": "users",
+  "group": "administration",
+  "order": 10,
+  "status": "active",
+  "namespace": "Atelier\Modules\Users",
+  "entry": "UsersModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [],
+  "navigation": [
+    { "id": "list", "label": "Consulter la liste des utilisateurs", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste des comptes, recherche, filtres et actions rapides" },
+    { "id": "new", "label": "Ajouter un utilisateur", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Création d’un compte utilisateur" },
+    { "id": "groups", "label": "Groupes", "route": "groups", "order": 3, "permission": "open", "icon": "layers", "description": "Groupes d’utilisateurs et profils de droits" },
+    { "id": "acl", "label": "Droits d’accès (ACL)", "route": "acl", "order": 4, "permission": "admin", "icon": "shield", "description": "Arborescence des ressources protégées et règles d’accès" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/users.css"],
+    "js": ["assets/users.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "users.account",
+      "name": "Comptes utilisateurs",
+      "description": "Identité publique des comptes (identifiant, nom affiché, état) ; jamais le mot de passe ni le courriel",
+      "visibility": "shared",
+      "tables": ["users", "user_groups"],
+      "fields": { "id": "Identifiant", "username": "Identifiant de connexion", "display_name": "Nom affiché", "status": "État du compte (active | disabled)" },
+      "operations": ["read"],
+      "version": 1
+    }
+  ],
+  "consumes": []
+}
