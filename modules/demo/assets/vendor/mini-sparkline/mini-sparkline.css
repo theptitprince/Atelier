@@ -1,0 +1,6 @@
+/*! mini-sparkline 1.0.0 — MIT — styles de la mini-courbe (couleurs héritées des variables du thème si présentes). */
+.mini-sparkline-host { display: inline-block; line-height: 0; vertical-align: middle; }
+.mini-sparkline { display: block; overflow: visible; }
+.mini-sparkline__area { fill: var(--c-accent-soft, #e3ecfb); }
+.mini-sparkline__line { fill: none; stroke: var(--c-accent, #2f6fdb); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.mini-sparkline__dot { fill: var(--c-accent, #2f6fdb); }

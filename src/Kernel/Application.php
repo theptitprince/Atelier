@@ -291,7 +291,10 @@ final class Application
                 throw new \LogicException('Une route de vue doit retourner une ModuleView.');
             }
             $data = $result->toArray();
-            $data['route'] ??= $routePath;
+            // Route canonique renvoyée au client : chemin + chaîne de requête (filtres, page, tri) pour que
+            // l'URL, l'historique et ctx.refresh() conservent l'état de la vue.
+            $query = $request->allQuery();
+            $data['route'] ??= $routePath . ($query !== [] ? '?' . http_build_query($query) : '');
             $data['module'] = $this->moduleClientInfo($descriptor, $module);
             return Response::json($data);
         }
