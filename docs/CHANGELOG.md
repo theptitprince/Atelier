@@ -2,6 +2,12 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.5.0 — 22/09/2026
+
+### Noyau
+- Onglets réorganisables par glisser-déposer et au clavier (Ctrl+←/→ sur l’onglet actif).
+- Bouton « Tout fermer » dans la barre d’onglets et menu contextuel d’onglet (clic droit ou Maj+F10) : page de base du module, fermer, fermer les autres, fermer ceux de droite, tout fermer. Chaque fermeture respecte la confirmation des modifications non enregistrées.
+
 ## 0.4.0 — 22/09/2026
 
 ### Modules

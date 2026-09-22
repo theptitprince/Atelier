@@ -199,8 +199,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .banner__busy[hidden] { display: none; }
 
 /* Onglets */
-.tabs { display: flex; align-items: flex-end; gap: 2px; padding: 0 var(--sp-3); background: var(--c-surface-2); border-bottom: 1px solid var(--c-border); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-.tabs::-webkit-scrollbar { display: none; }
+.tabs { display: flex; align-items: flex-end; gap: var(--sp-2); padding: 0 var(--sp-3); background: var(--c-surface-2); border-bottom: 1px solid var(--c-border); min-width: 0; }
+.tabs__list { display: flex; align-items: flex-end; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs__list::-webkit-scrollbar { display: none; }
+.tabs__actions { display: flex; align-items: center; height: var(--tabs-h); flex-shrink: 0; }
+.tab { touch-action: none; user-select: none; }
+.tab.is-dragging { opacity: 0.7; box-shadow: var(--c-accent) 0 0 0 2px inset; cursor: grabbing; }
+.tab-menu { position: fixed; z-index: 900; min-width: 220px; }
 .tab { display: inline-flex; align-items: center; gap: var(--sp-2); height: calc(var(--tabs-h) - 6px); padding: 0 var(--sp-2) 0 var(--sp-3); border: 1px solid transparent; border-bottom: 0; border-radius: var(--radius) var(--radius) 0 0; background: transparent; color: var(--c-text-muted); cursor: pointer; white-space: nowrap; max-width: 240px; font-size: var(--fs-sm); position: relative; top: 1px; }
 .tab:hover { background: var(--c-primary-soft); color: var(--c-text); }
 .tab[aria-selected="true"] { background: var(--c-surface); color: var(--c-text); border-color: var(--c-border); border-bottom-color: var(--c-surface); height: calc(var(--tabs-h) - 4px); font-weight: 600; }

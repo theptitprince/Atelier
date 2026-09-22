@@ -61,7 +61,22 @@
             </div>
         </header>
 
-        <div id="tabs" class="tabs" role="tablist" aria-label="Modules ouverts"></div>
+        <div id="tabs" class="tabs">
+            <div id="tabs-list" class="tabs__list" role="tablist" aria-label="Modules ouverts"></div>
+            <div class="tabs__actions">
+                <button type="button" class="btn btn--sm btn--ghost tabs__close-all" id="tabs-close-all" title="Fermer tous les onglets" aria-label="Fermer tous les onglets" hidden>
+                    <svg class="icon icon--sm" aria-hidden="true"><use href="#i-close"></use></svg> Tout fermer
+                </button>
+            </div>
+        </div>
+        <div id="tab-menu" class="dropdown__menu tab-menu" role="menu" hidden>
+            <button type="button" class="dropdown__item" role="menuitem" data-tab-menu="home"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-home"></use></svg> Page de base du module</button>
+            <div class="dropdown__separator"></div>
+            <button type="button" class="dropdown__item" role="menuitem" data-tab-menu="close"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-close"></use></svg> Fermer</button>
+            <button type="button" class="dropdown__item" role="menuitem" data-tab-menu="close-others">Fermer les autres</button>
+            <button type="button" class="dropdown__item" role="menuitem" data-tab-menu="close-right">Fermer ceux de droite</button>
+            <button type="button" class="dropdown__item" role="menuitem" data-tab-menu="close-all">Tout fermer</button>
+        </div>
 
         <main id="workspace" class="workspace">
             <section class="workspace__empty" id="workspace-empty">
