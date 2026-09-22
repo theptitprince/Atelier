@@ -1,0 +1,51 @@
+{
+  "id": "notes",
+  "name": "Bloc-notes",
+  "version": "1.0.0",
+  "description": "Notes personnelles : rédaction, recherche, tags partagés et corbeille",
+  "author": "Atelier",
+  "icon": "note",
+  "group": "tools",
+  "order": 10,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Notes",
+  "entry": "NotesModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [
+    { "code": "assist", "label": "Assistance", "description": "Assistance : lire les notes des autres utilisateurs" }
+  ],
+  "navigation": [
+    { "id": "list", "label": "Mes notes", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste, recherche et tri de mes notes" },
+    { "id": "new", "label": "Nouvelle note", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Rédiger une nouvelle note" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/notes.css"],
+    "js": ["assets/notes.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "notes.note",
+      "name": "Notes",
+      "description": "Notes personnelles, strictement privées (aucune exposition intermodule)",
+      "visibility": "private",
+      "tables": ["notes_note"],
+      "fields": {
+        "id": "Identifiant",
+        "title": "Titre",
+        "content": "Contenu",
+        "owner_id": "Propriétaire",
+        "created_at": "Date de création",
+        "updated_at": "Date de modification",
+        "deleted_at": "Date de mise à la corbeille"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    }
+  ],
+  "consumes": [],
+  "migrations": "migrations"
+}

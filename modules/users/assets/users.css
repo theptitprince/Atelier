@@ -1,0 +1,55 @@
+/* Styles propres au module Utilisateurs et droits, limités à sa racine .module-users. */
+
+/* ---- Liste ---- */
+.module-users .users-filters { align-items: flex-end; }
+.module-users .users-filters .field { margin-bottom: 0; }
+.module-users .users-filters__search { min-width: 260px; flex: 1 1 260px; }
+.module-users .users-filters .select { min-width: 160px; }
+.module-users .users-table__username { font-weight: 600; }
+.module-users .users-table__status .badge { margin: 1px 0; }
+.module-users .users-table .chip { text-decoration: none; }
+.module-users .users-table .chip:hover { border-color: var(--c-info); }
+.module-users .text-small { font-size: var(--fs-xs); }
+
+/* ---- Fiche (compte, groupe) ---- */
+.module-users .users-form-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-users .users-form-layout > .card { margin-bottom: var(--sp-4); }
+.module-users .users-form fieldset.field { margin-bottom: var(--sp-4); }
+.module-users .users-groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-2) var(--sp-4); }
+.module-users .users-meta .dl { row-gap: var(--sp-2); }
+.module-users .users-meta .dl dd { word-break: break-word; }
+.module-users .card__footer.form-actions { margin-top: 0; border-top: 0; }
+.module-users .users-inline-form { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-3); align-items: flex-start; }
+.module-users .users-inline-form .field { margin-bottom: 0; min-width: 160px; }
+.module-users .users-inline-form .field.grow { flex: 1 1 220px; }
+.module-users .list__item .grow { flex: 1; min-width: 0; }
+
+/* ---- Mot de passe temporaire ---- */
+.module-users .users-password-box { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-3); }
+.module-users .users-password-box code { font-size: var(--fs-lg); padding: var(--sp-1) var(--sp-2); background: var(--c-surface); border: 1px dashed var(--c-border-strong); border-radius: var(--radius-sm); user-select: all; letter-spacing: 0.04em; }
+.module-users .users-password-box .btn { margin-left: auto; }
+
+/* ---- Droits effectifs ---- */
+.module-users .users-effective td:last-child { word-break: break-word; }
+
+/* ---- ACL ---- */
+.module-users .users-acl { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
+.module-users .users-acl__tree { margin-bottom: 0; position: sticky; top: 0; }
+.module-users .users-acl__tree-body { max-height: calc(100vh - 220px); overflow: auto; padding: var(--sp-2); }
+.module-users .users-acl__detail { min-width: 0; }
+.module-users .users-tree__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; }
+.module-users .users-tree__label:hover { text-decoration: underline; }
+.module-users .tree__row.is-selected .users-tree__label { font-weight: 600; color: var(--c-primary); }
+.module-users .users-tree__kind { flex-shrink: 0; height: 18px; font-weight: 500; }
+.module-users .users-acl__inherited tbody tr { background: var(--c-surface-2); }
+.module-users .users-acl__inherited tbody tr:hover { background: var(--c-info-soft); }
+.module-users .users-acl__hint { padding: var(--sp-2) var(--sp-3); margin: 0; border-top: 1px solid var(--c-border); }
+.module-users .users-acl__test .alert { margin-top: var(--sp-3); }
+.module-users .users-acl__candidates-title { font-size: var(--fs-sm); color: var(--c-text-muted); margin: var(--sp-3) 0 var(--sp-2); }
+
+@media (max-width: 1100px) {
+    .module-users .users-form-layout,
+    .module-users .users-acl { grid-template-columns: 1fr; }
+    .module-users .users-acl__tree { position: static; }
+    .module-users .users-acl__tree-body { max-height: 320px; }
+}

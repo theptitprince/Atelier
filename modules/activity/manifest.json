@@ -1,0 +1,35 @@
+{
+  "id": "activity",
+  "name": "Journal d'activité",
+  "version": "1.0.0",
+  "description": "Consultation et export du journal d'activité fonctionnel et de sécurité",
+  "author": "Atelier",
+  "icon": "activity",
+  "group": "administration",
+  "order": 40,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Activity",
+  "entry": "ActivityModule",
+  "defaultRoute": "list",
+  "permissions": [],
+  "navigation": [
+    { "id": "list", "label": "Consulter le journal", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste paginée et filtrable des entrées du journal" }
+  ],
+  "resources": [
+    { "path": "action/export", "label": "Export CSV", "kind": "action", "permissions": ["export"], "description": "Exporter le journal filtré au format CSV" }
+  ],
+  "assets": { "css": ["assets/activity.css"], "js": [] },
+  "datasets": [
+    {
+      "code": "activity.log",
+      "name": "Journal d'activité",
+      "description": "Entrées du journal d'activité (table détenue par le noyau, lecture seule)",
+      "visibility": "private",
+      "tables": ["activity_log"],
+      "fields": { "occurred_at": "Date", "username": "Utilisateur", "module_id": "Module", "action": "Action", "result": "Résultat", "resource_ref": "Ressource", "message": "Message" },
+      "operations": ["read"],
+      "version": 1
+    }
+  ],
+  "consumes": []
+}

@@ -1,0 +1,9 @@
+/* Styles propres au module Mon profil, limités à sa racine. */
+.module-profile .profile__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--sp-4); align-items: start; }
+.module-profile .profile__grid .card { margin-bottom: 0; }
+.module-profile .profile__account .dl dd { min-width: 0; overflow-wrap: anywhere; }
+.module-profile .profile__preferences { max-width: 760px; }
+.module-profile .profile__select { max-width: 260px; }
+.module-profile .profile__disabled { cursor: not-allowed; color: var(--c-text-muted); }
+.module-profile .profile__footer-actions { padding-top: 0; border-top: 0; }
+.module-profile fieldset:last-child { margin-bottom: 0; }

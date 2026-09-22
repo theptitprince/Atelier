@@ -15,3 +15,6 @@
 .DS_Store
 Thumbs.db
 *.log
+
+# Réglages locaux de l'outillage
+/.claude/settings.local.json

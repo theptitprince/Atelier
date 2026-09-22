@@ -1,0 +1,24 @@
+{
+  "id": "settings",
+  "name": "Paramètres généraux",
+  "version": "1.0.0",
+  "description": "Paramètres dynamiques de l’application, sauvegardes et maintenance",
+  "author": "Atelier",
+  "icon": "settings",
+  "group": "administration",
+  "order": 30,
+  "status": "active",
+  "namespace": "Atelier\Modules\Settings",
+  "entry": "SettingsModule",
+  "defaultRoute": "general",
+  "permissions": [],
+  "navigation": [
+    { "id": "general", "label": "Paramètres", "route": "general", "order": 1, "permission": "open", "icon": "sliders", "description": "Paramètres dynamiques de l’application" },
+    { "id": "backups", "label": "Sauvegardes", "route": "backups", "order": 2, "permission": "admin", "icon": "save", "description": "Sauvegardes de la base et des pièces jointes" },
+    { "id": "maintenance", "label": "Maintenance", "route": "maintenance", "order": 3, "permission": "admin", "icon": "tool", "description": "Indicateurs, rétentions et cache" }
+  ],
+  "resources": [],
+  "assets": { "css": ["assets/settings.css"], "js": [] },
+  "datasets": [],
+  "consumes": []
+}

@@ -1,0 +1,63 @@
+{
+  "id": "demo",
+  "name": "Démonstration",
+  "version": "1.0.0",
+  "description": "Module fictif : référence des composants et des comportements du noyau",
+  "author": "Atelier",
+  "icon": "flask",
+  "group": "tools",
+  "order": 90,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Demo",
+  "entry": "DemoModule",
+  "defaultRoute": "index",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [],
+  "navigation": [
+    { "id": "index", "label": "Vue d’ensemble", "route": "index", "order": 1, "permission": "open", "icon": "home", "description": "Présentation du module et liste des vérifications couvertes" },
+    { "id": "components", "label": "Composants", "route": "components", "order": 2, "permission": "open", "icon": "grid", "description": "Titres, boutons, badges, cartes, listes, onglets internes…" },
+    { "id": "forms", "label": "Formulaires", "route": "forms", "order": 1, "permission": "open", "icon": "edit", "description": "Champs, validation serveur, soumission automatique, confirmation", "parent": "components" },
+    { "id": "tables", "label": "Tableaux", "route": "tables", "order": 2, "permission": "open", "icon": "list", "description": "Tri, filtres, pagination, sélection, actions groupées, export", "parent": "components" },
+    { "id": "feedback", "label": "Notifications et états", "route": "feedback", "order": 3, "permission": "open", "icon": "bell", "description": "Toasts, barre d’état, dialogues, blocs d’état, progression", "parent": "components" },
+    { "id": "lifecycle", "label": "Cycle de vie et onglets", "route": "lifecycle", "order": 3, "permission": "open", "icon": "clock", "description": "Hooks, minuteries, onglet modifié, navigation, bandeau dynamique" },
+    { "id": "shared", "label": "Tags, relations, pièces jointes", "route": "shared", "order": 4, "permission": "open", "icon": "tag", "description": "Registre, tags partagés, relations typées, pièces jointes, catalogue" },
+    { "id": "errors", "label": "Cas d’erreur", "route": "errors", "order": 5, "permission": "open", "icon": "error", "description": "Toutes les exceptions du noyau déclenchées volontairement" },
+    { "id": "errors-server", "label": "Erreur serveur simulée", "route": "errors/server", "order": 1, "permission": "admin", "icon": "warning", "description": "Exception PHP brute : réponse 500 avec référence d’incident", "parent": "errors" }
+  ],
+  "resources": [
+    { "path": "action/secret", "label": "Action réservée", "kind": "action", "permissions": ["execute"], "description": "Action de démonstration réservée aux détenteurs de la permission execute" }
+  ],
+  "assets": {
+    "css": ["assets/demo.css"],
+    "js": ["assets/demo.js"],
+    "vendor": [
+      { "type": "css", "path": "assets/vendor/mini-sparkline/mini-sparkline.css", "name": "mini-sparkline", "version": "1.0.0", "license": "MIT" },
+      { "type": "js", "path": "assets/vendor/mini-sparkline/mini-sparkline.js", "name": "mini-sparkline", "version": "1.0.0", "license": "MIT" }
+    ]
+  },
+  "datasets": [
+    {
+      "code": "demo.item",
+      "name": "Articles de démonstration",
+      "description": "Articles fictifs (outillage, papeterie, mobilier, informatique) servant à exercer tableaux, filtres et données partagées",
+      "visibility": "shared",
+      "tables": ["demo_item"],
+      "fields": { "id": "Identifiant", "name": "Nom", "category": "Catégorie", "quantity": "Quantité", "price": "Prix (centimes)", "active": "Actif", "created_at": "Créé le" },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    },
+    {
+      "code": "demo.secret",
+      "name": "Notes privées de démonstration",
+      "description": "Jeu privé : ne doit jamais apparaître dans le catalogue partagé ni être accessible par l’API intermodule",
+      "visibility": "private",
+      "tables": ["demo_secret"],
+      "fields": { "id": "Identifiant", "note": "Note" },
+      "operations": ["read"],
+      "version": 1
+    }
+  ],
+  "consumes": [],
+  "migrations": "migrations"
+}
