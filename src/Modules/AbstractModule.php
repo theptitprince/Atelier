@@ -63,7 +63,7 @@ abstract class AbstractModule implements ModuleInterface
     }
 
     /** Rend un gabarit partagé du noyau (composants communs : tableau, pagination, etc.). */
-    protected function renderCore(string $template, array $vars = []): string
+    public function renderCore(string $template, array $vars = []): string
     {
         return $this->ctx->template->render('core::' . $template, $vars + ['baseUrl' => $this->ctx->baseUrl()]);
     }
