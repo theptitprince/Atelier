@@ -14,7 +14,7 @@ return [
     'app' => [
         'name' => 'Atelier',
         'id' => 'atelier',
-        'version' => '0.7.1',
+        'version' => '0.7.2',
         'env' => 'dev',            // dev | test | prod
         'debug' => true,
         'timezone' => 'Europe/Paris',

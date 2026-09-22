@@ -23,7 +23,7 @@ $id = (int) $page['id'];
         <aside class="wiki__side">
             <section class="card card--compact">
                 <div class="card__header"><h2 class="card__title"><svg class="icon" aria-hidden="true"><use href="#i-tag"></use></svg> Tags</h2></div>
-                <div class="card__body"><?php if ($tags === []): ?><p class="text-muted mb-0">Aucun tag.</p><?php else: ?><div class="chips"><?php foreach ($tags as $tag): ?><span class="chip"><?= $e($tag) ?></span><?php endforeach; ?></div><?php endif; ?></div>
+                <div class="card__body"><?php if ($tags === []): ?><p class="text-muted mb-0">Aucun tag.</p><?php else: ?><div class="chips"><?php foreach ($tags as $tag): ?><a class="chip" href="#" data-route="list?tag=<?= $e(rawurlencode(\Atelier\Support\Str::normalizeTag($tag))) ?>" title="Toutes les pages de cette catégorie"><?= $e($tag) ?></a><?php endforeach; ?></div><?php endif; ?></div>
             </section>
 
             <section class="card card--compact">

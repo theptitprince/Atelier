@@ -39,7 +39,11 @@ final class WikiModule extends AbstractModule
 
     public function routes(RouteCollection $r): void
     {
+        $r->view('index', [$this, 'index'], permission: 'open');
         $r->view('list', [$this, 'list'], permission: 'open');
+        $r->view('settings', [$this, 'settingsView'], permission: 'admin');
+        $r->action('save-settings', [$this, 'saveSettings'], permission: 'admin');
+        $r->action('set-home', [$this, 'setHome'], permission: 'admin');
         $r->view('new', [$this, 'new'], permission: 'create');
         $r->view('show/{slug}', [$this, 'show'], permission: 'open');
         $r->view('edit/{id}', [$this, 'edit'], permission: 'update');
@@ -94,25 +98,117 @@ final class WikiModule extends AbstractModule
     // Vues
     // =====================================================================
 
+    /**
+     * Page d'arrivée du module (route par défaut) : la page d'accueil configurée ou la liste,
+     * selon le paramètre « landing » du module (Paramètres des pages).
+     */
+    public function index(Request $request, array $params): ModuleView
+    {
+        $home = $this->homePage();
+        if ($this->landing() === 'home' && $home !== null) {
+            return $this->show($request, ['slug' => (string) $home['slug']])->route('show/' . $home['slug']);
+        }
+        return $this->list($request, $params);
+    }
+
     public function list(Request $request, array $params): ModuleView
     {
         $query = $this->listQuery($request->allQuery());
-        $result = $this->repository()->paginate($query['q'], $query['page'], $query['per_page'], $query['sort'], $query['dir']);
+        $result = $this->repository()->paginate($query['q'], $query['page'], $query['per_page'], $query['sort'], $query['dir'], $query['tag'] !== '' ? $query['tag'] : null);
         $rows = $result['rows'];
         foreach ($rows as &$row) {
             $row['excerpt'] = mb_substr(trim(preg_replace('/\s+/u', ' ', BbCode::toText((string) $row['excerpt'])) ?? ''), 0, 200, 'UTF-8');
             $row['tags'] = $this->tagNames((int) $row['id']);
         }
         unset($row);
-        $rights = $this->rights(['create', 'update', 'delete']);
-        $content = $this->render('list', ['rows' => $rows, 'total' => (int) $result['total'], 'query' => $query, 'rights' => $rights, 'perPageChoices' => self::PER_PAGE_CHOICES, 'home' => $this->repository()->findBySlug('accueil')]);
+        $rights = $this->rights(['create', 'update', 'delete', 'admin']);
+        $content = $this->render('list', [
+            'rows' => $rows,
+            'total' => (int) $result['total'],
+            'query' => $query,
+            'rights' => $rights,
+            'perPageChoices' => self::PER_PAGE_CHOICES,
+            'home' => $this->homePage(),
+            'categories' => $this->repository()->tagCounts(),
+            'listRoute' => fn (array $overrides): string => $this->listRoute(array_merge($query, $overrides)),
+        ]);
         $actions = '<a class="btn btn--ghost" href="#" data-route="' . $this->e($this->listRoute($query)) . '">' . $this->icon('refresh') . '<span>Actualiser</span></a>';
+        if ($rights['admin']) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-route="settings" title="Page d’arrivée et page d’accueil">' . $this->icon('settings') . '<span>Paramètres</span></a>';
+        }
         if ($rights['create']) {
             $actions .= '<a class="btn btn--primary" href="#" data-route="new">' . $this->icon('plus') . '<span>Nouvelle page</span></a>';
         }
-        $subtitle = $result['total'] . ' page(s)' . ($query['q'] !== '' ? ' (filtrées)' : '');
+        $filtered = $query['q'] !== '' || $query['tag'] !== '';
+        $subtitle = $result['total'] . ' page(s)' . ($filtered ? ' (filtrées' . ($query['tag'] !== '' ? ', catégorie « ' . $query['tag'] . ' »' : '') . ')' : '');
         $banner = $this->renderCore('banner', ['icon' => 'book', 'title' => 'Pages', 'subtitle' => $subtitle, 'actions' => $actions]);
         return ModuleView::make('Pages')->banner($banner)->content($content)->status($subtitle)->route($this->listRoute($query));
+    }
+
+    /** Paramètres du module : page d'arrivée (liste ou page d'accueil) et choix de la page d'accueil. */
+    public function settingsView(Request $request, array $params): ModuleView
+    {
+        $home = $this->homePage();
+        $content = $this->render('settings', [
+            'landing' => $this->landing(),
+            'homeSlug' => $home !== null ? (string) $home['slug'] : (string) ($this->ctx->settings->get('home_slug', '', 'wiki') ?? ''),
+            'homeMissing' => $home === null && (string) ($this->ctx->settings->get('home_slug', '', 'wiki') ?? '') !== '',
+            'pages' => $this->repository()->allActive(),
+        ]);
+        $actions = '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Toutes les pages</span></a>';
+        $banner = $this->renderCore('banner', ['icon' => 'settings', 'title' => 'Paramètres des pages', 'subtitle' => 'Page d’arrivée et page d’accueil', 'actions' => $actions]);
+        return ModuleView::make('Pages · paramètres')->banner($banner)->content($content)->status('Paramètres des pages');
+    }
+
+    public function saveSettings(Request $request, array $params): ActionResult
+    {
+        $this->require('admin');
+        $landing = $request->string('landing');
+        $homeSlug = trim($request->string('home_slug'));
+        $errors = [];
+        if (!in_array($landing, ['list', 'home'], true)) {
+            $errors['landing'] = 'Choisissez « la liste des pages » ou « la page d’accueil ».';
+        }
+        if ($homeSlug !== '' && $this->repository()->findBySlug($homeSlug) === null) {
+            $errors['home_slug'] = 'Cette page n’existe pas (ou est dans la corbeille).';
+        }
+        if ($landing === 'home' && $homeSlug === '') {
+            $errors['home_slug'] = 'Choisissez la page d’accueil.';
+        }
+        if ($errors !== []) {
+            throw new ValidationException($errors);
+        }
+        $userId = $this->ctx->userId();
+        $this->ctx->settings->set('landing', $landing, 'wiki', $userId);
+        $this->ctx->settings->set('home_slug', $homeSlug, 'wiki', $userId);
+        $this->log('wiki.settings', 'success', 'wiki:settings', 'Paramètres des pages modifiés', ['landing' => $landing, 'home_slug' => $homeSlug]);
+        return ActionResult::ok(['landing' => $landing, 'home_slug' => $homeSlug], 'Paramètres enregistrés.')->dirty(false)->refresh();
+    }
+
+    /** Depuis une page : la définir comme page d'accueil (et arriver dessus en ouvrant le module). */
+    public function setHome(Request $request, array $params): ActionResult
+    {
+        $this->require('admin');
+        $page = $this->requirePage($this->requireId($request));
+        $userId = $this->ctx->userId();
+        $this->ctx->settings->set('home_slug', (string) $page['slug'], 'wiki', $userId);
+        $this->ctx->settings->set('landing', 'home', 'wiki', $userId);
+        $this->log('wiki.settings', 'success', 'page:' . $page['id'], 'Page d’accueil définie : ' . $page['title']);
+        return ActionResult::ok(['home_slug' => $page['slug']], '« ' . $page['title'] . ' » est désormais la page d’accueil des Pages.')->refresh();
+    }
+
+    private function landing(): string
+    {
+        $value = (string) ($this->ctx->settings->get('landing', 'home', 'wiki') ?? 'home');
+        return $value === 'list' ? 'list' : 'home';
+    }
+
+    /** Page d'accueil configurée (paramètre home_slug, sinon la page « accueil » si elle existe). @return array<string, mixed>|null */
+    private function homePage(): ?array
+    {
+        $slug = (string) ($this->ctx->settings->get('home_slug', '', 'wiki') ?? '');
+        $page = $slug !== '' ? $this->repository()->findBySlug($slug) : null;
+        return $page ?? $this->repository()->findBySlug('accueil');
     }
 
     public function new(Request $request, array $params): ModuleView
@@ -128,9 +224,11 @@ final class WikiModule extends AbstractModule
         $id = (int) $page['id'];
         $info = $this->ctx->shared->registry->find(WikiService::DATASET, (string) $id);
         $infoId = $info !== null ? (string) $info['id'] : null;
-        $rights = $this->rights(['update', 'delete', 'create']);
+        $rights = $this->rights(['update', 'delete', 'create', 'admin']);
+        $home = $this->homePage();
         $content = $this->render('show', [
             'page' => $page,
+            'isHome' => $home !== null && (int) $home['id'] === $id,
             'html' => $this->renderer()->toHtml($page['content']),
             'tags' => $this->tagNames($id),
             'points' => $this->linkedPoints($infoId),
@@ -145,6 +243,9 @@ final class WikiModule extends AbstractModule
         ]);
         $actions = '<a class="btn btn--ghost" href="#" data-route="list">' . $this->icon('chevron-left') . '<span>Pages</span></a>';
         $actions .= '<a class="btn btn--ghost" href="#" data-route="history/' . $id . '" title="Historique des versions">' . $this->icon('clock') . '<span>v' . (int) $page['revision'] . '</span></a>';
+        if ($rights['admin'] && !($home !== null && (int) $home['id'] === $id)) {
+            $actions .= '<button type="button" class="btn btn--ghost" data-action="set-home" data-params=\'{"id":' . $id . '}\' title="Arriver sur cette page en ouvrant le module">' . $this->icon('home') . '<span>Définir comme accueil</span></button>';
+        }
         if ($rights['update']) {
             $actions .= '<a class="btn btn--primary" href="#" data-route="edit/' . $id . '">' . $this->icon('edit') . '<span>Modifier</span></a>';
         }
@@ -482,7 +583,7 @@ final class WikiModule extends AbstractModule
         return $id;
     }
 
-    /** @param array<string, mixed> $input @return array{q: string, sort: string, dir: string, page: int, per_page: int} */
+    /** @param array<string, mixed> $input @return array{q: string, tag: string, sort: string, dir: string, page: int, per_page: int} */
     private function listQuery(array $input): array
     {
         $default = (int) $this->ctx->settings->preference($this->ctx->userId(), 'pageSize', 25);
@@ -490,6 +591,7 @@ final class WikiModule extends AbstractModule
         $sort = (string) ($input['sort'] ?? 'title');
         return [
             'q' => is_scalar($input['q'] ?? null) ? trim((string) $input['q']) : '',
+            'tag' => is_scalar($input['tag'] ?? null) ? \Atelier\Support\Str::normalizeTag((string) $input['tag']) : '',
             'sort' => WikiRepository::isSortable($sort) ? $sort : 'title',
             'dir' => strtolower((string) ($input['dir'] ?? ($sort === 'title' ? 'asc' : 'desc'))) === 'desc' ? 'desc' : 'asc',
             'page' => max(1, (int) ($input['page'] ?? 1)),
@@ -497,11 +599,12 @@ final class WikiModule extends AbstractModule
         ];
     }
 
-    /** @param array{q: string, sort: string, dir: string, page: int, per_page: int} $query */
+    /** @param array{q: string, tag?: string, sort: string, dir: string, page: int, per_page: int} $query */
     private function listRoute(array $query): string
     {
         $params = array_filter([
             'q' => $query['q'],
+            'tag' => $query['tag'] ?? '',
             'sort' => $query['sort'] !== 'title' ? $query['sort'] : null,
             'dir' => $query['dir'] !== 'asc' ? $query['dir'] : null,
             'per_page' => $query['per_page'] !== 25 ? $query['per_page'] : null,
