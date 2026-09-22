@@ -39,6 +39,7 @@ Première version de développement du socle.
 - Découverte des modules depuis `manifest.json`, surcharges administratives dans un fichier protégé, synchronisation des ressources, permissions et catalogue.
 - Interface générale : colonne arborescente, onglets (un par module), bandeau fourni par le module, barre d’état, toaster commun, boîtes de dialogue, historique de navigation.
 - Mécanismes transversaux : identifiants globaux, tags, relations typées, pièces jointes.
+- Pièces jointes chiffrées au repos (AES-256-GCM par blocs, clé locale `var/config/attachments.key` incluse dans les sauvegardes), déchiffrement à la volée au téléchargement, empreinte SHA-256 et compteur de téléchargements ; commandes `attachments:verify` et `attachments:encrypt`.
 - Journal d’activité et journal technique distincts.
 - Console : migrations, données de démonstration, sauvegarde et restauration, rétablissement de l’accès administrateur, export vers MariaDB.
 - Lanceurs Windows et Linux autour du serveur intégré à PHP et de SQLite.
@@ -46,3 +47,5 @@ Première version de développement du socle.
 ### Modules
 - Accueil (tableau de bord).
 - Utilisateurs et droits, Gestion des modules, Paramètres généraux, Journal d’activité, Bloc-notes, Mon profil, Démonstration.
+- Coordonnées GPS : référentiel de points (saisie décimale, DMS ou degrés-minutes), recherche de points proches, import et export CSV, tags, corbeille ; jeu partagé `geo.point` et service intermodule (`find`, `search`, `nearby`, `attach`…) pour rattacher les informations des autres modules à un lieu.
+- Fichiers joints : téléversement multiple par glisser-déposer, rattachement à toute information du registre commun, téléchargement contrôlé par les droits (auteur, assistance, lecteurs du jeu rattaché), aperçu des images, vérification d’intégrité, corbeille, quotas.

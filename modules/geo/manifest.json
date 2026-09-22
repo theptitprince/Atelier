@@ -1,0 +1,57 @@
+{
+  "id": "geo",
+  "name": "Coordonnées GPS",
+  "version": "1.0.0",
+  "description": "Référentiel de points GPS réutilisable par les autres modules comme clé de rattachement des informations",
+  "author": "Atelier",
+  "icon": "map-pin",
+  "group": "tools",
+  "order": 30,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Geo",
+  "entry": "GeoModule",
+  "defaultRoute": "list",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [],
+  "navigation": [
+    { "id": "list", "label": "Points GPS", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste, recherche et points à proximité" },
+    { "id": "new", "label": "Nouveau point", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Référencer un nouveau point" },
+    { "id": "import", "label": "Importer un CSV", "route": "import", "order": 3, "permission": "import", "icon": "upload", "description": "Import de points depuis un fichier CSV", "resource": "action/import" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 4, "permission": "delete", "icon": "trash", "description": "Points supprimés, restauration" }
+  ],
+  "resources": [
+    { "path": "action/import", "label": "Import CSV", "kind": "action", "permissions": ["import"], "description": "Importer des points depuis un fichier CSV" },
+    { "path": "action/export", "label": "Export CSV", "kind": "action", "permissions": ["export"], "description": "Exporter les points au format CSV" }
+  ],
+  "assets": {
+    "css": ["assets/geo.css"],
+    "js": ["assets/geo.js"],
+    "vendor": []
+  },
+  "datasets": [
+    {
+      "code": "geo.point",
+      "name": "Points GPS",
+      "description": "Points géographiques nommés (latitude, longitude, altitude, adresse), clé de rattachement commune aux modules",
+      "visibility": "shared",
+      "tables": ["geo_point"],
+      "fields": {
+        "id": "Identifiant",
+        "code": "Code court (unique, facultatif)",
+        "name": "Nom du point",
+        "latitude": "Latitude (degrés décimaux, WGS 84)",
+        "longitude": "Longitude (degrés décimaux, WGS 84)",
+        "altitude": "Altitude (mètres, facultatif)",
+        "address": "Adresse ou lieu-dit",
+        "description": "Description",
+        "created_at": "Date de création",
+        "updated_at": "Date de modification"
+      },
+      "operations": ["read", "create", "update", "delete"],
+      "version": 1
+    }
+  ],
+  "consumes": [],
+  "migrations": "migrations"
+}

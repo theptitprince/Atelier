@@ -1,0 +1,18 @@
+/* Styles propres au module Coordonnées GPS, limités à sa racine. */
+.module-geo .geo__filters { margin-bottom: var(--sp-3); }
+.module-geo .geo__per-page { width: auto; min-width: 5rem; }
+.module-geo .geo__coords { display: flex; flex-direction: column; gap: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.module-geo .geo__cell-address { max-width: 320px; }
+.module-geo .geo__name { font-weight: 500; }
+.module-geo .geo__form-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-geo .geo__preview .dl dd { overflow-wrap: anywhere; }
+.module-geo .geo__show-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-geo .geo__detail dd { min-width: 0; overflow-wrap: anywhere; }
+.module-geo .geo__detail .btn--icon { flex-shrink: 0; }
+.module-geo .geo__description { white-space: normal; }
+.module-geo .geo__link-results { border: 1px solid var(--c-border); border-radius: var(--radius); max-height: 260px; overflow: auto; margin-top: var(--sp-2); }
+.module-geo .geo__link-results .list__item { cursor: pointer; }
+.module-geo .geo__link-results .list__item:hover { background: var(--c-accent-soft); }
+.module-geo .geo__link-results .list__item[aria-selected="true"] { background: var(--c-accent-soft); }
+.module-geo .chip .chip__remove .icon { width: 12px; height: 12px; }
+.module-geo pre { font-size: var(--fs-xs); }

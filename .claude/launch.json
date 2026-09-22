@@ -1,11 +1,29 @@
 {
-  "version": "0.0.1",
-  "configurations": [
-    {
-      "name": "atelier",
-      "runtimeExecutable": "D:/_CLAUDE_CODE/_ATELIER/_tools/php84/php.exe",
-      "runtimeArgs": ["-S", "127.0.0.1:8000", "-t", "public", "tools/dev-router.php"],
-      "port": 8000
-    }
-  ]
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "atelier",
+            "runtimeExecutable": "D:/_CLAUDE_CODE/_ATELIER/_tools/php84/php.exe",
+            "runtimeArgs": [
+                "-S",
+                "127.0.0.1:8000",
+                "-t",
+                "public",
+                "tools/dev-router.php"
+            ],
+            "port": 8000
+        },
+        {
+            "name": "atelier-8010",
+            "runtimeExecutable": "D:/_CLAUDE_CODE/_ATELIER/_tools/php84/php.exe",
+            "runtimeArgs": [
+                "-S",
+                "127.0.0.1:8010",
+                "-t",
+                "public",
+                "tools/dev-router.php"
+            ],
+            "port": 8010
+        }
+    ]
 }

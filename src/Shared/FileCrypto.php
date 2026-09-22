@@ -244,8 +244,15 @@ final class FileCrypto
      */
     private function readHeader($handle): array
     {
-        $raw = $this->readExact($handle, self::HEADER_LENGTH, true);
-        if ($raw === null || substr($raw, 0, 4) !== self::MAGIC) {
+        $raw = '';
+        while (strlen($raw) < self::HEADER_LENGTH) {
+            $part = fread($handle, self::HEADER_LENGTH - strlen($raw));
+            if ($part === false || $part === '') {
+                break;
+            }
+            $raw .= $part;
+        }
+        if (strlen($raw) < self::HEADER_LENGTH || substr($raw, 0, 4) !== self::MAGIC) {
             throw new RuntimeException('Le fichier n’est pas au format chiffré attendu.');
         }
         if (ord($raw[4]) !== self::VERSION) {
