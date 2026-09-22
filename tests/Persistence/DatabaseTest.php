@@ -17,9 +17,11 @@ final class DatabaseTest extends TestCase
         $migrator = new Migrator($db);
         $dir = dirname(__DIR__, 2) . '/src/Persistence/migrations/core';
         $done = $migrator->migrate('core', $dir);
-        $this->assertCount(1, $done);
+        $available = count($migrator->available($dir));
+        $this->assertTrue($available >= 1);
+        $this->assertCount($available, $done);
         $this->assertCount(0, $migrator->migrate('core', $dir));
-        $this->assertSame(1, $migrator->currentVersion('core'));
+        $this->assertSame($available, $migrator->currentVersion('core'));
         $this->assertTrue($db->tableExists('users'));
         $this->assertTrue($db->tableExists('acl_rules'));
         $this->assertContains('activity_log', $db->tables());

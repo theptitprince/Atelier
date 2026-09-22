@@ -131,9 +131,18 @@ abstract class AbstractModule implements ModuleInterface
         return Str::e($value);
     }
 
-    /** Journalise une action du module dans le journal d'activité. */
-    protected function log(string $action, string $result = 'success', ?string $resourceRef = null, ?string $message = null, array $details = []): void
+    /**
+     * Journalise une action du module dans le journal d'activité.
+     * La catégorie (security, data, admin, technical) est déduite du préfixe de l'action si omise.
+     */
+    protected function log(string $action, string $result = 'success', ?string $resourceRef = null, ?string $message = null, array $details = [], ?string $category = null): void
     {
-        $this->ctx->activity->record($this->id(), $action, $result, $resourceRef, $message, $details);
+        $this->ctx->activity->record($this->id(), $action, $result, $resourceRef, $message, $details, null, $category);
+    }
+
+    /** Trace de débogage du module (visible dans le journal d'activité en niveau debug). */
+    protected function debug(string $message, array $details = []): void
+    {
+        $this->ctx->debug($this->id(), $message, $details);
     }
 }

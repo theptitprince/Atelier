@@ -2,6 +2,25 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.2.0 — 22/09/2026
+
+### Noyau
+- Journal d’activité enrichi : catégories (sécurité, données, administration, technique, débogage), identifiant de requête pour corréler les entrées, durée des traitements, trace de chaque vue et action en niveau `debug`, journalisation des routes introuvables, sessions expirées, rejets CSRF, manifestes invalides et synchronisations. Helper `debug()` pour les modules.
+- Éditeur de texte riche BBCode commun (`data-editor="bbcode"`) avec rendu sécurisé côté serveur.
+- Saisie de tags commune avec suggestions des tags existants (`data-tags-input`, `/core/tags`).
+- Le numéro de version de la barre d’état ouvre le journal des versions.
+- Un clic sur l’onglet actif ramène à la page de base du module.
+- Correctifs : appel d’un service intermodule non démarré, retour d’un module à l’état actif, variable écrasée dans la validation des manifestes.
+
+### Modules
+- Bloc-notes 1.1.0 : éditeur BBCode, suggestions de tags, extraits sans balises.
+- Journal d’activité 1.1.0 : filtres par catégorie et par requête, colonnes catégorie, durée et requête, détail corrélé.
+- Nouveaux : Utilisateurs et droits, Gestion des modules, Paramètres généraux, Mon profil.
+
+### Règle de versions
+- Noyau : `0.x.0` par lot de fonctionnalités, `0.x.y` pour un correctif, `1.0.0` à la recette du socle.
+- Modules : `1.x.0` fonctionnalité, `1.0.y` correctif, majeure si le contrat de données change.
+
 ## 0.1.0 — 22/09/2026
 
 Première version de développement du socle.

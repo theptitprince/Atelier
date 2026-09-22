@@ -85,18 +85,39 @@ final class ErrorHandler
     {
         if ($e instanceof AtelierException) {
             $errorId = null;
-            if ($e->kind() === 'server' || $e->kind() === 'unavailable') {
-                $errorId = Str::errorReference();
-                $this->logger->exception($e, $errorId);
-            } elseif ($e->kind() === 'forbidden') {
-                $this->activity?->record('core', 'access.denied', ActivityLog::DENIED, $e->payload()['resource'] ?? null, $e->getMessage(), $e->payload());
+            $payload = $e->payload();
+            switch ($e->kind()) {
+                case 'server':
+                case 'unavailable':
+                    $errorId = Str::errorReference();
+                    $this->logger->exception($e, $errorId);
+                    $this->activity?->record('core', $e->kind() === 'unavailable' ? 'module.unavailable' : 'error.server', ActivityLog::ERROR, $payload['module'] ?? null, $e->getMessage(), $payload, $errorId, ActivityLog::TECHNICAL);
+                    break;
+                case 'forbidden':
+                    $this->activity?->record('core', 'access.denied', ActivityLog::DENIED, $payload['resource'] ?? null, $e->getMessage(), $payload, null, ActivityLog::SECURITY);
+                    break;
+                case 'auth':
+                    $this->activity?->record('core', !empty($payload['expired']) ? 'session.expired' : 'auth.required', ActivityLog::DENIED, null, $e->getMessage(), [], null, ActivityLog::SECURITY);
+                    break;
+                case 'csrf':
+                    $this->activity?->record('core', 'csrf.rejected', ActivityLog::DENIED, null, $e->getMessage(), [], null, ActivityLog::SECURITY);
+                    break;
+                case 'not_found':
+                    $this->activity?->record('core', 'route.not_found', ActivityLog::FAILURE, null, $e->getMessage(), [], null, ActivityLog::TECHNICAL);
+                    break;
+                case 'validation':
+                    $this->activity?->debug('core', 'debug.validation', $e->getMessage(), ['fields' => array_keys($payload['fields'] ?? [])]);
+                    break;
+                case 'conflict':
+                    $this->activity?->record('core', 'data.conflict', ActivityLog::FAILURE, null, $e->getMessage(), $payload, null, ActivityLog::DATA);
+                    break;
             }
-            return [$e->kind(), $e->httpStatus(), $e->getMessage(), $e->payload(), $errorId];
+            return [$e->kind(), $e->httpStatus(), $e->getMessage(), $payload, $errorId];
         }
 
         $errorId = Str::errorReference();
         $this->logger->exception($e, $errorId, $e instanceof QueryException ? ['sql' => $e->sql(), 'params' => $e->params()] : []);
-        $this->activity?->record('core', 'error.server', ActivityLog::ERROR, null, $e::class . ': ' . Str::truncate($e->getMessage(), 200), [], $errorId);
+        $this->activity?->record('core', 'error.server', ActivityLog::ERROR, null, $e::class . ': ' . Str::truncate($e->getMessage(), 200), ['file' => basename($e->getFile()) . ':' . $e->getLine()], $errorId, ActivityLog::TECHNICAL);
 
         if ($e instanceof QueryException && $e->isConstraintViolation()) {
             return ['conflict', 409, 'L’opération viole une contrainte d’intégrité (doublon ou référence utilisée).', [], $errorId];

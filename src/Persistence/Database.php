@@ -376,6 +376,12 @@ final class Database
         return $this->isSqlite() ? 'INTEGER' : 'INT';
     }
 
+    /** Nombre à virgule flottante double précision (coordonnées, mesures). */
+    public function double(): string
+    {
+        return $this->isSqlite() ? 'REAL' : 'DOUBLE';
+    }
+
     /** Suffixe de table (moteur et jeu de caractères) pour MariaDB, vide pour SQLite. */
     public function tableOptions(): string
     {

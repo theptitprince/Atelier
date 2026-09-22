@@ -74,6 +74,19 @@ $pageQuery = $filters->toQuery(true);
                     </select>
                 </div>
                 <div class="field">
+                    <label class="field__label" for="activity-category">Catégorie</label>
+                    <select class="select select--sm" id="activity-category" name="category">
+                        <option value="">Toutes</option>
+                        <?php foreach (\Atelier\Activity\ActivityLog::categoryLabels() as $code => $label): ?>
+                            <option value="<?= $e($code) ?>"<?= $filters->value('category') === $code ? ' selected' : '' ?>><?= $e($label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="activity-request">Requête</label>
+                    <input class="input input--sm mono" type="text" id="activity-request" name="request" value="<?= $e($filters->value('request')) ?>" placeholder="identifiant de requête" autocomplete="off" title="Toutes les entrées produites par un même traitement">
+                </div>
+                <div class="field">
                     <label class="field__label" for="activity-resource">Ressource</label>
                     <input class="input input--sm" type="text" id="activity-resource" name="resource" value="<?= $e($filters->value('resource')) ?>" placeholder="ex. user:3" autocomplete="off">
                 </div>
@@ -118,26 +131,33 @@ $pageQuery = $filters->toQuery(true);
                 <thead>
                 <tr>
                     <th><?= $sortHeader('Date', 'occurred_at') ?></th>
+                    <th><?= $sortHeader('Catégorie', 'category') ?></th>
                     <th><?= $sortHeader('Utilisateur', 'username') ?></th>
                     <th><?= $sortHeader('Module', 'module_id') ?></th>
                     <th><?= $sortHeader('Action', 'action') ?></th>
                     <th><?= $sortHeader('Résultat', 'result') ?></th>
                     <th>Ressource</th>
                     <th>Message</th>
+                    <th class="col-num"><?= $sortHeader('Durée', 'duration_ms') ?></th>
+                    <th>Requête</th>
                     <th class="col-actions">Détail</th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php foreach ($rows as $row): ?>
                     <?php [$resultLabel, $resultTone] = $results[$row['result']] ?? [(string) $row['result'], 'muted']; ?>
-                    <tr>
-                        <td class="text-nowrap"><?= $e($datetime($row['occurred_at'])) ?></td>
+                    <?php $category = (string) ($row['category'] ?? 'data'); $categoryTone = ['security' => 'warning', 'admin' => 'info', 'technical' => 'danger', 'debug' => 'muted'][$category] ?? ''; ?>
+                    <tr class="activity__row--<?= $e($category) ?>">
+                        <td class="text-nowrap"><?= $e(\Atelier\Support\Clock::formatDateTimeSeconds($row['occurred_at'])) ?></td>
+                        <td><span class="badge<?= $categoryTone !== '' ? ' badge--' . $categoryTone : '' ?>"><?= $e(\Atelier\Activity\ActivityLog::categoryLabels()[$category] ?? $category) ?></span></td>
                         <td class="text-nowrap"><?= $row['username'] !== null && $row['username'] !== '' ? $e($row['username']) : '<span class="text-muted">—</span>' ?></td>
                         <td><?= $e($row['module_id']) ?></td>
                         <td><code><?= $e($row['action']) ?></code></td>
                         <td><span class="badge badge--<?= $e($resultTone) ?>"><?= $e($resultLabel) ?></span></td>
                         <td class="truncate activity__cell-resource"><?= $row['resource_ref'] !== null && $row['resource_ref'] !== '' ? '<code>' . $e($row['resource_ref']) . '</code>' : '<span class="text-muted">—</span>' ?></td>
                         <td class="truncate activity__cell-message" title="<?= $e($row['message'] ?? '') ?>"><?= $e($row['message'] ?? '') ?></td>
+                        <td class="col-num text-muted"><?= isset($row['duration_ms']) && $row['duration_ms'] !== null ? (int) $row['duration_ms'] . ' ms' : '' ?></td>
+                        <td><?php if (!empty($row['request_id'])): ?><a class="mono text-small" href="#" data-route="<?= $e('list?request=' . $row['request_id']) ?>" title="Toutes les entrées de cette requête"><?= $e(substr((string) $row['request_id'], 0, 8)) ?></a><?php else: ?><span class="text-muted">—</span><?php endif; ?></td>
                         <td class="col-actions">
                             <a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="detail/<?= (int) $row['id'] ?>" title="Voir le détail de l’entrée n° <?= (int) $row['id'] ?>" aria-label="Voir le détail de l’entrée n° <?= (int) $row['id'] ?>">
                                 <svg class="icon" aria-hidden="true"><use href="#i-eye"></use></svg>

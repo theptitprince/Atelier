@@ -263,7 +263,7 @@ final class ModuleManager
         if (!in_array($key, ['status', 'group', 'order', 'navigation'], true)) {
             throw new \InvalidArgumentException('Clé de surcharge inconnue : ' . $key);
         }
-        if ($key === 'status' && !in_array($value, Manifest::STATUSES, true)) {
+        if ($key === 'status' && $value !== null && !in_array($value, Manifest::STATUSES, true)) {
             throw new \InvalidArgumentException('État invalide : ' . (string) $value);
         }
         $overrides = $this->overrides();

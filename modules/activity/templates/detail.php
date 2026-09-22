@@ -34,6 +34,15 @@ $filterLink = static fn (array $params, string $label): string => '<a class="btn
                     <?php endif; ?>
                 </dd>
 
+                <dt>Catégorie</dt>
+                <dd><?php $category = (string) ($entry['category'] ?? 'data'); ?><span class="badge"><?= $e(\Atelier\Activity\ActivityLog::categoryLabels()[$category] ?? $category) ?></span> <span class="text-muted">(<?= $e($category) ?>)</span></dd>
+
+                <dt>Requête</dt>
+                <dd><?php if (!empty($entry['request_id'])): ?><code><?= $e($entry['request_id']) ?></code> <?= $filterLink(['request' => (string) $entry['request_id']], 'Toutes les entrées de cette requête') ?><?php else: ?><?= $dash ?><?php endif; ?></dd>
+
+                <dt>Durée</dt>
+                <dd><?= isset($entry['duration_ms']) && $entry['duration_ms'] !== null ? (int) $entry['duration_ms'] . ' ms' : $dash ?></dd>
+
                 <dt>Module</dt>
                 <dd><?= $e($entry['module_id']) ?></dd>
 

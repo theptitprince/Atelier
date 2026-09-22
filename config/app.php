@@ -14,7 +14,7 @@ return [
     'app' => [
         'name' => 'Atelier',
         'id' => 'atelier',
-        'version' => '0.1.0',
+        'version' => '0.2.0',
         'env' => 'dev',            // dev | test | prod
         'debug' => true,
         'timezone' => 'Europe/Paris',
@@ -68,6 +68,7 @@ return [
         'var' => '%root%/var',
         'modules' => '%root%/modules',
         'attachments' => '%var%/attachments',
+        'attachments_key' => '%var%/config/attachments.key',   // clé de chiffrement des pièces jointes (générée au premier usage)
         'logs' => '%var%/logs',
         'cache' => '%var%/cache',
         'backups' => '%var%/backups',
@@ -78,10 +79,13 @@ return [
     'logging' => [
         'technical_retention_days' => 30,
         'activity_retention_months' => 12,
-        'level' => 'debug',            // debug | info | warning | error
+        'activity_level' => 'debug',   // minimal | standard | debug : finesse du journal d'activité (debug trace chaque vue et action)
+        'activity_debug_retention_days' => 7, // les entrées de catégorie debug sont purgées plus tôt
+        'level' => 'debug',            // debug | info | warning | error (journal technique fichier)
     ],
 
     'attachments' => [
+        'encryption' => true,                       // chiffrement AES-256-GCM au repos (clé : paths.attachments_key)
         'max_file_size' => 20 * 1024 * 1024,        // 20 Mo par fichier
         'max_per_user' => 500 * 1024 * 1024,        // 500 Mo par utilisateur
         'max_total' => 5 * 1024 * 1024 * 1024,      // 5 Go au total

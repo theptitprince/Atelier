@@ -15,6 +15,11 @@
 - Les modules ne modifient jamais `src/` ; ils respectent `docs/contrat-module.md` et `docs/manifest-schema.md`. Le module `demo` est la référence.
 - Les fichiers modifiés par l'application sont écrits atomiquement (`Files::writeAtomic`).
 
+## Versions (gérées de façon autonome, sans demander)
+- Noyau `config/app.php` → `app.version` : `0.x.0` par lot de fonctionnalités, `0.x.y` correctif, `1.0.0` à la recette du socle. Chaque bump ajoute une section en tête de `docs/CHANGELOG.md`.
+- Modules `manifest.json` → `version` : `1.x.0` fonctionnalité, `1.0.y` correctif, majeure si le contrat de données change.
+- Le bump se fait dans le commit qui livre le changement.
+
 ## Périmètre décidé par l'utilisateur
 - Modules v1 : home, users, modules-admin, settings, activity, notes, profile, demo. **Pas de module chat.** Demander avant d'ajouter un module.
 - Compte de démonstration : `admin` / `123456789azerty` (défini dans `Kernel\Seeder`).

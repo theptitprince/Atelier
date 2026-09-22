@@ -27,6 +27,7 @@ use Atelier\Security\Session;
 use Atelier\Security\UserRepository;
 use Atelier\Shared\AttachmentService;
 use Atelier\Shared\DatasetCatalog;
+use Atelier\Shared\FileCrypto;
 use Atelier\Shared\InfoRegistry;
 use Atelier\Shared\RelationService;
 use Atelier\Shared\SharedServices;
@@ -100,7 +101,7 @@ final class Application
             new InfoRegistry($this->db),
             new TagService($this->db),
             new RelationService($this->db),
-            new AttachmentService($this->db, $this->config),
+            new AttachmentService($this->db, $this->config, $this->config->bool('attachments.encryption', true) ? new FileCrypto($this->config->path('attachments_key')) : null),
             new DatasetCatalog($this->db, $this->acl),
         );
         $this->errors = new ErrorHandler($this->logger, $this->template, $this->config->isDebug(), $this->activity, $this->config->string('app.base_url'));
@@ -124,7 +125,8 @@ final class Application
             $this->db,
             $this->modules,
             dirname(__DIR__) . '/Persistence/migrations/core',
-            $this->config->path('cache')
+            $this->config->path('cache'),
+            $this->activity
         );
     }
 
@@ -167,6 +169,9 @@ final class Application
      */
     public function handle(Request $request): Response
     {
+        $this->activity->setRequestId(\Atelier\Support\Str::random(6));
+        $this->activity->setLevel($this->config->string('logging.activity_level', 'standard'));
+        $this->activity->setContext(null, null, $request->ip());
         try {
             $this->session->start();
             $this->modules->discover();
@@ -204,7 +209,12 @@ final class Application
 
             case 'core':
                 $this->requireUser($request);
-                return $core->endpoint($request, $segments[1] ?? '', array_slice($segments, 2));
+                $started = microtime(true);
+                $response = $core->endpoint($request, $segments[1] ?? '', array_slice($segments, 2));
+                if (!in_array($segments[1] ?? '', ['ping', 'badges', 'session'], true)) {
+                    $this->activity->debug('core', 'debug.endpoint', $request->method() . ' /core/' . ($segments[1] ?? ''), ['status' => $response->status()], null, (int) round((microtime(true) - $started) * 1000));
+                }
+                return $response;
 
             case 'm':
             case 'api':
@@ -256,7 +266,18 @@ final class Application
             $this->csrf->verify($request);
         }
 
-        $result = ($route['handler'])($request, $match['params']);
+        // Trace de diagnostic : chaque vue/action exécutée, avec sa durée et son issue.
+        $started = microtime(true);
+        $traceAction = 'debug.' . $route['kind'];
+        $traceDetails = ['route' => $routePath, 'pattern' => $route['pattern'], 'method' => $request->method(), 'params' => $match['params'], 'query' => array_keys($request->allQuery()), 'permission' => $route['permission'], 'resource' => $resource];
+        try {
+            $result = ($route['handler'])($request, $match['params']);
+        } catch (Throwable $e) {
+            $outcome = $e instanceof \Atelier\Error\AtelierException ? ($e->kind() === 'validation' ? ActivityLog::FAILURE : ($e->kind() === 'forbidden' ? ActivityLog::DENIED : ActivityLog::ERROR)) : ActivityLog::ERROR;
+            $this->activity->record($moduleId, $traceAction, $outcome, 'route:' . $routePath, ($e instanceof \Atelier\Error\AtelierException ? $e->kind() : $e::class) . ' — ' . \Atelier\Support\Str::truncate($e->getMessage(), 200), $traceDetails, null, ActivityLog::DEBUG, (int) round((microtime(true) - $started) * 1000));
+            throw $e;
+        }
+        $this->activity->debug($moduleId, $traceAction, sprintf('%s %s/%s', $request->method(), $moduleId, $routePath), $traceDetails, 'route:' . $routePath, (int) round((microtime(true) - $started) * 1000));
 
         if ($route['kind'] === 'raw') {
             if (!$result instanceof Response) {

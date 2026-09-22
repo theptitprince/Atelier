@@ -233,6 +233,36 @@ final class Request
         return is_array($file) && isset($file['tmp_name']) && $file['tmp_name'] !== '' ? $file : null;
     }
 
+    /**
+     * Fichiers téléversés sous une clé, qu'elle soit simple (name="file") ou multiple (name="files[]") :
+     * toujours une liste de tableaux $_FILES normalisés, sans les entrées vides.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function fileList(string $key): array
+    {
+        $entry = $this->files[$key] ?? null;
+        if (!is_array($entry) || !isset($entry['tmp_name'])) {
+            return [];
+        }
+        if (!is_array($entry['tmp_name'])) {
+            return $entry['tmp_name'] !== '' || (int) ($entry['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE ? [$entry] : [];
+        }
+        $list = [];
+        foreach (array_keys($entry['tmp_name']) as $i) {
+            $file = [];
+            foreach (['name', 'type', 'tmp_name', 'error', 'size', 'full_path'] as $field) {
+                if (isset($entry[$field][$i])) {
+                    $file[$field] = $entry[$field][$i];
+                }
+            }
+            if (($file['tmp_name'] ?? '') !== '' || (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $list[] = $file;
+            }
+        }
+        return $list;
+    }
+
     /** @return array<string, mixed> */
     public function files(): array
     {

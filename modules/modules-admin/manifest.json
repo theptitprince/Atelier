@@ -8,7 +8,7 @@
   "group": "administration",
   "order": 20,
   "status": "active",
-  "namespace": "Atelier\Modules\ModulesAdmin",
+  "namespace": "Atelier\\Modules\\ModulesAdmin",
   "entry": "ModulesAdminModule",
   "defaultRoute": "list",
   "permissions": [],

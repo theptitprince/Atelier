@@ -526,7 +526,12 @@
       closeBtn.addEventListener('click', (e) => { e.stopPropagation(); close(id); });
       closeBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); close(id); } });
       tab.tabEl.appendChild(closeBtn);
-      tab.tabEl.addEventListener('click', () => activate(id, { push: true }));
+      tab.tabEl.addEventListener('click', () => {
+        // Un onglet déjà actif ramène à la page de base du module ; un onglet inactif s'active tel quel.
+        const base = tab.info && tab.info.defaultRoute ? tab.info.defaultRoute : null;
+        if (activeId === id && base && tab.route !== base) navigate(id, base);
+        else activate(id, { push: true });
+      });
       tab.tabEl.addEventListener('auxclick', (e) => { if (e.button === 1) { e.preventDefault(); close(id); } });
       tabsEl.appendChild(tab.tabEl);
       tab.ctx = createContext(tab);
@@ -714,6 +719,8 @@
           router.push(id, tab.route, options.replace || options.push === false);
         }
         if (view.status && view.status.message) status.message(view.status.message, view.status.level || '');
+        ui.enhance(content);
+        ui.enhance(tab.bannerEl);
         if (!tab.mounted) mountIfReady(tab); else callHook(tab, 'render', view);
         behaviors.autofocus(content);
       } catch (err) {
@@ -1267,6 +1274,225 @@
   })();
 
   // ---------------------------------------------------------------------------
+  // Composants d'interface communs : éditeur BBCode et saisie de tags
+  // ---------------------------------------------------------------------------
+  const bbcode = (function () {
+    const SIMPLE = { b: 'strong', i: 'em', u: 'u', s: 's', h1: 'h2', h2: 'h3', h3: 'h4', center: 'div class="bb-center"', right: 'div class="bb-right"' };
+    const COLORS = ['red', 'green', 'blue', 'orange', 'gray', 'grey', 'purple', 'teal', 'black'];
+    function safeUrl(url) {
+      url = String(url || '').trim();
+      if (!url || /[\s"'<>]/.test(url)) return null;
+      if (/^https?:\/\//i.test(url)) return url;
+      if (url.startsWith('/') && !url.startsWith('//')) return url;
+      return null;
+    }
+    /** Même algorithme que Atelier\View\BbCode::toHtml : échappement complet puis liste blanche. */
+    function toHtml(source) {
+      if (!source || !String(source).trim()) return '';
+      let text = util.escape(String(source).replace(/\r\n?/g, '\n'));
+      const codes = [];
+      text = text.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, (m, c) => { codes.push('<pre class="bb-code"><code>' + c.replace(/^\n+|\n+$/g, '') + '</code></pre>'); return ' CODE' + (codes.length - 1) + ' '; });
+      Object.keys(SIMPLE).forEach((tag) => {
+        const html = SIMPLE[tag];
+        const close = html.split(' ')[0];
+        text = text.replace(new RegExp('\\[' + tag + '\\]([\\s\\S]*?)\\[\\/' + tag + '\\]', 'gi'), '<' + html + '>$1</' + close + '>');
+      });
+      text = text.replace(/\[quote=(?:&quot;)?([^\]&]{1,80}?)(?:&quot;)?\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote"><cite>$1</cite>$2</blockquote>');
+      text = text.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>');
+      const decode = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+      text = text.replace(/\[url=(?:&quot;)?([^\]\s&]+?)(?:&quot;)?\]([\s\S]*?)\[\/url\]/gi, (m, u, label) => { const href = safeUrl(decode(u)); return href ? '<a href="' + util.escape(href) + '" rel="noopener" target="_blank">' + label + '</a>' : label; });
+      text = text.replace(/\[url\]([^\[]+?)\[\/url\]/gi, (m, u) => { const href = safeUrl(decode(u)); return href ? '<a href="' + util.escape(href) + '" rel="noopener" target="_blank">' + u + '</a>' : u; });
+      text = text.replace(/\[color=(?:&quot;)?(#[0-9a-f]{3,6}|[a-z]+)(?:&quot;)?\]([\s\S]*?)\[\/color\]/gi, (m, c, inner) => { c = c.toLowerCase(); return (c.startsWith('#') || COLORS.includes(c)) ? '<span style="color:' + c + '">' + inner + '</span>' : inner; });
+      text = text.replace(/\[size=small\]([\s\S]*?)\[\/size\]/gi, '<span class="bb-small">$1</span>').replace(/\[size=large\]([\s\S]*?)\[\/size\]/gi, '<span class="bb-large">$1</span>');
+      text = text.replace(/\[list(=1)?\]([\s\S]*?)\[\/list\]/gi, (m, ordered, body) => { const items = body.split(/\[\*\]/).map((s) => s.trim()).filter(Boolean); const tag = ordered ? 'ol' : 'ul'; return '<' + tag + ' class="bb-list"><li>' + items.join('</li><li>') + '</li></' + tag + '>'; });
+      text = text.replace(/\[hr\]/gi, '<hr>');
+      text = text.replace(/\n{3,}/g, '\n\n').replace(/(<\/(?:h2|h3|h4|blockquote|ul|ol|div|pre)>|<hr>)\n+/g, '$1').replace(/\n+(<(?:h2|h3|h4|blockquote|ul|ol|div|pre|hr)\b)/g, '$1');
+      text = text.replace(/\n/g, '<br>');
+      text = text.replace(/ CODE(\d+) /g, (m, i) => codes[Number(i)] || '');
+      return '<div class="bb">' + text + '</div>';
+    }
+    return { toHtml };
+  })();
+
+  const ui = (function () {
+    const TOOLS = [
+      { tag: 'b', label: 'Gras', icon: null, text: 'B', cls: 'editor__b', key: 'b' },
+      { tag: 'i', label: 'Italique', text: 'I', cls: 'editor__i', key: 'i' },
+      { tag: 'u', label: 'Souligné', text: 'U', cls: 'editor__u', key: 'u' },
+      { tag: 's', label: 'Barré', text: 'S', cls: 'editor__s' },
+      { sep: true },
+      { tag: 'h1', label: 'Titre', text: 'H1' },
+      { tag: 'h2', label: 'Sous-titre', text: 'H2' },
+      { sep: true },
+      { tag: 'quote', label: 'Citation', icon: 'chat' },
+      { tag: 'code', label: 'Code', text: '</>' },
+      { list: true, label: 'Liste à puces', icon: 'list' },
+      { tag: 'url', label: 'Lien', icon: 'link', prompt: true },
+      { hr: true, label: 'Séparateur', text: '—' },
+    ];
+
+    function wrapSelection(textarea, before, after) {
+      const start = textarea.selectionStart, end = textarea.selectionEnd;
+      const selected = textarea.value.slice(start, end);
+      const insert = before + selected + after;
+      textarea.setRangeText(insert, start, end, 'end');
+      if (!selected) textarea.setSelectionRange(start + before.length, start + before.length);
+      textarea.focus();
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    /** Éditeur BBCode : barre d'outils, raccourcis Ctrl+B/I/U, aperçu. */
+    function editor(textarea) {
+      if (textarea.dataset.enhanced) return;
+      textarea.dataset.enhanced = '1';
+      const readonly = textarea.readOnly || textarea.disabled;
+      const wrap = util.el('div', { class: 'editor' + (readonly ? ' editor--readonly' : '') });
+      const toolbar = util.el('div', { class: 'editor__toolbar', role: 'toolbar', 'aria-label': 'Mise en forme' });
+      TOOLS.forEach((tool) => {
+        if (tool.sep) { toolbar.appendChild(util.el('span', { class: 'editor__sep' })); return; }
+        const button = util.el('button', { type: 'button', class: 'btn btn--sm btn--ghost editor__tool ' + (tool.cls || ''), title: tool.label, 'aria-label': tool.label, disabled: readonly });
+        if (tool.icon) button.appendChild(util.icon(tool.icon, 'icon--sm')); else button.textContent = tool.text;
+        button.addEventListener('click', async () => {
+          if (tool.list) { wrapSelection(textarea, '[list]\n[*] ', '\n[/list]'); return; }
+          if (tool.hr) { wrapSelection(textarea, '\n[hr]\n', ''); return; }
+          if (tool.prompt) {
+            const url = await dialog.prompt({ title: 'Insérer un lien', label: 'Adresse (https://…)', value: 'https://' });
+            if (!url) return;
+            wrapSelection(textarea, '[url=' + url + ']', '[/url]');
+            return;
+          }
+          wrapSelection(textarea, '[' + tool.tag + ']', '[/' + tool.tag + ']');
+        });
+        toolbar.appendChild(button);
+      });
+      toolbar.appendChild(util.el('span', { class: 'toolbar__spacer' }));
+      const previewBtn = util.el('button', { type: 'button', class: 'btn btn--sm btn--ghost editor__tool', title: 'Aperçu', 'aria-pressed': 'false' }, [util.icon('eye', 'icon--sm'), ' Aperçu']);
+      toolbar.appendChild(previewBtn);
+      const help = util.el('details', { class: 'editor__help' }, [util.el('summary', { text: 'Aide BBCode' }), util.el('div', { class: 'text-small text-muted', html: '<code>[b]gras[/b]</code> <code>[i]italique[/i]</code> <code>[u]souligné[/u]</code> <code>[h1]Titre[/h1]</code> <code>[quote]citation[/quote]</code> <code>[code]code[/code]</code> <code>[url=https://…]lien[/url]</code> <code>[list][*] élément[/list]</code> <code>[list=1]…[/list]</code> <code>[color=red]…[/color]</code> <code>[hr]</code>' })]);
+      const preview = util.el('div', { class: 'editor__preview prose', hidden: true });
+      textarea.parentNode.insertBefore(wrap, textarea);
+      wrap.appendChild(toolbar);
+      wrap.appendChild(textarea);
+      wrap.appendChild(preview);
+      wrap.appendChild(help);
+      textarea.classList.add('editor__textarea');
+      previewBtn.addEventListener('click', () => {
+        const show = preview.hidden;
+        preview.innerHTML = show ? (bbcode.toHtml(textarea.value) || '<p class="text-muted">Aucun contenu.</p>') : '';
+        preview.hidden = !show;
+        textarea.hidden = show;
+        previewBtn.setAttribute('aria-pressed', show ? 'true' : 'false');
+        previewBtn.classList.toggle('is-active', show);
+      });
+      if (!readonly) {
+        textarea.addEventListener('keydown', (e) => {
+          if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+          const tool = TOOLS.find((t) => t.key === e.key.toLowerCase());
+          if (tool) { e.preventDefault(); wrapSelection(textarea, '[' + tool.tag + ']', '[/' + tool.tag + ']'); }
+        });
+      }
+    }
+
+    /**
+     * Saisie de tags : puces, suggestions des tags existants (/core/tags), création libre.
+     * L'input d'origine devient caché et conserve son name (valeurs séparées par des virgules).
+     */
+    function tagsInput(input) {
+      if (input.dataset.enhanced) return;
+      input.dataset.enhanced = '1';
+      const readonly = input.readOnly || input.disabled;
+      const scope = input.dataset.tagsScope || 'shared';
+      const max = parseInt(input.dataset.tagsMax || '20', 10);
+      let tags = String(input.value || '').split(',').map((t) => t.trim()).filter(Boolean);
+      input.type = 'hidden';
+      const wrap = util.el('div', { class: 'tagsinput' + (readonly ? ' tagsinput--readonly' : ''), role: 'group' });
+      const chips = util.el('div', { class: 'tagsinput__chips' });
+      const entry = util.el('input', { class: 'tagsinput__entry', type: 'text', placeholder: readonly ? '' : (input.placeholder || 'Ajouter un tag…'), autocomplete: 'off', 'aria-label': 'Nouveau tag', 'aria-autocomplete': 'list', disabled: readonly, id: input.id ? input.id + '-entry' : null });
+      const list = util.el('ul', { class: 'tagsinput__suggestions', role: 'listbox', hidden: true });
+      wrap.appendChild(chips); wrap.appendChild(entry); wrap.appendChild(list);
+      input.parentNode.insertBefore(wrap, input.nextSibling);
+      const label = input.id ? document.querySelector('label[for="' + input.id + '"]') : null;
+      if (label && entry.id) label.setAttribute('for', entry.id);
+
+      function sync() {
+        input.value = tags.join(', ');
+        chips.innerHTML = '';
+        tags.forEach((tag) => {
+          const chip = util.el('span', { class: 'chip' }, [util.icon('tag', 'icon--sm'), tag]);
+          if (!readonly) chip.appendChild(util.el('button', { type: 'button', class: 'chip__remove', 'aria-label': 'Retirer ' + tag, onclick: () => { tags = tags.filter((t) => t !== tag); sync(); input.dispatchEvent(new Event('input', { bubbles: true })); } }, [util.icon('close', 'icon--sm')]));
+          chips.appendChild(chip);
+        });
+      }
+      function add(raw) {
+        const value = String(raw || '').replace(/^#/, '').replace(/\s+/g, ' ').trim();
+        if (!value) return;
+        if (tags.some((t) => t.toLowerCase() === value.toLowerCase())) { entry.value = ''; return; }
+        if (tags.length >= max) { toast.warning('Au maximum ' + max + ' tags.'); return; }
+        tags.push(value); entry.value = ''; sync(); hide();
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      let active = -1; let items = [];
+      function hide() { list.hidden = true; list.innerHTML = ''; active = -1; items = []; entry.removeAttribute('aria-activedescendant'); }
+      function render(suggestions) {
+        list.innerHTML = '';
+        items = suggestions.filter((s) => !tags.some((t) => t.toLowerCase() === s.name.toLowerCase()));
+        const term = entry.value.trim();
+        if (term && !items.some((s) => s.name.toLowerCase() === term.toLowerCase())) items.push({ name: term, create: true });
+        if (!items.length) { hide(); return; }
+        items.forEach((s, index) => {
+          const li = util.el('li', { class: 'tagsinput__suggestion' + (s.create ? ' is-new' : ''), role: 'option', id: 'tagsug-' + index, 'aria-selected': 'false' }, [
+            util.icon(s.create ? 'plus' : 'tag', 'icon--sm'),
+            util.el('span', { text: s.create ? 'Créer « ' + s.name + ' »' : s.name }),
+            s.count ? util.el('span', { class: 'badge badge--muted', text: String(s.count) }) : null,
+          ]);
+          li.addEventListener('mousedown', (e) => { e.preventDefault(); add(s.name); entry.focus(); });
+          list.appendChild(li);
+        });
+        list.hidden = false; active = -1;
+      }
+      function highlight(index) {
+        const options = list.querelectorAll ? [] : Array.from(list.children);
+        options.forEach((o, i) => o.setAttribute('aria-selected', i === index ? 'true' : 'false'));
+        active = index;
+        if (index >= 0 && options[index]) { entry.setAttribute('aria-activedescendant', options[index].id); options[index].scrollIntoView({ block: 'nearest' }); }
+      }
+      const fetchSuggestions = util.debounce(async () => {
+        const term = entry.value.trim();
+        try {
+          const envelope = await api.get('/core/tags?scope=' + encodeURIComponent(scope) + '&q=' + encodeURIComponent(term));
+          if (document.activeElement === entry) render(envelope.data.tags || []);
+        } catch (e) { /* suggestions indisponibles : la saisie libre reste possible */ }
+      }, 180);
+      if (!readonly) {
+        entry.addEventListener('focus', fetchSuggestions);
+        entry.addEventListener('input', fetchSuggestions);
+        entry.addEventListener('blur', () => setTimeout(hide, 120));
+        entry.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); if (list.hidden) fetchSuggestions(); else highlight(Math.min(items.length - 1, active + 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(0, active - 1)); }
+          else if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab' && entry.value.trim()) {
+            if (e.key === 'Tab' && !entry.value.trim()) return;
+            e.preventDefault();
+            if (active >= 0 && items[active]) add(items[active].name); else add(entry.value);
+          }
+          else if (e.key === 'Backspace' && !entry.value && tags.length) { tags.pop(); sync(); input.dispatchEvent(new Event('input', { bubbles: true })); }
+          else if (e.key === 'Escape') hide();
+        });
+        wrap.addEventListener('click', (e) => { if (e.target === wrap || e.target === chips) entry.focus(); });
+      }
+      sync();
+    }
+
+    /** Active les composants communs dans un fragment fraîchement inséré. */
+    function enhance(root) {
+      if (!root) return;
+      root.querySelectorAll('textarea[data-editor="bbcode"]').forEach(editor);
+      root.querySelectorAll('input[data-tags-input]').forEach(tagsInput);
+    }
+    return { enhance, editor, tagsInput, bbcode };
+  })();
+
+  // ---------------------------------------------------------------------------
   // Démarrage
   // ---------------------------------------------------------------------------
   let started = false;
@@ -1337,7 +1563,7 @@
   }
 
   window.Atelier = Object.freeze({
-    config: CONFIG, api, toast, status, dialog, tabs, nav, modules, forms, resources, util, announce, AtelierError,
+    config: CONFIG, api, toast, status, dialog, tabs, nav, modules, forms, resources, util, ui, bbcode, announce, AtelierError,
     open: (moduleId, route) => tabs.open(moduleId, route, { push: true }),
   });
 

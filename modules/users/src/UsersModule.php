@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atelier\Modules\Users;
 
+use Atelier\Error\ModuleUnavailableException;
 use Atelier\Error\NotFoundException;
 use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
@@ -82,9 +83,15 @@ final class UsersModule extends AbstractModule
         $r->action('acl/test', [$this, 'aclTest'], permission: 'admin');
     }
 
-    /** Service intermodule du jeu partagé users.account. */
+    /**
+     * Service intermodule du jeu partagé users.account.
+     * Le module doit avoir été démarré (boot) : sans contexte, l'erreur est explicite plutôt qu'une erreur fatale.
+     */
     public function service(): ?object
     {
+        if (!isset($this->ctx)) {
+            throw new ModuleUnavailableException('Le module « users » doit être démarré (boot) avant d’exposer son service.', $this->id());
+        }
         return new UsersService($this->ctx);
     }
 

@@ -35,6 +35,8 @@ final class Console
         'backup:list' => ['backupList', 'Liste les sauvegardes disponibles'],
         'backup:restore' => ['backupRestore', 'Restaure une sauvegarde : backup:restore <nom> (--force requis)'],
         'maintenance:purge' => ['purge', 'Applique les rétentions (journal d’activité, journaux techniques, corbeille)'],
+        'attachments:verify' => ['attachmentsVerify', 'Vérifie l’intégrité de toutes les pièces jointes (authentification du chiffré, empreinte SHA-256)'],
+        'attachments:encrypt' => ['attachmentsEncrypt', 'Chiffre les pièces jointes encore stockées en clair'],
         'mariadb:export' => ['mariadbExport', 'Exporte les données SQLite vers une base MariaDB configurée : mariadb:export --to=config/env.mariadb.php'],
         'test' => ['test', 'Exécute la suite de tests'],
     ];
@@ -266,7 +268,7 @@ final class Console
 
     private function backupCreate(): int
     {
-        $backup = new Backup($this->app);
+        $backup = Backup::forApplication($this->app);
         $name = $backup->create();
         $this->app->activity->record('core', 'console.backup_create', ActivityLog::SUCCESS, 'backup:' . $name, 'Sauvegarde créée depuis la console');
         $this->info('Sauvegarde créée : ' . $name);
@@ -275,7 +277,7 @@ final class Console
 
     private function backupList(): int
     {
-        foreach ((new Backup($this->app))->list() as $entry) {
+        foreach ((Backup::forApplication($this->app))->list() as $entry) {
             $this->line(sprintf('  %-32s %10s  %s', $entry['name'], Str::humanSize($entry['size']), $entry['created_at']));
         }
         return 0;
@@ -288,7 +290,7 @@ final class Console
             $this->error('Usage : backup:restore <nom> --force (remplace les données actuelles ; une sauvegarde de sécurité est créée avant).');
             return 1;
         }
-        $backup = new Backup($this->app);
+        $backup = Backup::forApplication($this->app);
         $safety = $backup->create('avant-restauration');
         $this->line('  Sauvegarde de sécurité : ' . $safety);
         $report = $backup->restore($name);
@@ -319,6 +321,41 @@ final class Console
             }
         }
         return 0;
+    }
+
+    private function attachmentsVerify(): int
+    {
+        $service = $this->app->shared->attachments;
+        $ok = 0;
+        $failed = 0;
+        foreach ($service->all() as $row) {
+            $result = $service->verify((string) $row['id']);
+            if ($result['ok']) {
+                $ok++;
+            } else {
+                $failed++;
+                $this->line(sprintf('  ✖ %s  %s  %s', $row['id'], $row['original_name'], $result['message']));
+            }
+        }
+        $this->line(sprintf('  %d fichier(s) conforme(s), %d en erreur.', $ok, $failed));
+        $this->app->activity->record('core', 'console.attachments_verify', $failed === 0 ? ActivityLog::SUCCESS : ActivityLog::FAILURE, null, 'Vérification des pièces jointes depuis la console', ['ok' => $ok, 'failed' => $failed]);
+        return $failed === 0 ? 0 : 1;
+    }
+
+    private function attachmentsEncrypt(): int
+    {
+        $service = $this->app->shared->attachments;
+        if (!$service->isEncryptionEnabled()) {
+            $this->error('Le chiffrement est désactivé (attachments.encryption).');
+            return 1;
+        }
+        $result = $service->encryptExisting();
+        foreach ($result['errors'] as $error) {
+            $this->line('  ✖ ' . $error);
+        }
+        $this->line(sprintf('  %d fichier(s) chiffré(s), %d déjà chiffré(s), %d erreur(s).', $result['encrypted'], $result['skipped'], count($result['errors'])));
+        $this->app->activity->record('core', 'console.attachments_encrypt', $result['errors'] === [] ? ActivityLog::SUCCESS : ActivityLog::FAILURE, null, 'Chiffrement des pièces jointes existantes depuis la console', $result);
+        return $result['errors'] === [] ? 0 : 1;
     }
 
     private function mariadbExport(): int
