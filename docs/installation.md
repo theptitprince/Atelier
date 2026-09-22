@@ -47,10 +47,13 @@ Environnements distincts : `app.env` = `dev`, `test` ou `prod`. En `prod`, désa
 
 ## 4. Déploiement sur Apache (OVH ou serveur personnel)
 
-Seul le répertoire `public/` doit être exposé. Deux possibilités :
+Il n’y a pas de lanceur sur le serveur : c’est Apache qui sert `public/index.php`, unique point d’entrée. Seul le répertoire `public/` doit être exposé ; trois cas :
 
-- **DocumentRoot sur `public/`** (recommandé) : le `.htaccess` fourni route tout vers `index.php` et bloque les autres fichiers PHP.
-- **Sous-répertoire du site** (ex. `https://exemple.fr/atelier/`) : pointer un alias vers `public/`, définir `app.base_url = '/atelier'` et `RewriteBase /atelier/` dans `.htaccess`.
+- **DocumentRoot sur `public/`** (recommandé, serveur personnel) : dans le VirtualHost, `DocumentRoot /srv/atelier/public`. Le `public/.htaccess` route toute URL vers `index.php` et refuse les autres fichiers PHP.
+- **Hébergement mutualisé avec racine web imposée** (OVH : dossier `www/`) : déposer **tout le projet** dans `www/` (y compris les fichiers cachés `.htaccess`). Le `.htaccess` de la racine réécrit chaque requête vers `public/` ; les répertoires `src/`, `config/`, `var/`, `modules/`, `tools/`, `tests/` et `docs/` portent chacun un `.htaccess` `Require all denied`, donc ni la base SQLite, ni la configuration, ni le code ne sont accessibles en HTTP. Prérequis : `mod_rewrite` et `AllowOverride All` (standard chez OVH). Si la réécriture n’est pas active, `index.php` à la racine affiche une page de diagnostic au lieu de l’application.
+- **Sous-répertoire du site** (ex. `https://exemple.fr/atelier/`) : même principe, en décommentant `RewriteBase /atelier/` dans le `.htaccess` concerné et en définissant `app.base_url = '/atelier'` dans `config/env.local.php`.
+
+Vérification après transfert : `https://votre-site/` doit afficher la page de connexion ; `https://votre-site/config/app.php` et `https://votre-site/var/data/atelier.sqlite` doivent répondre 403.
 
 Droits : le processus PHP doit pouvoir écrire dans `var/` et ses sous-répertoires (`data`, `attachments`, `logs`, `cache`, `backups`, `sessions`, `tmp`, `config`). Les répertoires `src/`, `modules/`, `config/` peuvent rester en lecture seule.
 

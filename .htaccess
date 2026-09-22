@@ -1,0 +1,24 @@
+# Atelier — .htaccess de la racine du projet.
+#
+# À utiliser lorsque l'hébergeur impose la racine web (ex. OVH mutualisé : dossier www/) et que
+# le projet entier y est déposé. Toute requête est réécrite vers public/, seul répertoire prévu
+# pour être exposé. Si vous maîtrisez le DocumentRoot, pointez-le directement sur public/ et ce
+# fichier ne sert pas.
+
+Options -Indexes -MultiViews
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Adapter si le projet est dans un sous-répertoire du site (ex. RewriteBase /atelier/) ;
+    # définir alors app.base_url = '/atelier' dans config/env.local.php.
+    # RewriteBase /
+
+    # Déjà dans public/ : laisser passer.
+    RewriteRule ^public/ - [L]
+
+    # Tout le reste est servi depuis public/ (fichiers statiques réels ou index.php).
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Sans mod_rewrite, seul index.php (page de diagnostic) reste accessible ; les répertoires
+# sensibles sont de toute façon protégés par leur propre .htaccess.

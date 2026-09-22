@@ -2,6 +2,11 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.7.1 — 22/09/2026
+
+### Déploiement
+- Hébergement mutualisé (racine web imposée) : `.htaccess` racine réécrivant toute requête vers `public/`, `.htaccess` de refus dans `src/`, `config/`, `var/`, `modules/`, `tools/`, `tests/`, `docs/`, et `index.php` racine affichant un diagnostic si la réécriture n’est pas active. Documentation d’installation mise à jour.
+
 ## 0.7.0 — 22/09/2026
 
 ### Modules

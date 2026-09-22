@@ -6,6 +6,7 @@
 /var/*
 !/var/.gitkeep
 !/var/*/.gitkeep
+!/var/.htaccess
 
 # Configuration locale et secrets
 /config/env.local.php
