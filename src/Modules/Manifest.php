@@ -112,12 +112,12 @@ final class Manifest
         // Navigation
         $navigation = [];
         $navIds = [];
-        foreach (self::list($raw['navigation'] ?? []) as $i => $entry) {
-            if (!is_array($entry)) {
+        foreach (self::list($raw['navigation'] ?? []) as $i => $navEntry) {
+            if (!is_array($navEntry)) {
                 $errors[] = sprintf('Entrée de navigation n°%d invalide.', $i + 1);
                 continue;
             }
-            $navId = (string) ($entry['id'] ?? '');
+            $navId = (string) ($navEntry['id'] ?? '');
             if (!Str::isSlug($navId)) {
                 $errors[] = sprintf('Entrée de navigation n°%d : identifiant absent ou invalide.', $i + 1);
                 continue;
@@ -127,12 +127,12 @@ final class Manifest
                 continue;
             }
             $navIds[] = $navId;
-            $route = self::normalizeRoute((string) ($entry['route'] ?? ''));
+            $route = self::normalizeRoute((string) ($navEntry['route'] ?? ''));
             if ($route === null) {
                 $errors[] = sprintf('Entrée de navigation "%s" : route invalide.', $navId);
                 continue;
             }
-            $label = trim((string) ($entry['label'] ?? ''));
+            $label = trim((string) ($navEntry['label'] ?? ''));
             if ($label === '') {
                 $errors[] = sprintf('Entrée de navigation "%s" : libellé absent.', $navId);
             }
@@ -140,25 +140,25 @@ final class Manifest
                 'id' => $navId,
                 'label' => $label,
                 'route' => $route,
-                'order' => is_numeric($entry['order'] ?? null) ? (int) $entry['order'] : 100,
-                'permission' => Str::isSlug((string) ($entry['permission'] ?? 'open'), 32) ? (string) ($entry['permission'] ?? 'open') : 'open',
-                'icon' => isset($entry['icon']) ? (string) $entry['icon'] : null,
-                'description' => isset($entry['description']) ? (string) $entry['description'] : null,
-                'parent' => isset($entry['parent']) && $entry['parent'] !== '' ? (string) $entry['parent'] : null,
-                'resource' => isset($entry['resource']) ? trim((string) $entry['resource'], '/') : 'screen/' . $navId,
+                'order' => is_numeric($navEntry['order'] ?? null) ? (int) $navEntry['order'] : 100,
+                'permission' => Str::isSlug((string) ($navEntry['permission'] ?? 'open'), 32) ? (string) ($navEntry['permission'] ?? 'open') : 'open',
+                'icon' => isset($navEntry['icon']) ? (string) $navEntry['icon'] : null,
+                'description' => isset($navEntry['description']) ? (string) $navEntry['description'] : null,
+                'parent' => isset($navEntry['parent']) && $navEntry['parent'] !== '' ? (string) $navEntry['parent'] : null,
+                'resource' => isset($navEntry['resource']) ? trim((string) $navEntry['resource'], '/') : 'screen/' . $navId,
             ];
         }
         // Parents et profondeur (3 niveaux maximum : module > page > sous-page)
-        foreach ($navigation as $entry) {
-            if ($entry['parent'] !== null) {
-                if (!in_array($entry['parent'], $navIds, true)) {
-                    $errors[] = sprintf('Entrée "%s" : parent "%s" inconnu.', $entry['id'], $entry['parent']);
+        foreach ($navigation as $navItem) {
+            if ($navItem['parent'] !== null) {
+                if (!in_array($navItem['parent'], $navIds, true)) {
+                    $errors[] = sprintf('Entrée "%s" : parent "%s" inconnu.', $navItem['id'], $navItem['parent']);
                 } else {
-                    $parent = self::findNav($navigation, $entry['parent']);
+                    $parent = self::findNav($navigation, $navItem['parent']);
                     if ($parent !== null && $parent['parent'] !== null) {
                         $grand = self::findNav($navigation, $parent['parent']);
                         if ($grand !== null && $grand['parent'] !== null) {
-                            $errors[] = sprintf('Entrée "%s" : profondeur supérieure à trois niveaux.', $entry['id']);
+                            $errors[] = sprintf('Entrée "%s" : profondeur supérieure à trois niveaux.', $navItem['id']);
                         }
                     }
                 }
@@ -391,7 +391,7 @@ final class Manifest
         if ($route === '') {
             return 'index';
         }
-        if (str_contains($route, '..') || preg_match('#^[A-Za-z0-9_.\-/{}]+$#', $route) !== 1) {
+        if (str_contains($route, '..') || preg_match('#^[A-Za-z0-9_.\-/{}*]+$#', $route) !== 1) {
             return null;
         }
         return $route;

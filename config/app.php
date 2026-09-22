@@ -109,11 +109,6 @@ return [
         ],
     ],
 
-    'chat' => [
-        'poll_interval' => 3000,
-        'retention_months' => 12,
-        'max_message_length' => 2000,
-    ],
 
     'trash' => [
         'retention_days' => 30,

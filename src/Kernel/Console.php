@@ -154,7 +154,7 @@ final class Console
         foreach ($seeder->run() as $line) {
             $this->line('  ' . $line);
         }
-        $this->info('Données de démonstration en place. Compte administrateur : admin / Atelier-admin-2026 (changement demandé à la première connexion).');
+        $this->info('Données de démonstration en place. Compte administrateur : ' . Seeder::ADMIN_USERNAME . ' / ' . Seeder::ADMIN_PASSWORD . ' (changement demandé à la première connexion).');
         return 0;
     }
 

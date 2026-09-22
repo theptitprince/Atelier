@@ -1300,6 +1300,18 @@
         if (action === 'profile') { if (nav.moduleInfo('profile')) tabs.open('profile', null, { push: true }); else session.passwordDialog(false); }
       });
     });
+    const versionButton = document.getElementById('status-version');
+    if (versionButton) {
+      versionButton.addEventListener('click', async () => {
+        versionButton.classList.add('is-busy');
+        try {
+          const envelope = await api.get('/core/changelog');
+          const body = util.el('div', { class: 'changelog prose' });
+          body.innerHTML = envelope.data.html; // HTML produit et échappé côté serveur
+          dialog.open({ title: 'Journal des versions — Atelier v' + envelope.data.version, body, wide: true, buttons: [{ label: 'Fermer', value: 'ok', primary: true }] });
+        } catch (err) { toast.fromError(err); } finally { versionButton.classList.remove('is-busy'); }
+      });
+    }
     const logoutForm = document.getElementById('logout-form');
     if (logoutForm) {
       logoutForm.addEventListener('submit', async (e) => {

@@ -15,7 +15,7 @@ use Atelier\Security\Acl\AclService;
 final class Seeder
 {
     public const ADMIN_USERNAME = 'admin';
-    public const ADMIN_PASSWORD = 'Atelier-admin-2026';
+    public const ADMIN_PASSWORD = '123456789azerty';
 
     public function __construct(private readonly Application $app)
     {
@@ -56,7 +56,7 @@ final class Seeder
         // Règles ACL de départ
         $acl->setRule('group', $adminsId, AclService::ROOT, 'admin', 'allow', null, 'Administration complète');
         $acl->setRule('all', null, AclService::ROOT, 'view', 'allow', null, 'Tous les connectés voient les modules');
-        foreach (['home', 'notes', 'chat', 'profile'] as $moduleId) {
+        foreach (['home', 'notes', 'profile', 'demo'] as $moduleId) {
             if ($this->app->modules->has($moduleId)) {
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'open', 'allow', null, 'Accès de base');
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'read', 'allow');
@@ -64,9 +64,6 @@ final class Seeder
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'update', 'allow');
                 $acl->setRule('group', $usersId, AclService::module($moduleId), 'delete', 'allow');
             }
-        }
-        if ($this->app->modules->has('chat')) {
-            $acl->setRule('group', $usersId, AclService::module('chat'), 'execute', 'allow', null, 'Publier dans le chat');
         }
         $log[] = 'Règles ACL de départ appliquées.';
 
@@ -90,10 +87,10 @@ final class Seeder
                 $log[] = "Compte d'exemple \"$username\" créé (mot de passe : Atelier-demo-2026).";
             }
         }
-        // Bruno : accès refusé au chat pour illustrer une exception
+        // Bruno : accès refusé à la démonstration pour illustrer un refus explicite
         $bruno = $users->findByUsername('bruno');
-        if ($bruno !== null && $this->app->modules->has('chat')) {
-            $acl->setRule('user', (int) $bruno['id'], AclService::module('chat'), 'open', 'deny', null, 'Exemple de refus explicite');
+        if ($bruno !== null && $this->app->modules->has('demo')) {
+            $acl->setRule('user', (int) $bruno['id'], AclService::module('demo'), 'open', 'deny', null, 'Exemple de refus explicite');
         }
 
         // Données d'exemple des modules
