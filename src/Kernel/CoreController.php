@@ -82,6 +82,7 @@ final class CoreController
             'isRootAdmin' => $this->app->acl->can($userId, AclService::ROOT, 'admin'),
             'debug' => $config->isDebug(),
             'serverTime' => Clock::iso(Clock::utc()),
+            'flash' => $this->app->session->pullFlash('toast'),
         ];
 
         $html = $this->app->template->render('core::shell', [
@@ -127,8 +128,12 @@ final class CoreController
         $next = $this->safeNext($request->string('next'));
         try {
             $this->app->csrf->verify($request);
-            $this->app->auth->login($username, $password, $request->ip());
+            $user = $this->app->auth->login($username, $password, $request->ip());
             $this->app->csrf->rotate();
+            $this->app->session->flash('toast', [
+                'level' => 'success',
+                'message' => 'Bienvenue, ' . $user['display_name'] . '. Connexion réussie.',
+            ]);
             if ($request->isAtelierRequest()) {
                 return Response::json(['redirect' => $this->app->baseUrl() . ($next ?: '/')]);
             }
