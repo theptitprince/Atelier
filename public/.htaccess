@@ -1,0 +1,27 @@
+# Atelier — configuration Apache 2.4 pour le répertoire public.
+# Toute requête ne correspondant pas à un fichier statique existant est routée vers index.php.
+
+Options -Indexes -MultiViews
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # Adapter RewriteBase si l'application n'est pas à la racine du site (ex. /atelier/)
+    # RewriteBase /
+
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(css|js|svg|png|jpg|webp|woff2?)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+</IfModule>
+
+# Aucun fichier PHP autre que index.php ne doit être exécuté depuis ce répertoire.
+<FilesMatch "^(?!index\.php$).*\.php$">
+    Require all denied
+</FilesMatch>

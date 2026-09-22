@@ -1,0 +1,19 @@
+/* Page de connexion, pages d'erreur et de maintenance (hors interface générale). */
+.login-body { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--c-bg); }
+.login { width: 100%; display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-5); }
+.login__card { width: 100%; max-width: 400px; background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); box-shadow: var(--shadow); padding: var(--sp-6) var(--sp-6) var(--sp-5); }
+.login__brand { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); margin-bottom: var(--sp-5); color: var(--c-primary); }
+.login__title { margin: 0; font-size: var(--fs-2xl); color: var(--c-primary); }
+.login__submit { margin-top: var(--sp-2); }
+.login__help { margin: var(--sp-4) 0 0; text-align: center; font-size: var(--fs-sm); color: var(--c-text-muted); }
+.login__version { color: var(--c-text-muted); font-size: var(--fs-xs); margin: 0; }
+.login .field__label { font-size: var(--fs-md); }
+
+.error-card { max-width: 560px; }
+.error-card__message { font-size: var(--fs-lg); text-align: center; }
+.error-card__reference { text-align: center; color: var(--c-text-muted); font-size: var(--fs-sm); }
+.error-card__actions { text-align: center; margin-top: var(--sp-4); }
+.error-card__debug { margin-top: var(--sp-4); font-size: var(--fs-sm); }
+.error-card__debug pre { max-height: 320px; white-space: pre-wrap; word-break: break-all; font-size: var(--fs-xs); }
+.maintenance-modules { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--sp-1); font-size: var(--fs-sm); }
+.maintenance-modules li { display: flex; align-items: center; gap: var(--sp-2); }
