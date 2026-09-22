@@ -125,7 +125,7 @@ $dash = '<span class="text-muted">—</span>';
                             <div class="field mb-0">
                                 <label class="sr-only" for="geo-tag">Nouveau tag</label>
                                 <div class="input-group">
-                                    <input class="input input--sm" id="geo-tag" name="tag" placeholder="Ajouter un tag" maxlength="60" autocomplete="off">
+                                    <input class="input input--sm" id="geo-tag" name="tag" placeholder="Ajouter un tag" maxlength="60" autocomplete="off" data-tags-input data-tags-max="5">
                                     <button type="submit" class="btn btn--sm"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg></button>
                                 </div>
                                 <span class="field__error"></span>

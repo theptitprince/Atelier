@@ -1,0 +1,31 @@
+{
+  "id": "map",
+  "name": "Carte",
+  "version": "1.0.0",
+  "description": "Carte des points GPS référencés et de ce qui leur est relié (fonds OpenStreetMap ou OpenSeaMap, calques par tag et par type de lien, tri)",
+  "author": "Atelier",
+  "icon": "map",
+  "group": "tools",
+  "order": 35,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Map",
+  "entry": "MapModule",
+  "defaultRoute": "index",
+  "keepAlive": false,
+  "badge": null,
+  "permissions": [],
+  "navigation": [
+    { "id": "index", "label": "Carte", "route": "index", "order": 1, "permission": "open", "icon": "map", "description": "Points GPS sur fond OpenStreetMap ou OpenSeaMap, calques et liens" }
+  ],
+  "resources": [],
+  "assets": {
+    "css": ["assets/map.css"],
+    "js": ["assets/map.js"],
+    "vendor": [
+      { "type": "css", "path": "assets/vendor/leaflet/leaflet.css", "name": "Leaflet", "version": "1.9.4", "license": "BSD-2-Clause" },
+      { "type": "js", "path": "assets/vendor/leaflet/leaflet.js", "name": "Leaflet", "version": "1.9.4", "license": "BSD-2-Clause" }
+    ]
+  },
+  "datasets": [],
+  "consumes": ["geo.point"]
+}

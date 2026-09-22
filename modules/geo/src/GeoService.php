@@ -124,6 +124,17 @@ final class GeoService
         return array_map(static fn (array $p): array => ['id' => (int) $p['id'], 'label' => self::labelOf($p)], $this->repository()->all());
     }
 
+    /**
+     * Tous les points actifs (cartes, exports), triés par nom.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function all(): array
+    {
+        $this->assertReadable();
+        return array_map([$this, 'publicRow'], $this->repository()->all());
+    }
+
     /** Coordonnées d'un point sous forme d'objet (formats, distances). */
     public function coordinates(int $id): Coordinates
     {
