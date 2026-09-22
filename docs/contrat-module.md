@@ -1,0 +1,168 @@
+# Contrat technique d’un module Atelier
+
+Ce document décrit ce qu’un module doit fournir et ce que le noyau lui garantit. Le module `demo` sert d’exemple complet.
+
+## 1. Arborescence d’un module
+
+```
+modules/<id>/
+├── manifest.json          # déclaration normalisée (source de vérité), voir docs/manifest-schema.md
+├── src/                   # classes PHP, namespace déclaré dans le manifeste (PSR-4)
+│   └── <Entry>Module.php  # point d’entrée : extends Atelier\Modules\AbstractModule
+├── templates/             # gabarits PHP rendus par $this->render('nom', [...])
+├── assets/                # CSS/JS/images propres au module, servis via /module-assets/<id>/...
+├── migrations/            # 001_xxx.php : return static function (Database $db): void { ... };
+└── README.md              # documentation fonctionnelle (optionnel)
+```
+
+L’identifiant `<id>` (minuscules, chiffres, tirets) est le nom du répertoire **et** la valeur `id` du manifeste.
+
+## 2. Classe d’entrée
+
+```php
+namespace Atelier\Modules\Notes;
+
+use Atelier\Http\Request;
+use Atelier\Modules\AbstractModule;
+use Atelier\Modules\ActionResult;
+use Atelier\Modules\ModuleView;
+use Atelier\Modules\RouteCollection;
+
+final class NotesModule extends AbstractModule
+{
+    public function routes(RouteCollection $r): void
+    {
+        $r->view('list', [$this, 'list'], permission: 'open');                     // GET /m/notes/list
+        $r->view('edit/{id}', [$this, 'edit'], permission: 'update');
+        $r->action('save', [$this, 'save'], permission: 'update');                 // POST /m/notes/save
+        $r->action('delete', [$this, 'delete'], permission: 'delete');
+        $r->raw('export.csv', [$this, 'export'], permission: 'export');            // GET, Response brute
+    }
+
+    public function list(Request $request, array $params): ModuleView { ... }
+    public function save(Request $request, array $params): ActionResult { ... }
+}
+```
+
+### Trois natures de routes
+
+| Nature | Méthode HTTP | Retour attendu | Usage |
+|---|---|---|---|
+| `view` | GET | `ModuleView` | Écran chargé dans l’onglet (bandeau + contenu) |
+| `action` | POST (par défaut) | `ActionResult`, tableau ou `null` | Traitement JSON, formulaires, boutons |
+| `raw` | GET (par défaut) | `Response` | Téléchargements, CSV, impression |
+
+Motifs : segments séparés par `/`, paramètres `{id}`, reste du chemin `{path*}`. La chaîne de requête (`?page=2&sort=x`) n’intervient pas dans la correspondance ; elle est lue via `$request->query('page')`.
+
+### Permissions
+
+Chaque route déclare la permission requise (`view`, `open`, `read`, `create`, `update`, `delete`, `import`, `export`, `admin`, `execute` ou une permission propre déclarée dans le manifeste). Le noyau vérifie, avant d’appeler le gestionnaire :
+
+1. que le module est actif et que l’utilisateur a `open` sur `atelier/<id>` ;
+2. la permission de la route sur `atelier/<id>` ou sur `atelier/<id>/<resource>` si `resource:` est fourni ;
+3. le jeton CSRF pour toute méthode d’écriture.
+
+Le module reste responsable des contrôles plus fins dans ses gestionnaires : `$this->require('delete', 'data/note')`, `$this->can('admin')`, `$this->rights(['update', 'delete'])`. **Masquer un bouton n’est jamais suffisant.**
+
+## 3. Ce que le noyau fournit : `$this->ctx`
+
+| Accès | Rôle |
+|---|---|
+| `$this->ctx->request()` | Requête courante (`string()`, `int()`, `bool()`, `arrayInput()`, `file()`) |
+| `$this->ctx->user()`, `userId()` | Utilisateur connecté (exception si absent) |
+| `$this->ctx->db` | `Database` : `select`, `selectOne`, `insert`, `update`, `delete`, `transaction` — **uniquement dans les dépôts/services du module** |
+| `$this->ctx->acl` | Résolution des droits |
+| `$this->ctx->activity` | Journal d’activité : `$this->log('note.create', 'success', 'note:12', 'Note créée')` |
+| `$this->ctx->settings` | Paramètres (`get`/`set` avec `moduleId`) et préférences utilisateur |
+| `$this->ctx->shared` | `registry`, `tags`, `relations`, `attachments`, `catalog` (voir docs/donnees-partagees.md) |
+| `$this->ctx->moduleService('users')` | Service d’un autre module pour lire ses jeux de données partagés |
+| `$this->ctx->template`, `logger`, `csrf`, `users`, `config` | Services divers |
+
+Helpers de `AbstractModule` : `render()`, `renderCore('banner'|'pagination'|'state'|'sort_header')`, `view()`, `resource()`, `can()`, `require()`, `rights()`, `url()`, `actionUrl()`, `assetUrl()`, `e()`, `log()`.
+
+## 4. Vue : `ModuleView`
+
+```php
+return ModuleView::make('Bloc-notes')
+    ->banner($this->renderCore('banner', ['icon' => 'note', 'title' => 'Bloc-notes', 'subtitle' => '12 notes', 'actions' => $actionsHtml]))
+    ->content($this->render('list', ['notes' => $notes]))
+    ->status('12 notes affichées')
+    ->state(['selected' => 3]);   // transmis au JavaScript du module (ctx.state)
+```
+
+Le bandeau est **entièrement** produit par le module ; `renderCore('banner')` est une commodité, pas une obligation. Il doit utiliser les composants du CSS commun.
+
+## 5. Action : `ActionResult`
+
+```php
+return ActionResult::ok(['id' => $id], 'Note enregistrée.')->navigate('edit/' . $id);
+return ActionResult::ok(null, 'Note supprimée.')->refresh();
+return ActionResult::ok()->close();
+return ActionResult::warning(null, 'Aucun élément sélectionné.');
+```
+
+Directives interprétées par le client : `refresh()`, `navigate(route)`, `close()`, `status(text)`, `dirty(bool)`, `banner(html)`. Le `message` est affiché dans le toaster avec le niveau (`ok` = succès, `info`, `warning`).
+
+Erreurs : lever `ValidationException(['champ' => 'message'])`, `NotFoundException`, `ForbiddenException`, `ConflictException`. Le noyau les convertit en réponse normalisée et le client affiche les erreurs près des champs.
+
+## 6. HTML déclaratif (aucun JavaScript nécessaire)
+
+Dans le contenu et le bandeau d’un module, le noyau interprète :
+
+| Attribut | Effet |
+|---|---|
+| `<a data-route="edit/3">` ou `<a href="/m/notes/edit/3">` | Charge la route dans l’onglet du module (URL et historique mis à jour) |
+| `<button data-action="delete" data-params='{"id":3}' data-confirm="Supprimer ?" data-danger>` | POST l’action après confirmation ; applique les directives |
+| `data-prompt="Nouveau nom"` `data-prompt-field="name"` | Demande une saisie avant l’action |
+| `<form data-action="save">` | Soumission fetch (JSON, ou multipart si fichier), erreurs de champs affichées, directives appliquées |
+| `<form data-action="save" data-track-dirty data-save-shortcut>` | Marque l’onglet « modifié » à la saisie ; Ctrl+S soumet |
+| `<form data-action="search" data-auto-submit>` | Soumission au changement (Entrée pour les champs texte) |
+| `<select data-route-select>` | Charge la route de l’option choisie |
+| `<a data-open-module="users" data-open-route="list">` | Ouvre (ou réutilise) l’onglet d’un autre module |
+| `[data-subtabs="id"] > [data-subtab="x"]` + `[data-subtab-panel="x"]` | Onglets internes de contenu |
+
+Attributs générés par le bandeau standard : `[data-banner-busy]` (indicateur d’action en cours), `[data-banner-subtitle]`.
+
+## 7. JavaScript optionnel
+
+Déclarer le fichier dans `assets.js` du manifeste, puis :
+
+```js
+Atelier.modules.register('notes', {
+  mount(ctx)        { /* onglet créé */ },
+  render(ctx, view) { /* après chaque chargement de vue : ctx.root, ctx.banner, ctx.state */ },
+  suspend(ctx)      { /* onglet masqué : les ctx.interval() sont suspendus automatiquement */ },
+  resume(ctx)       { },
+  beforeClose(ctx)  { return true; /* ou false / Promise<bool> ; le noyau gère déjà ctx.isDirty() */ },
+  unmount(ctx)      { /* les écouteurs ctx.on() et minuteries ctx.interval() sont libérés automatiquement */ },
+});
+```
+
+`ctx` : `moduleId`, `root`, `banner`, `state`, `data` (stockage privé de l’onglet), `api.get/post(route)`, `navigate(route)`, `refresh()`, `close()`, `setDirty()`, `isDirty()`, `isActive()`, `status(text)`, `busy(bool)`, `toast`, `dialog`, `util`, `on(el, evt, [selector], handler)`, `interval(fn, ms)`, `timeout(fn, ms)`.
+
+Le manifeste peut déclarer `"keepAlive": true` si un module a réellement besoin de conserver ses minuteries lorsqu’il est masqué (à justifier).
+
+## 8. Styles propres au module
+
+- Déclarés dans `assets.css` ; chargés avant l’affichage, conservés tant qu’un onglet du module existe, retirés à la fermeture (comptage de références).
+- Toute règle est préfixée par la racine du module : `.module-notes .note-card { ... }`. Le contenu rendu doit envelopper son HTML dans `<div class="module module-<id>">`.
+- Interdit : redéfinir `body`, `.btn`, `.table`, `.input`… Priorité aux variables `--c-*`, `--sp-*`.
+- Bibliothèques tierces : déclarées dans `assets.vendor` avec nom, version et licence.
+
+## 9. Données
+
+- Tables préfixées par l’identifiant du module : `notes_note`. Créées par les migrations du module.
+- Chaque jeu de données est déclaré dans `datasets` avec `visibility: shared|private`. Un jeu privé n’est ni catalogué ni accessible par l’API intermodule.
+- Un module consommateur lit un jeu partagé via le **service** du module propriétaire (`$this->ctx->moduleService('users')->...`) et jamais directement ses tables. Le service vérifie les permissions de l’utilisateur avec `$this->ctx->shared->catalog->canAccess($userId, 'users.account', 'read')`.
+- Identifiants globaux, tags, relations, pièces jointes : `$this->ctx->shared->registry->register('notes.note', (string) $id, $title, $userId)` puis `tags->attach($infoId, 'urgent')`, etc.
+
+## 10. Cycle de vie et installation
+
+1. Dépôt du répertoire dans `modules/` ;
+2. `console db:migrate` (ou premier chargement de l’interface) : validation du manifeste, migrations, synchronisation des ressources ACL, permissions et catalogue ;
+3. activation depuis l’administration des modules (ou `console modules:set <id> active`) ;
+4. attribution des droits dans le module Utilisateurs et ACL.
+
+Hooks optionnels de la classe : `install(ModuleContext $ctx)`, `seed(): string` (données de démonstration), `purge(): string` (rétention), `service(): ?object`.
+
+Un manifeste invalide n’empêche que le module concerné : il apparaît en erreur dans la colonne et dans l’administration avec le détail des erreurs.

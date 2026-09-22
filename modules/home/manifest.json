@@ -1,0 +1,19 @@
+{
+  "id": "home",
+  "name": "Accueil",
+  "version": "1.0.0",
+  "description": "Tableau de bord affiché après connexion",
+  "author": "Atelier",
+  "icon": "home",
+  "group": "general",
+  "order": 1,
+  "status": "active",
+  "namespace": "Atelier\\Modules\\Home",
+  "entry": "HomeModule",
+  "defaultRoute": "index",
+  "permissions": [],
+  "navigation": [],
+  "assets": { "css": ["assets/home.css"], "js": [] },
+  "datasets": [],
+  "consumes": []
+}
