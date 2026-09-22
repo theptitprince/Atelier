@@ -1,0 +1,32 @@
+/* Styles propres au module Entretien, limités à sa racine. */
+.module-maintenance .maintenance__filters { margin-bottom: var(--sp-3); }
+.module-maintenance .maintenance__select { width: auto; min-width: 9rem; max-width: 16rem; }
+.module-maintenance .maintenance__per-page { width: auto; min-width: 5rem; }
+.module-maintenance .maintenance__name { font-weight: 500; }
+.module-maintenance .maintenance__nav-label { margin-left: 4px; }
+.module-maintenance .maintenance__state { white-space: nowrap; }
+.module-maintenance .maintenance__row--overdue td:first-child,
+.module-maintenance .maintenance__row--due td:first-child { box-shadow: inset 3px 0 0 var(--c-danger, #c0392b); }
+.module-maintenance .maintenance__row--soon td:first-child { box-shadow: inset 3px 0 0 var(--c-warning, #d68910); }
+
+/* Tableau de bord */
+.module-maintenance .maintenance__stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.module-maintenance .maintenance__dashboard { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-maintenance .maintenance__reminder { align-items: center; }
+.module-maintenance .maintenance__reminder-detail { display: block; }
+
+/* Fiches et formulaires */
+.module-maintenance .maintenance__show-layout,
+.module-maintenance .maintenance__form-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: var(--sp-4); align-items: start; }
+.module-maintenance .maintenance__detail dd { min-width: 0; overflow-wrap: anywhere; }
+.module-maintenance .maintenance__excerpt { margin-top: 2px; white-space: normal; }
+.module-maintenance .maintenance__fieldset { border: 1px solid var(--c-border); border-radius: var(--radius); padding: var(--sp-3); margin: 0 0 var(--sp-3); }
+.module-maintenance .maintenance__fieldset legend { padding: 0 var(--sp-1); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.module-maintenance .maintenance__state-banner { align-items: center; margin-bottom: var(--sp-3); }
+.module-maintenance .maintenance__h3 { font-size: var(--fs-sm, 0.9rem); text-transform: uppercase; letter-spacing: .04em; color: var(--c-text-muted, #666); margin: var(--sp-3) 0 var(--sp-1); display: flex; align-items: center; gap: 4px; }
+.module-maintenance .maintenance__lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
+.module-maintenance .maintenance__checklist { margin: 0; padding-left: 1.2em; }
+.module-maintenance .maintenance__checklist li { padding: 2px 0; overflow-wrap: anywhere; }
+.module-maintenance .maintenance__description { white-space: normal; }
+.module-maintenance .maintenance__attach-form .input[type="file"] { padding: 3px; }
+.module-maintenance details > summary { cursor: pointer; }

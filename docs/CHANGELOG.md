@@ -2,6 +2,11 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.6.0 — 22/09/2026
+
+### Modules
+- Nouveau : Entretien 1.0.0 (GMAO domestique). Équipements (véhicule, chauffage, électroménager, habitation…) avec compteur (km, heures, cycles) et relevé rapide ; tâches d’entretien périodiques par jours et/ou au compteur avec rappel anticipé propre à chaque tâche ; pannes et défauts ; fiche d’intervention (descriptif BBCode, pièces, contacts, outillage, durée et coût estimés) imprimable ; historique des interventions avec replanification automatique, coûts et export CSV ; tableau de bord des rappels, badge du module, calendrier iCalendar ; documents et factures joints depuis les fiches ou depuis le module Fichiers joints ; tags partagés ; corbeille ; service intermodule (`assets`, `reminders`).
+
 ## 0.5.1 — 22/09/2026
 
 ### Noyau
@@ -41,11 +46,6 @@ Ce fichier est affiché dans l’application en cliquant sur le numéro de versi
 ### Noyau
 - Générateur de squelette de module : `console module:create <id>` (manifeste, classe d’entrée avec liste/édition/suppression, dépôt, migration, gabarits, feuille de style, README), migration et synchronisation appliquées immédiatement.
 - Guide du développeur de module (`docs/developpeur-module.md`) : génération, droits, cycle de développement, données partagées, vérification curl, check-list de livraison.
-
-### Modules
-- Nouveau : Entretien 1.0.0 (GMAO domestique). Équipements (véhicule, chauffage, électroménager, habitation…) avec compteur (km, heures, cycles) et relevé rapide ; tâches d’entretien périodiques par jours et/ou au compteur avec rappel anticipé propre à chaque tâche ; pannes et défauts ; fiche d’intervention (descriptif BBCode, pièces, contacts, outillage, durée et coût estimés) imprimable ; historique des interventions avec replanification automatique, coûts et export CSV ; tableau de bord des rappels, badge du module, calendrier iCalendar ; documents et factures joints depuis les fiches ou depuis le module Fichiers joints ; tags partagés ; corbeille ; service intermodule (`assets`, `reminders`).
-
-## 0.3.0 — 22/09/2026
 
 ### Noyau
 - Pièces jointes chiffrées au repos (AES-256-GCM par blocs, clé locale `var/config/attachments.key` incluse dans les sauvegardes), déchiffrement à la volée au téléchargement, empreinte SHA-256 et compteur de téléchargements ; commandes `attachments:verify` et `attachments:encrypt`.
