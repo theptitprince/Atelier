@@ -53,6 +53,7 @@ docs/              documentation : installation, exploitation, contrat de module
 
 - [Installation et configuration](docs/installation.md)
 - [Exploitation, sauvegarde, restauration, migration MariaDB](docs/exploitation.md)
+- [Guide du développeur de module](docs/developpeur-module.md) (générateur `console module:create`)
 - [Contrat technique d’un module](docs/contrat-module.md)
 - [Schéma du manifeste](docs/manifest-schema.md)
 - [Données partagées, catalogue, tags, relations, pièces jointes](docs/donnees-partagees.md)

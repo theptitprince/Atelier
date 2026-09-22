@@ -2,6 +2,12 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.3.0 — 22/09/2026
+
+### Noyau
+- Générateur de squelette de module : `console module:create <id>` (manifeste, classe d’entrée avec liste/édition/suppression, dépôt, migration, gabarits, feuille de style, README), migration et synchronisation appliquées immédiatement.
+- Guide du développeur de module (`docs/developpeur-module.md`) : génération, droits, cycle de développement, données partagées, vérification curl, check-list de livraison.
+
 ## 0.2.2 — 22/09/2026
 
 ### Noyau
