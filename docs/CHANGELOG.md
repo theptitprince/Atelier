@@ -2,6 +2,11 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.7.2 — 22/09/2026
+
+### Modules
+- Pages 1.1.0 : page d’arrivée paramétrable (liste de toutes les pages ou page d’accueil choisie, « Paramètres des pages » réservé aux administrateurs, bouton « Définir comme accueil » sur une page) ; classement par catégories = tags partagés (barre de catégories avec compteurs, chips cliquables, filtre `tag`).
+
 ## 0.7.1 — 22/09/2026
 
 ### Déploiement

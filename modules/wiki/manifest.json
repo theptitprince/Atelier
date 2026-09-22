@@ -1,7 +1,7 @@
 {
   "id": "wiki",
   "name": "Pages",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Pages de type wiki reliées entre elles, avec images et fichiers joints, tags partagés, lieux GPS et historique des versions",
   "author": "Atelier",
   "icon": "book",
@@ -10,14 +10,15 @@
   "status": "active",
   "namespace": "Atelier\\Modules\\Wiki",
   "entry": "WikiModule",
-  "defaultRoute": "list",
+  "defaultRoute": "index",
   "keepAlive": false,
   "badge": null,
   "permissions": [],
   "navigation": [
     { "id": "list", "label": "Toutes les pages", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste et recherche des pages" },
     { "id": "new", "label": "Nouvelle page", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Rédiger une nouvelle page" },
-    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 3, "permission": "delete", "icon": "trash", "description": "Pages supprimées, restauration" }
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 3, "permission": "delete", "icon": "trash", "description": "Pages supprimées, restauration" },
+    { "id": "settings", "label": "Paramètres des pages", "route": "settings", "order": 4, "permission": "admin", "icon": "settings", "description": "Page d’arrivée et page d’accueil" }
   ],
   "resources": [],
   "assets": {

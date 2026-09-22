@@ -27,8 +27,13 @@ final class WikiRepository
         return isset(self::SORTS[$column]);
     }
 
-    /** @return array{rows: list<array<string, mixed>>, total: int} */
-    public function paginate(string $search, int $page, int $perPage, string $sort = 'title', string $direction = 'asc'): array
+    /**
+     * Liste paginée ; $tag (forme normalisée d'un tag partagé) restreint aux pages qui le portent :
+     * les tags servent de catégories.
+     *
+     * @return array{rows: list<array<string, mixed>>, total: int}
+     */
+    public function paginate(string $search, int $page, int $perPage, string $sort = 'title', string $direction = 'asc', ?string $tag = null): array
     {
         $where = ['p.deleted_at IS NULL'];
         $params = [];
@@ -36,6 +41,11 @@ final class WikiRepository
         if ($search !== '') {
             $where[] = '(' . $this->db->lower('p.title') . ' LIKE :s OR ' . $this->db->lower("COALESCE(p.content, '')") . ' LIKE :s)';
             $params['s'] = '%' . mb_strtolower($search, 'UTF-8') . '%';
+        }
+        if ($tag !== null && $tag !== '') {
+            $where[] = "EXISTS (SELECT 1 FROM info_registry r INNER JOIN info_tags it ON it.info_id = r.id INNER JOIN tags t ON t.id = it.tag_id
+                        WHERE r.dataset_code = 'wiki.page' AND r.local_key = CAST(p.id AS " . ($this->db->isSqlite() ? 'TEXT' : 'CHAR') . ") AND t.scope = 'shared' AND t.normalized = :tag)";
+            $params['tag'] = $tag;
         }
         $whereSql = implode(' AND ', $where);
         $total = $this->db->count('SELECT COUNT(*) FROM wiki_page p WHERE ' . $whereSql, $params);
@@ -49,6 +59,30 @@ final class WikiRepository
             $params
         );
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Tags partagés portés par les pages actives, avec le nombre de pages : ce sont les « catégories ».
+     *
+     * @return list<array{name: string, normalized: string, count: int}>
+     */
+    public function tagCounts(): array
+    {
+        $cast = $this->db->isSqlite() ? 'TEXT' : 'CHAR';
+        $rows = $this->db->select(
+            "SELECT t.name, t.normalized, COUNT(*) AS n
+             FROM tags t INNER JOIN info_tags it ON it.tag_id = t.id INNER JOIN info_registry r ON r.id = it.info_id
+             INNER JOIN wiki_page p ON r.dataset_code = 'wiki.page' AND r.local_key = CAST(p.id AS $cast)
+             WHERE t.scope = 'shared' AND p.deleted_at IS NULL
+             GROUP BY t.id, t.name, t.normalized ORDER BY t.normalized"
+        );
+        return array_map(static fn (array $r): array => ['name' => (string) $r['name'], 'normalized' => (string) $r['normalized'], 'count' => (int) $r['n']], $rows);
+    }
+
+    /** @return list<array<string, mixed>> pages actives (id, slug, title) pour un sélecteur */
+    public function allActive(): array
+    {
+        return $this->db->select('SELECT id, slug, title FROM wiki_page WHERE deleted_at IS NULL ORDER BY title');
     }
 
     /** @return array<string, mixed>|null */

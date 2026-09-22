@@ -14,7 +14,8 @@ Aucun HTML saisi n'est rendu : les compléments sont remplacés par des jetons a
 
 ## Fonctions
 
-- **Liste** : recherche dans titres et contenus, tri, extraits, tags, nombre de liens entrants ; bouton « Accueil » si une page `accueil` existe.
+- **Arrivée** (route `index`, route par défaut) : la page d'accueil configurée ou la liste, selon le paramètre du module (« Paramètres des pages », droit `admin`) ; « Toutes les pages » reste dans le menu de gauche. Depuis une page, « Définir comme accueil ».
+- **Liste** : recherche dans titres et contenus, **catégories** (barre des tags portés par les pages, filtre `list?tag=…`, chips cliquables), tri, extraits, nombre de liens entrants ; bouton « Accueil ».
 - **Lecture** : contenu rendu, tags, lieux (fiche du point, position sur la carte), pièces jointes (téléchargement, « Joindre un fichier »), pages qui pointent ici (rétroliens), pages à créer (liens rouges), autres relations du registre commun.
 - **Édition** : titre (unique, sert de cible aux liens), contenu (éditeur BBCode), tags (saisie commune avec suggestions), lieux (recherche des points GPS par nom, code ou coordonnées ; relation « localisé à »), insertion au curseur de `[[Titre]]`, `[file=…]` et `[point=…]`, aide sur la syntaxe.
 - **Historique** : versions (50 conservées), lecture d'une version, restauration (crée une nouvelle version).
