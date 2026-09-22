@@ -2,6 +2,12 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.7.0 — 22/09/2026
+
+### Modules
+- Nouveau : Budget 1.0.0 (comptabilité domestique). Comptes et soldes (courant, pointé), opérations à montant signé avec catégorie, tiers, pointage, justificatifs joints, actions groupées et export CSV ; import CSV de relevés bancaires sans doublons avec catégorie devinée ; catégories à deux niveaux et budgets mensuels ou annuels datés, vue réalisé / budget du mois ; prévisionnel (récurrences à poster, badge, projection du solde sur 6 à 24 mois intégrant les coûts estimés des entretiens) ; objectifs d’épargne et économies réalisées (budget non dépensé calculé + registre des gains) ; service intermodule pour le report d’opérations externes.
+- Entretien 1.1.0 : le coût réel d’une intervention est reporté automatiquement dans le Budget (opération d’origine « Entretien », mise à jour et retrait suivis) ; les coûts estimés des tâches à venir alimentent le prévisionnel du Budget.
+
 ## 0.6.0 — 22/09/2026
 
 ### Modules
