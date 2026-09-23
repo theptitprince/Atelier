@@ -119,7 +119,8 @@ final class ProjectModuleTest extends TestCase
         $this->assertSame(422, $this->post('project', 'link', ['id' => $projectId, 'to' => 'inexistant'])->status());
         $content = $this->view('show/' . $projectId)['content'];
         $this->assertStringContains('Fait partie du projet', $content);
-        $this->assertMatches('/data-open-module="explorer"[^>]*>Accueil</', $content, 'page wiki sans openRoute : lien vers l’Explorateur');
+        // Le module Pages déclare openRoute "page/{key}" : la page liée s'ouvre dans son module.
+        $this->assertMatches('/data-open-module="wiki"[^>]*data-open-route="page\/\d+"[^>]*>Accueil</', $content, 'page wiki avec openRoute : lien vers le module Pages');
         $infoId = (string) $this->app->shared->registry->find('project.project', (string) $projectId)['id'];
         $relations = $this->app->shared->relations->relationsOf($infoId);
         $this->assertCount(1, $relations);
