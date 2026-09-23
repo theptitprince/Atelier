@@ -2,6 +2,22 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.8.0 — 23/09/2026
+
+### Corbeille globale pour tous les modules
+- Règle du projet : toute suppression est logique, restaurable 30 jours et regroupée dans le module Corbeille (recherche, restauration, purge groupées). Le générateur `module:create` produit ce squelette.
+- Entretien 1.2.0 (équipements, tâches, interventions ; documents joints sur chaque équipement et chaque intervention), Budget 1.1.0 (opérations, comptes, récurrences, objectifs, épargnes), Actualités 1.2.0 (flux, faits archivés), Pages 1.2.1, Coordonnées GPS 1.1.0.
+
+### Modules
+- Nouveau : **Projets 1.0.0** — conteneur transversal (tâches, journal de bord, documents, éléments liés de tous les modules, lieux, budget, tags, corbeille, service intermodule).
+- Fichiers joints 1.1.0 : nom d’affichage distinct du nom d’origine, tags sur les fichiers, dossiers virtuels (arbre, fil d’Ariane, déplacement, suppression sans perte), dépôt direct avec nom, tags et dossier.
+- Journal d’activité 1.2.0 : purge ciblée réservée aux administrateurs (catégorie, résultat, module, ancienneté, aperçu, confirmation, journalisée).
+- Routes d’ouverture (`openRoute`) déclarées par Pages, Coordonnées GPS et Entretien : les éléments liés s’ouvrent dans leur module.
+
+### Noyau
+- Pièces jointes : `label`, dossiers virtuels (`AttachmentFolderService`), filtres dossier/tag, validation UTF-8, désinscription du registre à la purge.
+- Migrations : erreur explicite sur deux fichiers de même numéro ; Corbeille : agrégateur réinitialisé à chaque requête.
+
 ## 0.7.2 — 22/09/2026
 
 ### Modules

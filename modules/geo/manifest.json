@@ -32,6 +32,7 @@
   "datasets": [
     {
       "code": "geo.point",
+      "openRoute": "show/{key}",
       "name": "Points GPS",
       "description": "Points géographiques nommés (latitude, longitude, altitude, adresse), clé de rattachement commune aux modules",
       "visibility": "shared",
