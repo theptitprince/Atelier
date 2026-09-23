@@ -94,7 +94,9 @@
         if (!li) return;
         var open = !li.classList.contains('is-open');
         li.classList.toggle('is-open', open);
-        li.setAttribute('aria-expanded', open ? 'true' : 'false');
+        // L'état est annoncé par le treeitem, c'est-à-dire le lien focalisable de la ligne.
+        var item = li.querySelector(':scope > .tree__row > [role="treeitem"]');
+        if (item) item.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
         toggle.setAttribute('aria-label', open ? 'Replier' : 'Déplier');
       });
@@ -103,10 +105,11 @@
         var tree = root.querySelector('[data-acl-tree]');
         if (!tree) return;
         var collapse = button.dataset.state === 'open';
-        tree.querySelectorAll('li[aria-expanded]').forEach(function (li) {
-          li.classList.toggle('is-open', !collapse);
-          li.setAttribute('aria-expanded', collapse ? 'false' : 'true');
-          var toggle = li.querySelector(':scope > .tree__row [data-tree-toggle]');
+        tree.querySelectorAll('[role="treeitem"][aria-expanded]').forEach(function (item) {
+          item.setAttribute('aria-expanded', collapse ? 'false' : 'true');
+          var li = item.closest('li');
+          if (li) li.classList.toggle('is-open', !collapse);
+          var toggle = li && li.querySelector(':scope > .tree__row [data-tree-toggle]');
           if (toggle) toggle.setAttribute('aria-expanded', collapse ? 'false' : 'true');
         });
         button.dataset.state = collapse ? 'closed' : 'open';

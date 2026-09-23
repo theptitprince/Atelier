@@ -226,26 +226,27 @@ return ActionResult::ok(null, 'Enregistré.')-&gt;refresh();</code></pre>
                     <div class="card">
                         <div class="card__header"><h3 class="card__title">Arbre <code>.tree</code></h3></div>
                         <div class="card__body">
-                            <ul class="tree">
-                                <li class="is-open">
-                                    <div class="tree__row"><button type="button" class="tree__toggle" aria-expanded="true" aria-label="Replier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('folder', 'icon--sm') ?> atelier/demo</div>
-                                    <ul>
-                                        <li class="is-open">
-                                            <div class="tree__row is-selected"><button type="button" class="tree__toggle" aria-expanded="true" aria-label="Replier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('folder', 'icon--sm') ?> screen (sélectionné)</div>
-                                            <ul>
-                                                <li><div class="tree__row"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('file', 'icon--sm') ?> index</div></li>
-                                                <li><div class="tree__row"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('file', 'icon--sm') ?> components</div></li>
+                            <?php // Référence pour les modules : le rôle et l'état vont sur l'élément focalisable, jamais sur le <li>, sans quoi un lecteur d'écran n'annonce ni la nature ni le repli. ?>
+                            <ul class="tree" role="tree" aria-label="Ressources de démonstration">
+                                <li class="is-open" role="none">
+                                    <div class="tree__row" role="none"><button type="button" class="tree__toggle" aria-expanded="true" aria-label="Replier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('folder', 'icon--sm') ?> <span role="treeitem" aria-expanded="true" tabindex="0">atelier/demo</span></div>
+                                    <ul role="group">
+                                        <li class="is-open" role="none">
+                                            <div class="tree__row is-selected" role="none"><button type="button" class="tree__toggle" aria-expanded="true" aria-label="Replier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('folder', 'icon--sm') ?> <span role="treeitem" aria-expanded="true" aria-selected="true" tabindex="-1">screen (sélectionné)</span></div>
+                                            <ul role="group">
+                                                <li role="none"><div class="tree__row" role="none"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('file', 'icon--sm') ?> <span role="treeitem" tabindex="-1">index</span></div></li>
+                                                <li role="none"><div class="tree__row" role="none"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('file', 'icon--sm') ?> <span role="treeitem" tabindex="-1">components</span></div></li>
                                             </ul>
                                         </li>
-                                        <li>
-                                            <div class="tree__row"><button type="button" class="tree__toggle" aria-expanded="false" aria-label="Déplier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('database', 'icon--sm') ?> data (replié)</div>
-                                            <ul><li><div class="tree__row">item</div></li></ul>
+                                        <li role="none">
+                                            <div class="tree__row" role="none"><button type="button" class="tree__toggle" aria-expanded="false" aria-label="Déplier"><?= $icon('chevron-right', 'icon--sm') ?></button><?= $icon('database', 'icon--sm') ?> <span role="treeitem" aria-expanded="false" tabindex="-1">data (replié)</span></div>
+                                            <ul role="group"><li role="none"><div class="tree__row" role="none"><span role="treeitem" tabindex="-1">item</span></div></li></ul>
                                         </li>
-                                        <li><div class="tree__row"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('key', 'icon--sm') ?> action/secret</div></li>
+                                        <li role="none"><div class="tree__row" role="none"><span class="tree__toggle tree__toggle--spacer"></span><?= $icon('key', 'icon--sm') ?> <span role="treeitem" tabindex="-1">action/secret</span></div></li>
                                     </ul>
                                 </li>
                             </ul>
-                            <p class="text-small text-muted mt-2 mb-0">Le repli est purement CSS (<code>li.is-open &gt; ul</code>) ; l’écran Cycle de vie montre comment le module branche ses écouteurs.</p>
+                            <p class="text-small text-muted mt-2 mb-0">Le repli est purement CSS (<code>li.is-open &gt; ul</code>) ; l’écran Cycle de vie montre comment le module branche ses écouteurs. Le rôle <code>treeitem</code> et l’état <code>aria-expanded</code> sont portés par l’élément focalisable, et un seul élément est atteignable au clavier (<code>tabindex="0"</code>).</p>
                         </div>
                     </div>
                 </div>

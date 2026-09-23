@@ -56,7 +56,7 @@ $minClosing = $projection === [] ? $opening : min(array_column($projection, 'clo
                     </table>
                 </div>
                 <div class="card__footer text-small text-muted">
-                    Projection à partir des récurrences actives<?= $maintenanceAvailable ? ' et des coûts estimés des entretiens à venir (module Entretien)' : '' ?>, hors dépenses courantes non récurrentes. Solde minimal projeté : <strong class="<?= $minClosing < 0 ? 'text-danger' : '' ?>"><?= $e($module->money($minClosing)) ?></strong>.
+                    Projection à partir des récurrences actives des comptes actifs<?= $maintenanceAvailable ? ' et des coûts estimés des entretiens à venir (module Entretien)' : '' ?>, hors dépenses courantes non récurrentes. Solde minimal projeté : <strong class="<?= $minClosing < 0 ? 'text-danger' : '' ?>"><?= $e($module->money($minClosing)) ?></strong>.
                 </div>
             </section>
 
@@ -92,6 +92,7 @@ $minClosing = $projection === [] ? $opening : min(array_column($projection, 'clo
                                     <span class="grow">
                                         <a href="#" data-route="recurring/<?= (int) $r['id'] ?>/edit"><strong><?= $e($r['label']) ?></strong></a>
                                         <?php if (!$r['active']): ?><span class="badge badge--muted">terminée</span><?php elseif ($isDue): ?><span class="badge badge--warning">à poster</span><?php endif; ?>
+                                        <?php if ($r['account_archived']): ?><span class="badge badge--muted" title="Le solde de départ ne compte pas les comptes archivés : cette récurrence n’est pas projetée.">compte archivé</span><?php endif; ?>
                                         <span class="text-small text-muted budget__block"><?= $e($module->intervalLabel($r)) ?> · prochaine le <?= $e($module->day($r['next_at'])) ?><?= $r['ends_at'] !== null ? ' · jusqu’au ' . $e($module->day($r['ends_at'])) : '' ?> · <?= $e($r['account_name']) ?></span>
                                     </span>
                                     <?= $module->amountHtml($r['amount']) ?>

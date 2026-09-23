@@ -168,12 +168,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav__row { display: flex; align-items: center; gap: var(--sp-1); min-height: 36px; padding: 0 var(--sp-2) 0 var(--sp-3); color: var(--c-sidebar-text); cursor: pointer; user-select: none; border-left: 3px solid transparent; }
 .nav__row:hover { background: var(--c-sidebar-hover); }
 .nav__row:focus-visible { outline-offset: -2px; }
-.nav__item[aria-current="true"] > .nav__row, .nav__row.is-selected { background: var(--c-sidebar-active); border-left-color: var(--c-accent); }
+/* aria-current est porté par la ligne (role="treeitem") depuis que le <li> est role="none". */
+.nav__row[aria-current], .nav__row.is-selected { background: var(--c-sidebar-active); border-left-color: var(--c-accent); }
 .nav__icon { width: 1.2em; height: 1.2em; flex-shrink: 0; opacity: 0.9; }
 .nav__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav__chevron { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; color: var(--c-sidebar-muted); border-radius: var(--radius-sm); cursor: pointer; padding: 0; transition: transform var(--t-fast); }
 .nav__chevron:hover { color: var(--c-sidebar-text); background: rgba(255,255,255,0.08); }
-.nav__chevron[aria-expanded="true"] { transform: rotate(90deg); }
+/* Le chevron n'est plus un contrôle : il suit l'état déplié annoncé par la ligne. */
+.nav__row[aria-expanded="true"] > .nav__chevron { transform: rotate(90deg); }
 .nav__chevron--spacer { visibility: hidden; }
 .nav__children { display: none; }
 .nav__item.is-open > .nav__children { display: block; }

@@ -53,10 +53,17 @@ final class BbCode
             $text = preg_replace('/\[' . $tag . '\](.*?)\[\/' . $tag . '\]/si', $open . '$1' . $close, $text) ?? $text;
         }
 
-        $text = preg_replace('/\[quote=(?:&quot;)?([^\]&]{1,80}?)(?:&quot;)?\](.*?)\[\/quote\]/si', '<blockquote class="bb-quote"><cite>$1</cite>$2</blockquote>', $text) ?? $text;
+        // Même limite que pour [url=…] : la classe excluait « & », donc un auteur contenant une
+        // esperluette (échappée en « &amp; » juste avant) faisait retomber la citation en texte
+        // brut. Le nom est déjà échappé à ce stade, il ne peut donc pas rouvrir de balise.
+        $text = preg_replace('/\[quote=(?:&quot;)?([^\]]{1,80}?)(?:&quot;)?\](.*?)\[\/quote\]/si', '<blockquote class="bb-quote"><cite>$1</cite>$2</blockquote>', $text) ?? $text;
         $text = preg_replace('/\[quote\](.*?)\[\/quote\]/si', '<blockquote class="bb-quote">$1</blockquote>', $text) ?? $text;
 
-        $text = preg_replace_callback('/\[url=(?:&quot;)?([^\]\s&]+?)(?:&quot;)?\](.*?)\[\/url\]/si', static function (array $m): string {
+        // Non-régression : la classe de caractères excluait « & », si bien qu'une URL à plusieurs
+        // paramètres (échappée en « &amp; » juste avant) n'était jamais reconnue et le [url=…]
+        // restait affiché brut. La capture s'arrête maintenant au « ] » ; le filtrage reste entier,
+        // safeUrl recevant l'URL déséchappée refuse toujours espaces, guillemets et schémas exotiques.
+        $text = preg_replace_callback('/\[url=(?:&quot;)?([^\]]+?)(?:&quot;)?\](.*?)\[\/url\]/si', static function (array $m): string {
             $href = self::safeUrl(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
             return $href === null ? $m[2] : '<a href="' . Str::e($href) . '" rel="noopener" target="_blank">' . $m[2] . '</a>';
         }, $text) ?? $text;

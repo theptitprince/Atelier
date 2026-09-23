@@ -14,7 +14,7 @@ return [
     'app' => [
         'name' => 'Atelier',
         'id' => 'atelier',
-        'version' => '0.8.1',
+        'version' => '0.8.2',
         // Ce fichier étant versionné, il est réglé pour la production : un dépôt déployé tel quel
         // ne divulgue ni trace d'appel, ni chemin de fichier, ni requête SQL au client.
         // Le serveur de développement (start.bat, tools/dev-router.php) rebascule en dev + debug.

@@ -17,7 +17,7 @@ final class RecurringRepository
     public const TABLE = 'budget_recurring';
     public const UNITS = ['day' => 'jour(s)', 'week' => 'semaine(s)', 'month' => 'mois', 'year' => 'an(s)'];
 
-    private const COLUMNS = 'r.id, r.account_id, r.category_id, r.label, r.payee, r.amount, r.interval_unit, r.interval_count, r.next_at, r.ends_at, r.active, r.notes, r.created_by, r.created_at, r.updated_at, r.deleted_at, r.deleted_by, a.name AS account_name, c.name AS category_name, p.name AS category_parent_name';
+    private const COLUMNS = 'r.id, r.account_id, r.category_id, r.label, r.payee, r.amount, r.interval_unit, r.interval_count, r.next_at, r.ends_at, r.active, r.notes, r.created_by, r.created_at, r.updated_at, r.deleted_at, r.deleted_by, a.name AS account_name, a.archived AS account_archived, c.name AS category_name, p.name AS category_parent_name';
     private const FROM = ' FROM budget_recurring r INNER JOIN budget_account a ON a.id = r.account_id LEFT JOIN budget_category c ON c.id = r.category_id LEFT JOIN budget_category p ON p.id = c.parent_id';
     private const ALIVE = 'r.deleted_at IS NULL AND a.deleted_at IS NULL';
 
@@ -38,15 +38,23 @@ final class RecurringRepository
         return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE ' . self::ALIVE . ($activeOnly ? ' AND r.active = 1' : '') . ' ORDER BY r.active DESC, r.next_at ASC, r.id ASC'));
     }
 
-    /** @return list<array<string, mixed>> récurrences actives dont l'échéance est atteinte */
+    /**
+     * Récurrences actives dont l'échéance est atteinte.
+     *
+     * Les comptes archivés sont écartés, comme dans le solde et le prévisionnel : les proposer
+     * « à poster » créait une opération sur un compte dont le solde n'est compté nulle part.
+     * Une récurrence d'un compte archivé reste visible dans la liste, signalée comme telle.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function due(string $today): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE ' . self::ALIVE . ' AND r.active = 1 AND r.next_at <= :d ORDER BY r.next_at ASC, r.id ASC', ['d' => $today]));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE ' . self::ALIVE . ' AND a.archived = 0 AND r.active = 1 AND r.next_at <= :d ORDER BY r.next_at ASC, r.id ASC', ['d' => $today]));
     }
 
     public function countDue(string $today): int
     {
-        return $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE . ' r INNER JOIN budget_account a ON a.id = r.account_id WHERE ' . self::ALIVE . ' AND r.active = 1 AND r.next_at <= :d', ['d' => $today]);
+        return $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE . ' r INNER JOIN budget_account a ON a.id = r.account_id WHERE ' . self::ALIVE . ' AND a.archived = 0 AND r.active = 1 AND r.next_at <= :d', ['d' => $today]);
     }
 
     /** Récurrences rattachées à une catégorie, corbeille comprise (garde-fou de suppression). */
@@ -148,6 +156,8 @@ final class RecurringRepository
             $row[$key] = $row[$key] === null ? null : (int) $row[$key];
         }
         $row['active'] = (bool) $row['active'];
+        // Le prévisionnel a besoin de l'état du compte : son solde de départ ignore les comptes archivés.
+        $row['account_archived'] = (bool) ($row['account_archived'] ?? false);
         $row['category_path'] = $row['category_name'] === null ? null : (($row['category_parent_name'] ?? null) !== null ? $row['category_parent_name'] . ' › ' : '') . $row['category_name'];
         return $row;
     }

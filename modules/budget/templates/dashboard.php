@@ -27,7 +27,7 @@ $remaining = $envelopes['expense']['budget'] - $envelopes['expense']['spent'];
         <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value text-success"><?= $e($module->money($totals['income'], '0,00 €')) ?></span><span class="kpi__label">recettes de <?= $e($monthLabel) ?></span></div></div>
         <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value text-danger"><?= $e($module->money(-$totals['expense'], '0,00 €')) ?></span><span class="kpi__label">dépenses de <?= $e($monthLabel) ?></span></div></div>
         <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $remaining < 0 ? ' text-danger' : '' ?>"><?= $e($module->money($remaining, '—')) ?></span><span class="kpi__label">budget restant<?= $envelopes['overspent'] > 0 ? ' <span class="badge badge--danger">' . (int) $envelopes['overspent'] . ' dépassé' . ($envelopes['overspent'] > 1 ? 's' : '') . '</span>' : '' ?></span></div></div>
-        <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $savings['total'] >= 0 ? ' text-success' : ' text-danger' ?>"><?= $e($module->money($savings['total'], '0,00 €', true)) ?></span><span class="kpi__label">économies <?= (int) $savings['year'] ?></span></div></div>
+        <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $savings['total'] >= 0 ? ' text-success' : ' text-danger' ?>"><?= $e($module->money($savings['total'], '0,00 €', true)) ?></span><span class="kpi__label">économies <?= (int) $savings['year'] ?> (<?= (int) $savings['months'] ?> mois révolus)</span></div></div>
     </div>
 
     <div class="budget__dashboard">

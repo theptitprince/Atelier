@@ -60,10 +60,15 @@ final class NewsRepository
 
     // ----- Centres d'intérêt -----
 
-    /** @return list<array<string, mixed>> avec item_count */
+    /**
+     * @return list<array<string, mixed>> avec item_count
+     *
+     * item_count ne compte que les entrées vivantes, comme le fil et les archives : un fait mis à la
+     * corbeille gonflait auparavant le compteur affiché à côté du centre d'intérêt.
+     */
     public function interests(): array
     {
-        return $this->db->select('SELECT i.*, (SELECT COUNT(*) FROM news_item_interest ii WHERE ii.interest_id = i.id) AS item_count FROM news_interest i ORDER BY i.position, i.name');
+        return $this->db->select('SELECT i.*, (SELECT COUNT(*) FROM news_item_interest ii INNER JOIN news_item n ON n.id = ii.item_id WHERE ii.interest_id = i.id AND n.deleted_at IS NULL) AS item_count FROM news_interest i ORDER BY i.position, i.name');
     }
 
     /** @return array<string, mixed>|null */
@@ -87,15 +92,24 @@ final class NewsRepository
         return $this->db->delete('news_interest', 'id = :id', ['id' => $id]) > 0;
     }
 
-    /** Recalcule les correspondances d'un centre d'intérêt sur toutes les entrées présentes. */
+    /**
+     * Recalcule les correspondances d'un centre d'intérêt sur toutes les entrées présentes.
+     *
+     * Les entrées en corbeille sont rapprochées comme les autres — leur correspondance doit exister au
+     * cas où elles seraient restaurées — mais ne sont pas comptées : le nombre annoncé à l'utilisateur
+     * est celui des entrées visibles, comme le compteur de interests() et le filtre du fil.
+     *
+     * @param array<string, mixed> $interest
+     * @return int entrées vivantes rapprochées
+     */
     public function rematchInterest(array $interest): int
     {
         $this->db->delete('news_item_interest', 'interest_id = :i', ['i' => (int) $interest['id']]);
         $count = 0;
-        foreach ($this->db->select('SELECT id, title, summary FROM news_item') as $item) {
+        foreach ($this->db->select('SELECT id, title, summary, deleted_at FROM news_item') as $item) {
             if (InterestMatcher::matches((string) $item['title'] . ' ' . (string) $item['summary'], (string) $interest['keywords'])) {
                 $this->db->insert('news_item_interest', ['item_id' => (int) $item['id'], 'interest_id' => (int) $interest['id']]);
-                $count++;
+                $count += $item['deleted_at'] === null ? 1 : 0;
             }
         }
         return $count;

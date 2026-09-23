@@ -311,6 +311,32 @@ final class MaintenanceModuleTest extends TestCase
         $this->assertCount(1, $service->assets($this->userId));
     }
 
+    /**
+     * Non-régression : la liste déroulante des années proposait l'année d'un équipement en corbeille,
+     * alors que l'historique n'affiche rien pour cette année — filtre sans résultat.
+     */
+    public function testHistoryYearsIgnoreTrashedAssets(): void
+    {
+        $this->allowAll();
+        $car = $this->createCar();
+        $mower = (int) $this->post('asset-save', ['name' => 'Tondeuse', 'category' => 'garden'])['data']['id'];
+        $this->post('log-save', ['asset_id' => $car, 'done_at' => '2026-03-04', 'title' => 'Vidange moteur']);
+        $this->post('log-save', ['asset_id' => $mower, 'done_at' => '2019-06-08', 'title' => 'Affûtage de la lame']);
+        $this->assertStringContains('<option value="2019"', $this->view('history')['data']['content']);
+
+        // Équipement en corbeille : ses interventions quittent l'historique, l'année quitte le filtre.
+        $this->assertSame(200, $this->post('asset-delete', ['id' => $mower])['_status']);
+        $history = $this->view('history')['data']['content'];
+        $this->assertFalse(str_contains($history, 'Affûtage de la lame'));
+        $this->assertFalse(str_contains($history, '<option value="2019"'), 'une année proposée doit donner au moins un résultat');
+        $this->assertStringContains('<option value="2026"', $history);
+        $this->assertStringContains('Aucune intervention', $this->view('history', ['year' => 2019])['data']['content']);
+
+        // Restauré, l'équipement rend son année au filtre.
+        $this->assertSame(200, $this->post('trash-restore', ['id' => 'asset:' . $mower])['_status']);
+        $this->assertStringContains('<option value="2019"', $this->view('history')['data']['content']);
+    }
+
     public function testSeedIsIdempotent(): void
     {
         $this->allowAll();

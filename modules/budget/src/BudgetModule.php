@@ -341,7 +341,10 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         $horizonEnd = Period::monthRange(Period::addMonths($today->format('Y-m'), $months - 1))[1];
         $externals = array_values(array_filter($this->maintenanceCosts($months), static fn (array $item): bool => $item['day'] <= $horizonEnd));
         $opening = $this->accountRepo()->totalBalance();
-        $projection = Forecast::project($opening, $today->format('Y-m'), $months, array_values(array_filter($recurrings, static fn (array $r): bool => $r['active'])), $externals);
+        // Même périmètre que le solde de départ (comptes actifs) : sans ce filtre, la projection
+        // déduisait les récurrences de comptes archivés dont le solde n'était pas compté au départ.
+        $projected = array_values(array_filter($recurrings, static fn (array $r): bool => $r['active'] && !$r['account_archived']));
+        $projection = Forecast::project($opening, $today->format('Y-m'), $months, $projected, $externals);
         $rights = $this->rights(['create', 'update', 'delete']);
         $content = $this->render('forecast', [
             'months' => $months,
@@ -662,6 +665,8 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         $created = 0;
         $skipped = 0;
         $errors = [];
+        /** @var array<string, int> $occurrences rang de chaque empreinte dans CE fichier */
+        $occurrences = [];
         $userId = $this->ctx->userId();
         $categoriesByName = [];
         foreach ($this->categoryRepo()->all() as $category) {
@@ -685,7 +690,12 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
             if ($invert) {
                 $amount = -$amount;
             }
-            $hash = sha1($account['id'] . '|' . $day . '|' . $amount . '|' . mb_strtolower($label, 'UTF-8'));
+            // L'empreinte porte le rang de la ligne dans le fichier : sans lui, deux dépenses réellement
+            // identiques le même jour (deux péages, deux cafés) étaient fusionnées et une ligne perdue.
+            // Le rang 1 garde l'empreinte historique, donc réimporter un relevé ne crée toujours rien.
+            $fingerprint = $account['id'] . '|' . $day . '|' . $amount . '|' . mb_strtolower($label, 'UTF-8');
+            $rank = $occurrences[$fingerprint] = ($occurrences[$fingerprint] ?? 0) + 1;
+            $hash = sha1($rank === 1 ? $fingerprint : $fingerprint . '|' . $rank);
             if ($this->transactionRepo()->hashExists($hash)) {
                 $skipped++;
                 continue;
@@ -1278,8 +1288,11 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     }
 
     /**
-     * Économies d'une année : budget non dépensé par catégorie de dépense (cumul des mois écoulés)
+     * Économies d'une année : budget non dépensé par catégorie de dépense (cumul des mois révolus)
      * et gains enregistrés dans le registre.
+     *
+     * Le mois en cours est exclu : son budget est connu en entier alors que ses dépenses ne le sont
+     * qu'à la date du jour, ce qui gonflerait l'économie affichée jusqu'au dernier jour du mois.
      *
      * @return array{year: int, months: int, automatic: list<array<string, mixed>>, automatic_total: int, manual: list<array<string, mixed>>, manual_total: int, total: int}
      */
@@ -1287,7 +1300,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     {
         $today = $this->today();
         $currentYear = (int) $today->format('Y');
-        $months = $year < $currentYear ? 12 : ($year > $currentYear ? 0 : (int) $today->format('n'));
+        $months = $year < $currentYear ? 12 : ($year > $currentYear ? 0 : (int) $today->format('n') - 1);
         $from = sprintf('%04d-01-01', $year);
         $to = $months === 0 ? $from : Period::monthRange(sprintf('%04d-%02d', $year, $months))[1];
         $byMonth = $months === 0 ? [] : $this->transactionRepo()->sumByMonthAndCategory($from, $to);
@@ -1322,11 +1335,12 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         unset($row);
         usort($automatic, static fn (array $a, array $b): int => $b['saved'] <=> $a['saved']);
 
+        // Les gains enregistrés sont arrêtés à la même date que le budget non dépensé : les deux
+        // colonnes du rapport (et leur total) couvrent ainsi exactement les mêmes mois révolus.
         $manual = [];
         $manualTotal = 0;
-        $yearEnd = sprintf('%04d-12-31', $year);
         foreach ($this->savingsRepo()->savings() as $saving) {
-            $realized = SavingsRepository::realized($saving, $from, min($yearEnd, $today->format('Y-m-d')));
+            $realized = $months === 0 ? 0 : SavingsRepository::realized($saving, $from, $to);
             $manual[] = $saving + ['realized' => $realized, 'yearly' => $saving['kind'] === 'monthly' ? $saving['amount'] * 12 : $saving['amount']];
             $manualTotal += $realized;
         }

@@ -91,10 +91,15 @@ final class LogRepository
         return (int) ($this->db->scalar('SELECT COALESCE(SUM(l.cost), 0)' . self::FROM . ' WHERE l.deleted_at IS NULL AND a.deleted_at IS NULL AND l.done_at >= :d', ['d' => $day]) ?? 0);
     }
 
-    /** @return list<int> années présentes dans l'historique, décroissantes */
+    /**
+     * @return list<int> années présentes dans l'historique, décroissantes
+     *
+     * Même critère que where() (équipement vivant compris) : sans cela, le filtre proposait l'année
+     * d'un équipement mis à la corbeille, qui ne ramenait aucune intervention.
+     */
     public function years(): array
     {
-        $rows = $this->db->select('SELECT DISTINCT SUBSTR(done_at, 1, 4) AS y FROM ' . self::TABLE . ' WHERE deleted_at IS NULL ORDER BY y DESC');
+        $rows = $this->db->select('SELECT DISTINCT SUBSTR(l.done_at, 1, 4) AS y' . self::FROM . ' WHERE l.deleted_at IS NULL AND a.deleted_at IS NULL ORDER BY y DESC');
         return array_values(array_filter(array_map(static fn (array $r): int => (int) $r['y'], $rows), static fn (int $y): bool => $y > 0));
     }
 

@@ -13,14 +13,18 @@ $renderNode = static function (array $node, int $depth) use (&$renderNode, $e, $
     $hasChildren = $node['children'] !== [];
     $isOpen = in_array($path, $openPaths, true);
     $isSelected = $path === $selectedPath;
-    $html = '<li class="' . ($isOpen ? 'is-open' : '') . '" data-path="' . $e($path) . '" role="treeitem"' . ($hasChildren ? ' aria-expanded="' . ($isOpen ? 'true' : 'false') . '"' : '') . ($isSelected ? ' aria-selected="true"' : '') . '>';
-    $html .= '<div class="tree__row' . ($isSelected ? ' is-selected' : '') . '">';
+    // Le rôle et l'état appartiennent à l'élément réellement focalisable : portés par le <li>,
+    // ils n'étaient jamais annoncés, un lecteur d'écran n'apprenait donc pas qu'une ressource
+    // était dépliable. Le <li> et sa ligne sont neutralisés pour que le treeitem reste un enfant
+    // direct du groupe dans l'arbre d'accessibilité.
+    $html = '<li class="' . ($isOpen ? 'is-open' : '') . '" data-path="' . $e($path) . '" role="none">';
+    $html .= '<div class="tree__row' . ($isSelected ? ' is-selected' : '') . '" role="none">';
     if ($hasChildren) {
         $html .= '<button type="button" class="tree__toggle" data-tree-toggle aria-expanded="' . ($isOpen ? 'true' : 'false') . '" aria-label="' . ($isOpen ? 'Replier' : 'Déplier') . '"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-chevron-right"></use></svg></button>';
     } else {
         $html .= '<span class="tree__toggle tree__toggle--spacer" aria-hidden="true"></span>';
     }
-    $html .= '<a class="users-tree__label" href="#" data-route="acl?resource=' . $e(rawurlencode($path)) . '" title="' . $e($path) . '">' . $e($resource['label']) . '</a>';
+    $html .= '<a class="users-tree__label" role="treeitem"' . ($hasChildren ? ' aria-expanded="' . ($isOpen ? 'true' : 'false') . '"' : '') . ($isSelected ? ' aria-selected="true"' : '') . ' href="#" data-route="acl?resource=' . $e(rawurlencode($path)) . '" title="' . $e($path) . '">' . $e($resource['label']) . '</a>';
     $html .= '<span class="badge badge--muted users-tree__kind">' . $e(UserPresenter::kindLabel((string) $resource['kind'])) . '</span>';
     $html .= '</div>';
     if ($hasChildren) {

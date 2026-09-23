@@ -144,6 +144,33 @@ final class NewsTrashTest extends TestCase
         $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM news_item WHERE feed_id = :f', ['f' => $other]));
     }
 
+    /**
+     * Non-régression : le compteur d'un centre d'intérêt (badge du fil, page Classement) et le
+     * recalcul des correspondances comptaient encore les faits mis en corbeille.
+     */
+    public function testInterestCountsIgnoreTrashedItems(): void
+    {
+        $this->assertSame(200, $this->post('interest-save', ['name' => 'Espace', 'keywords' => 'fusée, ariane'])['_status']);
+        $this->post('feed-save', ['url' => 'https://exemple.test/rss']);
+        $repository = new \Atelier\Modules\News\NewsRepository($this->app->db);
+        $interest = $repository->interests()[0];
+        $this->assertSame(1, (int) $interest['item_count']);
+        $a1 = (int) $this->app->db->scalar("SELECT id FROM news_item WHERE guid = 'a1'");
+
+        // Fait archivé puis mis en corbeille : il quitte le fil, il doit quitter le compteur.
+        $this->post('archive', ['id' => $a1]);
+        $this->assertSame(200, $this->post('archive-delete', ['id' => $a1])['_status']);
+        $this->assertSame(0, (int) $repository->interests()[0]['item_count'], 'un fait en corbeille ne compte plus');
+        $rematched = $this->post('interest-save', ['id' => (int) $interest['id'], 'name' => 'Espace', 'keywords' => 'fusée, ariane']);
+        $this->assertSame(0, (int) $rematched['data']['matched'], 'le recalcul annonce le même périmètre que le fil');
+        $this->assertSame(0, (int) $repository->interests()[0]['item_count']);
+
+        // Restauré, le fait retrouve son centre d'intérêt : le recalcul n'a pas effacé sa correspondance.
+        $this->assertSame(200, $this->post('trash-restore', ['id' => 'archive:' . $a1])['_status']);
+        $this->assertSame(1, (int) $repository->interests()[0]['item_count']);
+        $this->assertStringContains('Fusée Ariane', $this->view('archives', ['interest' => (int) $interest['id']])['data']['content']);
+    }
+
     public function testArchiveTrashRestorePurgeAndRetention(): void
     {
         $feed = (int) $this->post('feed-save', ['url' => 'https://exemple.test/rss'])['data']['id'];

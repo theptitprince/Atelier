@@ -1,7 +1,7 @@
 {
   "id": "demo",
   "name": "Démonstration",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Module fictif : référence des composants et des comportements du noyau",
   "author": "Atelier",
   "icon": "flask",

@@ -173,15 +173,18 @@ final class BudgetModuleTest extends TestCase
         $august = $this->view('envelopes', ['month' => '2026-08'])['data']['content'];
         $this->assertStringContains('700,00 €', $august);
 
-        // Économies 2026 (9 mois écoulés) : Alimentation 9×600 − 1 100 ; Loisirs 9×200 − 350 ; + registre manuel.
+        // Économies 2026 : seuls les mois révolus comptent (janvier → août, le 22 septembre est incomplet).
+        // Alimentation 8×600 − 700 ; Loisirs 8×200 − 0 (le concert est de septembre) ; + registre manuel.
         $this->assertSame(200, $this->post('saving-save', ['label' => 'Fournisseur d’électricité', 'kind' => 'monthly', 'amount' => '18', 'effective_from' => '2026-05-01'])['_status']);
         $this->assertSame(200, $this->post('saving-save', ['label' => 'Prime remboursée', 'kind' => 'one_off', 'amount' => '120', 'effective_from' => '2026-02-10'])['_status']);
         $savings = $this->view('savings')['data'];
-        $this->assertStringContains('4 300,00 €', $savings['content'], 'Alimentation : 5 400 − 1 100');
-        $this->assertStringContains('1 450,00 €', $savings['content'], 'Loisirs : 1 800 − 350');
-        $this->assertStringContains('+90,00 €', $savings['content'], 'électricité : 5 mois × 18');
-        $this->assertStringContains('+210,00 €', $savings['banner'], 'gains enregistrés : 90 + 120');
-        $this->assertStringContains('+5 960,00 €', $savings['banner'], 'total : 5 750 + 210');
+        $this->assertStringContains('(8 mois)', $savings['content'], 'le mois en cours, forcément incomplet, est exclu');
+        $this->assertStringContains('janvier → août', $savings['content']);
+        $this->assertStringContains('4 100,00 €', $savings['content'], 'Alimentation : 4 800 − 700');
+        $this->assertStringContains('1 600,00 €', $savings['content'], 'Loisirs : 1 600 − 0');
+        $this->assertStringContains('+72,00 €', $savings['content'], 'électricité : 4 mois × 18');
+        $this->assertStringContains('+192,00 €', $savings['banner'], 'gains enregistrés : 72 + 120');
+        $this->assertStringContains('+5 892,00 €', $savings['banner'], 'total : 5 700 + 192');
 
         // Objectif lié à un compte d'épargne : progression = solde du compte.
         $livret = $this->post('account-save', ['name' => 'Livret', 'kind' => 'savings', 'initial_balance' => '1500'])['data']['id'];
@@ -326,6 +329,85 @@ final class BudgetModuleTest extends TestCase
         $this->app->acl->setRule('user', $this->userId, AclService::module('budget') . '/data/transaction', 'create', 'deny');
         $this->app->acl->clearCache();
         $this->assertThrows(ForbiddenException::class, fn () => $service->recordExternal($this->userId, 'test:2', 'maintenance', ['label' => 'x', 'amount' => -1, 'done_at' => '2026-09-01']));
+    }
+
+    /**
+     * Non-régression : le prévisionnel projetait les récurrences des comptes archivés alors que son
+     * solde de départ ne compte que les comptes actifs — départ et projection sur deux périmètres.
+     */
+    public function testForecastIgnoresRecurringsOfArchivedAccounts(): void
+    {
+        $this->allowAll();
+        $this->createAccount('Courant', '1 000');
+        $old = $this->createAccount('Ancien compte', '400');
+        $closed = $this->post('recurring-save', ['account_id' => $old, 'type' => 'expense', 'amount' => '100', 'label' => 'Abonnement clos', 'interval_unit' => 'month', 'interval_count' => '1', 'next_at' => '2026-10-10']);
+        $this->assertSame(200, $closed['_status'], json_encode($closed));
+        $this->assertSame(200, $this->post('account-archive', ['id' => $old])['_status']);
+
+        // Horizon de 6 mois (septembre à février) : 5 échéances, ignorées tant que le compte est archivé.
+        $forecast = $this->view('forecast', ['months' => 6])['data'];
+        $this->assertStringContains('Solde projeté dans 6 mois : 1 000,00 €', $forecast['banner'], 'la récurrence d’un compte archivé n’est pas projetée');
+        $this->assertStringContains('1 000,00 €)', $forecast['banner'], 'solde de départ : comptes actifs seulement');
+        $this->assertStringContains('compte archivé', $forecast['content'], 'la récurrence reste listée, signalée hors projection');
+
+        // Compte réactivé : les deux périmètres se rejoignent, 1 400 − 5 × 100.
+        $this->assertSame(200, $this->post('account-archive', ['id' => $old])['_status']);
+        $back = $this->view('forecast', ['months' => 6])['data'];
+        $this->assertStringContains('Solde projeté dans 6 mois : 900,00 € (aujourd’hui 1 400,00 €)', $back['banner']);
+        $this->assertFalse(str_contains($back['content'], 'compte archivé'));
+    }
+
+    /**
+     * Non-régression : une récurrence échue d'un compte archivé restait proposée « à poster »
+     * (bulle du module, « Tout poster »). La poster créait une opération sur un compte dont le
+     * solde n'est compté ni dans le total ni dans le prévisionnel.
+     */
+    public function testDueRecurringsOfArchivedAccountsAreNotProposed(): void
+    {
+        $this->allowAll();
+        $this->createAccount('Courant', '1 000');
+        $old = $this->createAccount('Ancien compte', '400');
+        $this->post('recurring-save', ['account_id' => $old, 'type' => 'expense', 'amount' => '100', 'label' => 'Abonnement clos', 'interval_unit' => 'month', 'interval_count' => '1', 'next_at' => '2026-09-01']);
+        $badge = fn (): int => (int) $this->app->handle(Request::create('GET', '/core/badges', [], [], $this->headers()))->decodedJson()['data']['badges']['budget']['count'];
+        $this->assertSame(1, $badge(), 'échéance dépassée sur un compte actif');
+
+        $this->assertSame(200, $this->post('account-archive', ['id' => $old])['_status']);
+        $this->assertSame(0, $badge(), 'compte archivé : plus rien à poster');
+        $this->assertSame('info', $this->post('recurring-post-due', [])['level'], 'aucune opération créée');
+
+        $this->assertSame(200, $this->post('account-archive', ['id' => $old])['_status']);
+        $this->assertSame(1, $badge(), 'compte réactivé : l’échéance revient');
+    }
+
+    /**
+     * Non-régression : deux lignes rigoureusement identiques d'un même relevé étaient fusionnées en une
+     * seule opération (ligne perdue), l'empreinte d'import ignorant le rang de la ligne dans le fichier.
+     */
+    public function testImportKeepsIdenticalLinesAndStaysIdempotent(): void
+    {
+        $this->allowAll();
+        $account = $this->createAccount();
+        $csv = "Date;Libellé;Débit;Crédit\r\n05/09/2026;PEAGE A10;9,40;\r\n05/09/2026;PEAGE A10;9,40;\r\n06/09/2026;BOULANGERIE;4,50;\r\n";
+        $upload = function () use ($csv, $account): array {
+            $file = tempnam(sys_get_temp_dir(), 'csv');
+            file_put_contents($file, $csv);
+            $files = ['file' => ['name' => 'releve.csv', 'type' => 'text/csv', 'tmp_name' => $file, 'error' => UPLOAD_ERR_OK, 'size' => strlen($csv)]];
+            $request = new Request('POST', '/m/budget/import', [], ['account_id' => $account], $files, [], array_change_key_case($this->headers(), CASE_LOWER), ['REMOTE_ADDR' => '127.0.0.1']);
+            $response = $this->app->handle($request);
+            $json = $response->decodedJson();
+            $json['_status'] = $response->status();
+            return $json;
+        };
+        $first = $upload();
+        $this->assertSame(200, $first['_status'], json_encode($first));
+        $this->assertSame(3, $first['data']['created'], 'les deux péages du même jour sont deux dépenses réelles');
+        $this->assertSame(2, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE label = :l', ['l' => 'PEAGE A10']));
+
+        // Idempotence : le même fichier réimporté ne crée plus rien.
+        $second = $upload();
+        $this->assertSame(0, $second['data']['created']);
+        $this->assertSame(3, $second['data']['skipped'], 'doublons ignorés au second import');
+        $this->assertSame(3, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction'));
     }
 
     public function testSeedIsIdempotent(): void
