@@ -1,8 +1,8 @@
 {
   "id": "news",
   "name": "Actualités",
-  "version": "1.1.0",
-  "description": "Veille d’actualité à partir de flux RSS, Atom ou JSON Feed choisis, classés par catégorie et par centre d’intérêt, avec archivage des faits à conserver",
+  "version": "1.2.0",
+  "description": "Veille d’actualité à partir de flux RSS, Atom ou JSON Feed choisis, classés par catégorie et par centre d’intérêt, avec archivage des faits à conserver et corbeille (flux et faits archivés restaurables 30 jours)",
   "author": "Atelier",
   "icon": "rss",
   "group": "tools",
@@ -20,7 +20,8 @@
     { "id": "list", "label": "Fil d’actualité", "route": "list", "order": 1, "permission": "open", "icon": "rss", "description": "Dernières actualités des flux suivis, filtrées par catégorie, centre d’intérêt ou flux" },
     { "id": "archives", "label": "Archives", "route": "archives", "order": 2, "permission": "open", "icon": "archive", "description": "Faits archivés à la demande, annotés et tagués" },
     { "id": "feeds", "label": "Flux suivis", "route": "feeds", "order": 3, "permission": "update", "icon": "globe", "description": "Ajouter, modifier, actualiser ou retirer des flux" },
-    { "id": "taxonomy", "label": "Catégories et intérêts", "route": "taxonomy", "order": 4, "permission": "update", "icon": "tag", "description": "Catégories de flux et centres d’intérêt (mots-clés)" }
+    { "id": "taxonomy", "label": "Catégories et intérêts", "route": "taxonomy", "order": 4, "permission": "update", "icon": "tag", "description": "Catégories de flux et centres d’intérêt (mots-clés)" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 5, "permission": "delete", "icon": "trash", "description": "Flux retirés et faits archivés supprimés : restauration ou suppression définitive" }
   ],
   "resources": [],
   "assets": {
@@ -35,9 +36,10 @@
       "description": "Faits d’actualité conservés à la demande (titre, source, date, note), reliables aux autres modules",
       "visibility": "shared",
       "tables": ["news_item"],
-      "fields": { "id": "Identifiant", "title": "Titre", "url": "Lien vers la source", "summary": "Résumé", "published_at": "Date de publication", "archived_at": "Date d’archivage", "archive_note": "Note d’archivage" },
+      "fields": { "id": "Identifiant", "title": "Titre", "url": "Lien vers la source", "summary": "Résumé", "published_at": "Date de publication", "archived_at": "Date d’archivage", "archive_note": "Note d’archivage", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read"],
-      "version": 1
+      "openRoute": "archive/{key}",
+      "version": 2
     },
     {
       "code": "news.feed",
@@ -45,9 +47,9 @@
       "description": "Flux d’actualité configurés et leurs entrées non archivées (données de travail, non exposées)",
       "visibility": "private",
       "tables": ["news_feed", "news_category", "news_interest", "news_item", "news_item_interest", "news_read"],
-      "fields": { "title": "Titre du flux", "url": "Adresse du flux", "category_id": "Catégorie" },
+      "fields": { "title": "Titre du flux", "url": "Adresse du flux", "category_id": "Catégorie", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "version": 2
     }
   ],
   "consumes": [],

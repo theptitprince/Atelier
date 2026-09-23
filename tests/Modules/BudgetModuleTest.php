@@ -130,8 +130,7 @@ final class BudgetModuleTest extends TestCase
         $this->assertSame(200, $this->post('transaction-delete', ['id' => $id3])['_status']);
         $this->assertSame(404, $this->view('transaction/' . $id3 . '/edit')['_status']);
 
-        // Un compte avec opérations s'archive mais ne se supprime pas.
-        $this->assertSame(422, $this->post('account-delete', ['id' => $account])['_status']);
+        // Un compte s'archive (conservé dans l'historique) ; sa suppression est logique (voir BudgetTrashTest).
         $this->assertSame(200, $this->post('account-archive', ['id' => $account])['_status']);
         $this->assertStringContains('archivé', $this->view('accounts')['data']['content']);
         $this->post('account-archive', ['id' => $account]);
@@ -295,7 +294,8 @@ final class BudgetModuleTest extends TestCase
         $this->assertSame(1, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction'));
         $this->assertSame(-14000, (int) $this->app->db->scalar('SELECT amount FROM budget_transaction WHERE id = :id', ['id' => $transactionId]));
         $this->assertSame(200, $this->post('log-delete', ['id' => $logId], 'maintenance')['_status']);
-        $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction'));
+        $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE deleted_at IS NULL'), 'opération placée dans la corbeille');
+        $this->assertSame(1, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE deleted_at IS NOT NULL'));
 
         // Report désactivé dans les réglages : plus d'opération créée.
         $this->assertSame(200, $this->post('settings-save', ['account_id' => $account, 'category_id' => '', 'auto' => '0'])['_status']);

@@ -11,6 +11,7 @@ Veille d'actualité à partir de flux choisis (RSS 2.0, RSS 1.0, Atom, JSON Feed
 - **Flux suivis** : bouton « Flux suggérés » (vingt sources publiques classées : presse générale, international, sciences, environnement, technologie, sécurité, administration ; les flux déjà suivis sont ignorés), ajout par adresse (titre, site et description lus depuis le flux), catégorie, fréquence (15 minutes à 7 jours), copie locale des articles (option), rétention (1 à 3 650 jours), suspension, récupération manuelle, suppression (les archives sont conservées).
 - **Catégories et centres d'intérêt** : couleurs, ordre ; mots-clés séparés par des virgules, insensibles à la casse et aux accents, sur mots entiers, `-mot` pour exclure ; recalcul des correspondances à l'enregistrement.
 - **Rétention** : `maintenance:purge` supprime les entrées non archivées plus anciennes que la rétention de leur flux.
+- **Corbeille** (1.2.0) : retirer un flux ou supprimer un fait archivé (bouton « Supprimer » de la fiche d'archive, permission `archive`) est une suppression **logique** (`deleted_at`, `deleted_by`), restaurable pendant `trash.retention_days` (30 jours) depuis l'écran « Corbeille » du module (permission `delete`) ou la corbeille globale (module `trash`, `TrashProviderInterface`, identifiants `feed:<id>` et `archive:<id>`, jeux `news.feed` et `news.archive`). Un flux en corbeille disparaît des listes, du badge, des tâches de fond et du fil (ses entrées non archivées sont masquées, non supprimées) ; ses faits archivés restent consultables et le flux **ne peut pas être purgé** tant qu'il en porte (`409`, purge de rétention ignorée) : les faits doivent être purgés ou le flux restauré. Un fait archivé en corbeille quitte les archives, le service intermodule et le registre à la purge seulement (note, tags, relations, pièces jointes conservés jusque-là). Restauration : `update` pour un flux, `archive` pour un fait ; suppression définitive : `delete`. Les entrées lues / non lues du cache restent gérées par la rétention des flux, pas par la corbeille. « Désarchiver » reste un changement d'état (retour au fil), non une suppression. Recréer un flux dont l'adresse est en corbeille est refusé (restaurer plutôt).
 
 ## Prérequis réseau
 
@@ -21,8 +22,8 @@ Le serveur doit pouvoir joindre les sites sources (extension `curl`). Si PHP ne 
 | Permission | Effet |
 |---|---|
 | `open` | Fil, archives, lecture personnelle, actualisation |
-| `archive` (propre au module) | Archiver, annoter, taguer, désarchiver |
-| `create` / `update` / `delete` | Flux, catégories, centres d'intérêt |
+| `archive` (propre au module) | Archiver, annoter, taguer, désarchiver, mettre un fait archivé en corbeille et le restaurer |
+| `create` / `update` / `delete` | Flux, catégories, centres d'intérêt ; `update` restaure un flux, `delete` ouvre la corbeille du module et supprime définitivement |
 | `read` sur `atelier/news/data/archive` | Accès intermodule aux faits archivés |
 
 ## Service intermodule (`$this->ctx->moduleService('news')`)
@@ -36,4 +37,6 @@ $news->infoId(12);          // identifiant du registre commun, pour relations / 
 
 ## Données
 
-Tables `news_category`, `news_interest`, `news_feed` (`refresh_minutes`, `retention_days`, `fetch_content`), `news_item` (entrées ; `content`, `content_status`, `content_fetched_at` pour la copie locale ; `is_archived`, `archived_at`, `archived_by`, `archive_note`), `news_item_interest`, `news_read` (lecture par utilisateur). Jeu partagé `news.archive` (faits archivés, lecture seule) ; jeu privé `news.feed`.
+Tables `news_category`, `news_interest`, `news_feed` (`refresh_minutes`, `retention_days`, `fetch_content`), `news_item` (entrées ; `content`, `content_status`, `content_fetched_at` pour la copie locale ; `is_archived`, `archived_at`, `archived_by`, `archive_note`), `news_item_interest`, `news_read` (lecture par utilisateur). Jeu partagé `news.archive` (faits archivés, lecture seule) ; jeu privé `news.feed`. Migration `003_soft_delete` : `deleted_at` (indexée) et `deleted_by` sur `news_feed` et `news_item`.
+
+Hook `purge()` (`console maintenance:purge`) : rétention des entrées, puis purge physique des flux (sans fait archivé) et des faits archivés en corbeille depuis plus de `trash.retention_days` jours.

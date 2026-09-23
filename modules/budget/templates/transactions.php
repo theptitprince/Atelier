@@ -64,7 +64,7 @@ $dash = '<span class="text-muted">—</span>';
                     <select class="select select--sm budget__select" name="category_id" aria-label="Catégorie à appliquer"><?= $module->categoryOptions($categories, null) ?></select>
                     <button type="submit" class="btn btn--sm" data-budget-op="categorize"><?= $module->icon('tag') ?> Catégoriser</button>
                 <?php endif; ?>
-                <?php if ($rights['delete']): ?><button type="submit" class="btn btn--sm btn--outline-danger" data-budget-op="delete" data-confirm="Supprimer les opérations sélectionnées ?"><?= $module->icon('trash') ?> Supprimer</button><?php endif; ?>
+                <?php if ($rights['delete']): ?><button type="submit" class="btn btn--sm btn--outline-danger" data-budget-op="delete" data-confirm="Placer les opérations sélectionnées dans la corbeille ? Elles restent restaurables pendant 30 jours."><?= $module->icon('trash') ?> Supprimer</button><?php endif; ?>
             </div>
             <div class="table-wrap">
                 <table class="table budget__table">
@@ -92,7 +92,7 @@ $dash = '<span class="text-muted">—</span>';
                             </td>
                             <td class="col-actions"><span class="table-actions">
                                 <a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="transaction/<?= (int) $t['id'] ?>/edit" title="Modifier"><?= $module->icon('edit') ?></a>
-                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="transaction-delete" data-params='{"id":<?= (int) $t['id'] ?>}' data-confirm="Supprimer « <?= $e($t['label']) ?> » ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="transaction-delete" data-params='{"id":<?= (int) $t['id'] ?>}' data-confirm="Placer « <?= $e($t['label']) ?> » dans la corbeille ?" data-danger title="Supprimer (corbeille)"><?= $module->icon('trash') ?></button><?php endif; ?>
                             </span></td>
                         </tr>
                     <?php endforeach; ?>

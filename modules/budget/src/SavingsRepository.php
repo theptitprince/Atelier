@@ -9,6 +9,8 @@ use Atelier\Support\Clock;
 
 /**
  * Accès aux tables budget_goal (objectifs d'épargne) et budget_saving (registre des économies réalisées).
+ * Les deux tables ont une corbeille (deleted_at) ; un objectif lié à un compte en corbeille repasse en
+ * progression manuelle tant que le compte n'est pas restauré.
  */
 final class SavingsRepository
 {
@@ -16,23 +18,25 @@ final class SavingsRepository
     public const SAVINGS = 'budget_saving';
     public const SAVING_KINDS = ['one_off' => 'Ponctuelle', 'monthly' => 'Par mois', 'yearly' => 'Par an'];
 
+    private const GOAL_SELECT = 'SELECT g.*, a.name AS account_name, CASE WHEN a.id IS NULL THEN NULL ELSE a.initial_balance + COALESCE((SELECT SUM(t.amount) FROM budget_transaction t WHERE t.account_id = a.id AND t.deleted_at IS NULL), 0) END AS account_balance FROM budget_goal g LEFT JOIN budget_account a ON a.id = g.account_id AND a.deleted_at IS NULL';
+    private const SAVING_SELECT = 'SELECT s.*, c.name AS category_name FROM budget_saving s LEFT JOIN budget_category c ON c.id = s.category_id';
+
     public function __construct(private readonly Database $db)
     {
     }
 
     // ----- Objectifs -----
 
-    /** @return list<array<string, mixed>> objectifs avec solde du compte associé */
+    /** @return list<array<string, mixed>> objectifs vivants avec solde du compte associé */
     public function goals(): array
     {
-        $rows = $this->db->select('SELECT g.*, a.name AS account_name, CASE WHEN a.id IS NULL THEN NULL ELSE a.initial_balance + COALESCE((SELECT SUM(t.amount) FROM budget_transaction t WHERE t.account_id = a.id), 0) END AS account_balance FROM ' . self::GOALS . ' g LEFT JOIN budget_account a ON a.id = g.account_id ORDER BY g.due_at ASC, g.id ASC');
-        return array_map([$this, 'hydrateGoal'], $rows);
+        return array_map([$this, 'hydrateGoal'], $this->db->select(self::GOAL_SELECT . ' WHERE g.deleted_at IS NULL ORDER BY g.due_at ASC, g.id ASC'));
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null objectif vivant */
     public function findGoal(int $id): ?array
     {
-        $row = $this->db->selectOne('SELECT g.*, a.name AS account_name, CASE WHEN a.id IS NULL THEN NULL ELSE a.initial_balance + COALESCE((SELECT SUM(t.amount) FROM budget_transaction t WHERE t.account_id = a.id), 0) END AS account_balance FROM ' . self::GOALS . ' g LEFT JOIN budget_account a ON a.id = g.account_id WHERE g.id = :id', ['id' => $id]);
+        $row = $this->db->selectOne(self::GOAL_SELECT . ' WHERE g.id = :id AND g.deleted_at IS NULL', ['id' => $id]);
         return $row === null ? null : $this->hydrateGoal($row);
     }
 
@@ -49,25 +53,67 @@ final class SavingsRepository
         $this->db->update(self::GOALS, $this->goalColumns($data) + ['updated_at' => Clock::utc()], 'id = :id', ['id' => $id]);
     }
 
-    public function deleteGoal(int $id): bool
+    public function softDeleteGoal(int $id, ?int $userId): bool
     {
-        return $this->db->delete(self::GOALS, 'id = :id', ['id' => $id]) > 0;
+        return $this->db->update(self::GOALS, ['deleted_at' => Clock::utc(), 'deleted_by' => $userId], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
+    }
+
+    public function restoreGoal(int $id): bool
+    {
+        return $this->db->update(self::GOALS, ['deleted_at' => null, 'deleted_by' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'un objectif en corbeille. */
+    public function purgeGoal(int $id): bool
+    {
+        return $this->db->delete(self::GOALS, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findTrashedGoal(int $id): ?array
+    {
+        $row = $this->db->selectOne(self::GOAL_SELECT . ' WHERE g.id = :id AND g.deleted_at IS NOT NULL', ['id' => $id]);
+        return $row === null ? null : $this->hydrateGoal($row);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function trashedGoals(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map([$this, 'hydrateGoal'], $this->db->select(self::GOAL_SELECT . ' WHERE g.deleted_at IS NOT NULL AND g.deleted_at >= :l ORDER BY g.deleted_at DESC, g.id DESC', ['l' => $limit]));
+    }
+
+    /** @return list<int> */
+    public function expiredTrashGoalIds(int $retentionDays): array
+    {
+        return $this->expiredIds(self::GOALS, $retentionDays);
+    }
+
+    /** Détache les objectifs d'un compte purgé (ils repassent en progression manuelle). */
+    public function detachAccount(int $accountId): int
+    {
+        return $this->db->update(self::GOALS, ['account_id' => null, 'updated_at' => Clock::utc()], 'account_id = :a', ['a' => $accountId]);
     }
 
     // ----- Économies réalisées -----
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<array<string, mixed>> économies vivantes */
     public function savings(): array
     {
-        $rows = $this->db->select('SELECT s.*, c.name AS category_name FROM ' . self::SAVINGS . ' s LEFT JOIN budget_category c ON c.id = s.category_id ORDER BY s.effective_from DESC, s.id DESC');
-        return array_map([$this, 'hydrateSaving'], $rows);
+        return array_map([$this, 'hydrateSaving'], $this->db->select(self::SAVING_SELECT . ' WHERE s.deleted_at IS NULL ORDER BY s.effective_from DESC, s.id DESC'));
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null économie vivante */
     public function findSaving(int $id): ?array
     {
-        $row = $this->db->selectOne('SELECT s.*, c.name AS category_name FROM ' . self::SAVINGS . ' s LEFT JOIN budget_category c ON c.id = s.category_id WHERE s.id = :id', ['id' => $id]);
+        $row = $this->db->selectOne(self::SAVING_SELECT . ' WHERE s.id = :id AND s.deleted_at IS NULL', ['id' => $id]);
         return $row === null ? null : $this->hydrateSaving($row);
+    }
+
+    /** Économies rattachées à une catégorie, corbeille comprise (garde-fou de suppression). */
+    public function countSavingsForCategory(int $categoryId): int
+    {
+        return $this->db->count('SELECT COUNT(*) FROM ' . self::SAVINGS . ' WHERE category_id = :c', ['c' => $categoryId]);
     }
 
     /** @param array<string, mixed> $data */
@@ -83,9 +129,40 @@ final class SavingsRepository
         $this->db->update(self::SAVINGS, $this->savingColumns($data) + ['updated_at' => Clock::utc()], 'id = :id', ['id' => $id]);
     }
 
-    public function deleteSaving(int $id): bool
+    public function softDeleteSaving(int $id, ?int $userId): bool
     {
-        return $this->db->delete(self::SAVINGS, 'id = :id', ['id' => $id]) > 0;
+        return $this->db->update(self::SAVINGS, ['deleted_at' => Clock::utc(), 'deleted_by' => $userId], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
+    }
+
+    public function restoreSaving(int $id): bool
+    {
+        return $this->db->update(self::SAVINGS, ['deleted_at' => null, 'deleted_by' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'une économie en corbeille. */
+    public function purgeSaving(int $id): bool
+    {
+        return $this->db->delete(self::SAVINGS, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findTrashedSaving(int $id): ?array
+    {
+        $row = $this->db->selectOne(self::SAVING_SELECT . ' WHERE s.id = :id AND s.deleted_at IS NOT NULL', ['id' => $id]);
+        return $row === null ? null : $this->hydrateSaving($row);
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function trashedSavings(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map([$this, 'hydrateSaving'], $this->db->select(self::SAVING_SELECT . ' WHERE s.deleted_at IS NOT NULL AND s.deleted_at >= :l ORDER BY s.deleted_at DESC, s.id DESC', ['l' => $limit]));
+    }
+
+    /** @return list<int> */
+    public function expiredTrashSavingIds(int $retentionDays): array
+    {
+        return $this->expiredIds(self::SAVINGS, $retentionDays);
     }
 
     /**
@@ -106,6 +183,13 @@ final class SavingsRepository
             'yearly' => (int) round((int) $saving['amount'] / 12 * (Period::monthsBetween(Period::monthOf($start), Period::monthOf($end)) + 1)),
             default => 0,
         };
+    }
+
+    /** @return list<int> */
+    private function expiredIds(string $table, int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . $table . ' WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
     }
 
     /** @param array<string, mixed> $data @return array<string, mixed> */
@@ -143,6 +227,7 @@ final class SavingsRepository
         $row['current'] = (int) $row['current'];
         $row['account_id'] = $row['account_id'] === null ? null : (int) $row['account_id'];
         $row['account_balance'] = $row['account_balance'] === null ? null : (int) $row['account_balance'];
+        $row['deleted_by'] = ($row['deleted_by'] ?? null) === null ? null : (int) $row['deleted_by'];
         $row['progress'] = $row['account_balance'] ?? $row['current'];
         $row['percent'] = $row['target'] > 0 ? (int) min(100, max(0, round($row['progress'] * 100 / $row['target']))) : 0;
         $row['reached'] = $row['target'] > 0 && $row['progress'] >= $row['target'];
@@ -155,6 +240,7 @@ final class SavingsRepository
         $row['id'] = (int) $row['id'];
         $row['amount'] = (int) $row['amount'];
         $row['category_id'] = $row['category_id'] === null ? null : (int) $row['category_id'];
+        $row['deleted_by'] = ($row['deleted_by'] ?? null) === null ? null : (int) $row['deleted_by'];
         return $row;
     }
 }

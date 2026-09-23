@@ -1,8 +1,8 @@
 {
   "id": "budget",
   "name": "Budget",
-  "version": "1.0.0",
-  "description": "Comptabilité domestique : comptes, opérations, budgets par catégorie, prévisionnel (récurrences, échéances d’entretien), objectifs d’épargne et économies réalisées",
+  "version": "1.1.0",
+  "description": "Comptabilité domestique : comptes, opérations, budgets par catégorie, prévisionnel (récurrences, échéances d’entretien), objectifs d’épargne et économies réalisées, corbeille (suppression logique restaurable 30 jours)",
   "author": "Atelier",
   "icon": "book",
   "group": "tools",
@@ -24,6 +24,7 @@
     { "id": "savings", "label": "Épargne et économies", "route": "savings", "order": 5, "permission": "open", "icon": "archive", "description": "Objectifs d’épargne et économies réalisées (budget non dépensé, gains enregistrés)" },
     { "id": "accounts", "label": "Comptes", "route": "accounts", "order": 6, "permission": "open", "icon": "database", "description": "Comptes courants, épargne, espèces et leurs soldes" },
     { "id": "categories", "label": "Catégories", "route": "categories", "order": 7, "permission": "open", "icon": "tag", "description": "Catégories de dépenses et de recettes, budgets mensuels ou annuels" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 9, "permission": "delete", "icon": "trash", "description": "Opérations, comptes, récurrences, objectifs et économies supprimés : restauration ou suppression définitive" },
     { "id": "settings", "label": "Réglages", "route": "settings", "order": 8, "permission": "admin", "icon": "settings", "description": "Compte et catégorie utilisés pour les coûts venant du module Entretien" }
   ],
   "resources": [
@@ -42,9 +43,9 @@
       "description": "Comptes bancaires, d’épargne ou en espèces avec solde initial",
       "visibility": "shared",
       "tables": ["budget_account"],
-      "fields": { "id": "Identifiant", "name": "Nom", "kind": "Nature (checking, savings, cash, other)", "initial_balance": "Solde initial (centimes)", "opened_at": "Date d’ouverture", "archived": "Archivé" },
+      "fields": { "id": "Identifiant", "name": "Nom", "kind": "Nature (checking, savings, cash, other)", "initial_balance": "Solde initial (centimes)", "opened_at": "Date d’ouverture", "archived": "Archivé", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "version": 2
     },
     {
       "code": "budget.category",
@@ -62,9 +63,10 @@
       "description": "Opérations datées (montant signé en centimes, négatif pour une dépense) avec catégorie, tiers, pointage, origine (saisie, import, récurrence, module Entretien) et justificatifs joints",
       "visibility": "shared",
       "tables": ["budget_transaction"],
-      "fields": { "id": "Identifiant", "account_id": "Compte", "category_id": "Catégorie", "done_at": "Date", "amount": "Montant signé (centimes)", "label": "Libellé", "payee": "Tiers", "cleared": "Pointée", "source": "Origine", "source_ref": "Référence d’origine" },
+      "fields": { "id": "Identifiant", "account_id": "Compte", "category_id": "Catégorie", "done_at": "Date", "amount": "Montant signé (centimes)", "label": "Libellé", "payee": "Tiers", "cleared": "Pointée", "source": "Origine", "source_ref": "Référence d’origine", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "openRoute": "transaction/{key}/edit",
+      "version": 2
     },
     {
       "code": "budget.recurring",
@@ -72,9 +74,9 @@
       "description": "Loyers, salaires, abonnements : périodicité, prochaine échéance, fin éventuelle",
       "visibility": "private",
       "tables": ["budget_recurring"],
-      "fields": { "id": "Identifiant", "label": "Libellé", "amount": "Montant signé (centimes)", "interval_unit": "Unité", "interval_count": "Nombre d’unités", "next_at": "Prochaine échéance" },
+      "fields": { "id": "Identifiant", "label": "Libellé", "amount": "Montant signé (centimes)", "interval_unit": "Unité", "interval_count": "Nombre d’unités", "next_at": "Prochaine échéance", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "version": 2
     },
     {
       "code": "budget.saving",
@@ -82,9 +84,9 @@
       "description": "Objectifs d’épargne et registre des économies réalisées",
       "visibility": "private",
       "tables": ["budget_goal", "budget_saving"],
-      "fields": { "id": "Identifiant", "name": "Nom", "target": "Cible (centimes)", "amount": "Gain (centimes)" },
+      "fields": { "id": "Identifiant", "name": "Nom", "target": "Cible (centimes)", "amount": "Gain (centimes)", "deleted_at": "Date de mise en corbeille (NULL = vivant)" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "version": 2
     }
   ],
   "consumes": ["maintenance.job"],

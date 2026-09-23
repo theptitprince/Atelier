@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atelier\Modules\Budget;
 
+use Atelier\Error\ConflictException;
 use Atelier\Error\ForbiddenException;
 use Atelier\Error\ModuleUnavailableException;
 use Atelier\Error\NotFoundException;
@@ -15,6 +16,7 @@ use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Support\Clock;
 use Atelier\Support\Str;
 use Atelier\View\BbCode;
@@ -30,11 +32,19 @@ use DateTimeZone;
  *  - prévisionnel : opérations récurrentes à poster, échéances d'entretien (coûts estimés du module
  *    Entretien) et projection du solde ;
  *  - objectifs d'épargne et économies réalisées (budget non dépensé + gains enregistrés) ;
- *  - service intermodule : le module Entretien y reporte le coût réel de chaque intervention.
+ *  - service intermodule : le module Entretien y reporte le coût réel de chaque intervention ;
+ *  - corbeille : opérations, comptes, récurrences, objectifs et économies sont supprimés logiquement
+ *    (restaurables pendant trash.retention_days) et exposés à la corbeille globale.
  */
-final class BudgetModule extends AbstractModule
+final class BudgetModule extends AbstractModule implements TrashProviderInterface
 {
     public const DATASET_TRANSACTION = 'budget.transaction';
+    public const DATASET_ACCOUNT = 'budget.account';
+    public const DATASET_RECURRING = 'budget.recurring';
+    public const DATASET_SAVING = 'budget.saving';
+
+    /** Types d'éléments de la corbeille : préfixe d'identifiant => jeu de données. */
+    private const TRASH_KINDS = ['transaction' => self::DATASET_TRANSACTION, 'account' => self::DATASET_ACCOUNT, 'recurring' => self::DATASET_RECURRING, 'goal' => self::DATASET_SAVING, 'saving' => self::DATASET_SAVING];
 
     private const IMPORT_RESOURCE = 'action/import';
     private const EXPORT_RESOURCE = 'action/export';
@@ -97,8 +107,11 @@ final class BudgetModule extends AbstractModule
         $r->view('category/new', [$this, 'categoryNew'], permission: 'create');
         $r->view('category/{id}/edit', [$this, 'categoryEdit'], permission: 'update');
         $r->view('settings', [$this, 'settings'], permission: 'admin');
+        $r->view('trash', [$this, 'trash'], permission: 'delete');
 
         $r->action('badge', [$this, 'badge'], permission: 'open', methods: ['GET']);
+        $r->action('trash-restore', [$this, 'trashRestore'], permission: 'update');
+        $r->action('trash-purge', [$this, 'trashPurge'], permission: 'delete');
         $r->action('filter-transactions', [$this, 'filterTransactions'], permission: 'open');
         $r->action('transaction-save', [$this, 'transactionSave'], permission: 'open');
         $r->action('transaction-delete', [$this, 'transactionDelete'], permission: 'delete');
@@ -521,6 +534,22 @@ final class BudgetModule extends AbstractModule
         return ModuleView::make('Réglages du budget')->banner($banner)->content($content)->status('Réglages');
     }
 
+    /** Corbeille du module : éléments supprimés depuis moins de N jours, restauration et suppression définitive. */
+    public function trash(Request $request, array $params): ModuleView
+    {
+        $retention = $this->retentionDays();
+        $rows = $this->trashRows($retention);
+        $rights = $this->rights(['update', 'delete']);
+        $content = $this->render('trash', ['rows' => $rows, 'retention' => $retention, 'rights' => $rights]);
+        $actions = $this->navLinks('trash');
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-open-module="trash" title="Corbeille globale : tous les modules et les pièces jointes">' . $this->icon('trash') . '<span>Voir toute la corbeille</span></a>';
+        }
+        $subtitle = count($rows) . ' élément' . (count($rows) > 1 ? 's' : '') . ' · purge automatique après ' . $retention . ' jours';
+        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille du budget', 'subtitle' => $subtitle, 'actions' => $actions]);
+        return ModuleView::make('Corbeille · budget')->banner($banner)->content($content)->status($subtitle);
+    }
+
     // =====================================================================
     // Actions
     // =====================================================================
@@ -559,13 +588,13 @@ final class BudgetModule extends AbstractModule
         return ActionResult::ok(['id' => $id], 'Opération « ' . $data['label'] . ' » enregistrée.')->dirty(false)->navigate('transactions');
     }
 
+    /** Mise en corbeille (les justificatifs joints restent rattachés jusqu'à la purge). */
     public function transactionDelete(Request $request, array $params): ActionResult
     {
         $transaction = $this->requireTransaction($this->requireId($request));
-        $this->ctx->shared->registry->unregister(self::DATASET_TRANSACTION, (string) $transaction['id']);
-        $this->transactionRepo()->delete($transaction['id']);
-        $this->log('budget.transaction_delete', 'success', 'budget_transaction:' . $transaction['id'], 'Opération supprimée : ' . $transaction['label'], ['amount' => $transaction['amount']]);
-        return ActionResult::ok(null, 'Opération « ' . $transaction['label'] . ' » supprimée.')->navigate('transactions');
+        $this->transactionRepo()->softDelete($transaction['id'], $this->ctx->userId());
+        $this->log('budget.transaction_delete', 'success', 'budget_transaction:' . $transaction['id'], 'Opération placée dans la corbeille : ' . $transaction['label'], ['amount' => $transaction['amount']]);
+        return ActionResult::ok(null, 'Opération « ' . $transaction['label'] . ' » placée dans la corbeille.')->navigate('transactions');
     }
 
     /** Pointage / dépointage d'une opération. */
@@ -601,11 +630,8 @@ final class BudgetModule extends AbstractModule
                 break;
             case 'delete':
                 $this->require('delete');
-                foreach ($ids as $id) {
-                    $this->ctx->shared->registry->unregister(self::DATASET_TRANSACTION, (string) $id);
-                }
-                $count = $this->transactionRepo()->deleteMany($ids);
-                $message = $count . ' opération' . ($count > 1 ? 's' : '') . ' supprimée' . ($count > 1 ? 's' : '') . '.';
+                $count = $this->transactionRepo()->softDeleteMany($ids, $this->ctx->userId());
+                $message = $count . ' opération' . ($count > 1 ? 's' : '') . ' placée' . ($count > 1 ? 's' : '') . ' dans la corbeille.';
                 break;
             default:
                 throw ValidationException::single('op', 'Opération groupée inconnue.');
@@ -734,9 +760,9 @@ final class BudgetModule extends AbstractModule
     public function recurringDelete(Request $request, array $params): ActionResult
     {
         $recurring = $this->requireRecurring($this->requireId($request));
-        $this->recurringRepo()->delete($recurring['id']);
-        $this->log('budget.recurring_delete', 'success', 'budget_recurring:' . $recurring['id'], 'Récurrence supprimée : ' . $recurring['label']);
-        return ActionResult::ok(null, 'Récurrence « ' . $recurring['label'] . ' » supprimée. Les opérations déjà postées sont conservées.')->refresh();
+        $this->recurringRepo()->softDelete($recurring['id'], $this->ctx->userId());
+        $this->log('budget.recurring_delete', 'success', 'budget_recurring:' . $recurring['id'], 'Récurrence placée dans la corbeille : ' . $recurring['label']);
+        return ActionResult::ok(null, 'Récurrence « ' . $recurring['label'] . ' » placée dans la corbeille. Les opérations déjà postées sont conservées.')->refresh();
     }
 
     /** Poste l'occurrence courante d'une récurrence (crée l'opération, avance l'échéance). */
@@ -789,9 +815,9 @@ final class BudgetModule extends AbstractModule
         if ($goal === null) {
             throw new NotFoundException('Objectif introuvable.');
         }
-        $this->savingsRepo()->deleteGoal($id);
-        $this->log('budget.goal_delete', 'success', 'budget_goal:' . $id, 'Objectif supprimé : ' . $goal['name']);
-        return ActionResult::ok(null, 'Objectif « ' . $goal['name'] . ' » supprimé.')->refresh();
+        $this->savingsRepo()->softDeleteGoal($id, $this->ctx->userId());
+        $this->log('budget.goal_delete', 'success', 'budget_goal:' . $id, 'Objectif placé dans la corbeille : ' . $goal['name']);
+        return ActionResult::ok(null, 'Objectif « ' . $goal['name'] . ' » placé dans la corbeille.')->refresh();
     }
 
     public function savingSave(Request $request, array $params): ActionResult
@@ -819,9 +845,9 @@ final class BudgetModule extends AbstractModule
         if ($saving === null) {
             throw new NotFoundException('Économie introuvable.');
         }
-        $this->savingsRepo()->deleteSaving($id);
-        $this->log('budget.saving_delete', 'success', 'budget_saving:' . $id, 'Économie supprimée : ' . $saving['label']);
-        return ActionResult::ok(null, 'Économie « ' . $saving['label'] . ' » supprimée.')->refresh();
+        $this->savingsRepo()->softDeleteSaving($id, $this->ctx->userId());
+        $this->log('budget.saving_delete', 'success', 'budget_saving:' . $id, 'Économie placée dans la corbeille : ' . $saving['label']);
+        return ActionResult::ok(null, 'Économie « ' . $saving['label'] . ' » placée dans la corbeille.')->refresh();
     }
 
     public function accountSave(Request $request, array $params): ActionResult
@@ -851,15 +877,14 @@ final class BudgetModule extends AbstractModule
         return ActionResult::ok(['archived' => $archived], 'Compte « ' . $account['name'] . ' » ' . ($archived ? 'archivé' : 'réactivé') . '.')->refresh();
     }
 
+    /** Mise en corbeille : les opérations du compte sont masquées (soldes, listes) jusqu'à sa restauration. */
     public function accountDelete(Request $request, array $params): ActionResult
     {
         $account = $this->requireAccount($this->requireId($request), true);
-        if ($account['transaction_count'] > 0) {
-            throw new ValidationException(['id' => 'Ce compte porte des opérations : archivez-le plutôt.']);
-        }
-        $this->accountRepo()->delete($account['id']);
-        $this->log('budget.account_delete', 'success', 'budget_account:' . $account['id'], 'Compte supprimé : ' . $account['name']);
-        return ActionResult::ok(null, 'Compte « ' . $account['name'] . ' » supprimé.')->refresh();
+        $this->accountRepo()->softDelete($account['id'], $this->ctx->userId());
+        $masked = (int) $account['transaction_count'];
+        $this->log('budget.account_delete', 'success', 'budget_account:' . $account['id'], 'Compte placé dans la corbeille : ' . $account['name'], ['transactions' => $masked]);
+        return ActionResult::ok(null, 'Compte « ' . $account['name'] . ' » placé dans la corbeille' . ($masked > 0 ? ' avec ses ' . $masked . ' opération' . ($masked > 1 ? 's' : '') : '') . '.')->refresh();
     }
 
     public function categorySave(Request $request, array $params): ActionResult
@@ -888,16 +913,135 @@ final class BudgetModule extends AbstractModule
         return ActionResult::ok(['archived' => $archived], 'Catégorie « ' . $category['name'] . ' » ' . ($archived ? 'archivée' : 'réactivée') . '.')->refresh();
     }
 
+    /**
+     * Suppression physique d'une catégorie, refusée (409) tant que des opérations (corbeille comprise),
+     * budgets, récurrences ou économies s'y rattachent : archiver est la voie normale.
+     */
     public function categoryDelete(Request $request, array $params): ActionResult
     {
         $category = $this->requireCategory($this->requireId($request));
         if ($this->categoryRepo()->hasChildren($category['id'])) {
             throw new ValidationException(['id' => 'Supprimez ou déplacez d’abord ses sous-catégories.']);
         }
-        $detached = $this->transactionRepo()->detachCategory($category['id']);
+        $usage = $this->categoryRepo()->usage($category['id']);
+        $parts = array_filter([
+            $usage['transactions'] > 0 ? $usage['transactions'] . ' opération(s)' : null,
+            $usage['envelopes'] > 0 ? $usage['envelopes'] . ' budget(s)' : null,
+            $usage['recurrings'] > 0 ? $usage['recurrings'] . ' récurrence(s)' : null,
+            $usage['savings'] > 0 ? $usage['savings'] . ' économie(s)' : null,
+        ]);
+        if ($parts !== []) {
+            throw new ConflictException('La catégorie « ' . $category['name'] . ' » est utilisée par ' . implode(', ', $parts) . ' (corbeille comprise) : archivez-la, ou recatégorisez ces données avant de la supprimer.');
+        }
         $this->categoryRepo()->delete($category['id']);
-        $this->log('budget.category_delete', 'success', 'budget_category:' . $category['id'], 'Catégorie supprimée : ' . $category['name'], ['detached' => $detached]);
-        return ActionResult::ok(null, 'Catégorie « ' . $category['name'] . ' » supprimée' . ($detached > 0 ? ' ; ' . $detached . ' opération(s) sans catégorie' : '') . '.')->refresh();
+        $this->log('budget.category_delete', 'success', 'budget_category:' . $category['id'], 'Catégorie supprimée : ' . $category['name']);
+        return ActionResult::ok(null, 'Catégorie « ' . $category['name'] . ' » supprimée.')->refresh();
+    }
+
+    // ----- Corbeille (vue du module) -----
+
+    /** Restaure un élément depuis la vue corbeille du module : { id: "transaction:12" }. */
+    public function trashRestore(Request $request, array $params): ActionResult
+    {
+        $id = $request->string('id');
+        $this->restoreTrashItem($id);
+        return ActionResult::ok(['id' => $id], '« ' . $this->trashLabel($id) . ' » restauré' . (str_starts_with($id, 'transaction:') || str_starts_with($id, 'recurring:') || str_starts_with($id, 'saving:') ? 'e' : '') . '.')->refresh();
+    }
+
+    /** Supprime définitivement un élément depuis la vue corbeille du module. */
+    public function trashPurge(Request $request, array $params): ActionResult
+    {
+        $id = $request->string('id');
+        $label = $this->trashLabel($id);
+        $this->purgeTrashItem($id);
+        return ActionResult::ok(['id' => $id], '« ' . $label . ' » supprimé définitivement.')->refresh();
+    }
+
+    // =====================================================================
+    // Corbeille globale (TrashProviderInterface)
+    // =====================================================================
+
+    /**
+     * Éléments en corbeille visibles par l'utilisateur courant (données partagées du module :
+     * quiconque ouvre le module les voit ; restauration = update, purge = delete).
+     */
+    public function trashItems(): array
+    {
+        $retention = $this->retentionDays();
+        $canRestore = $this->can('update');
+        $canPurge = $this->can('delete');
+        $items = [];
+        foreach ($this->trashRows($retention) as $row) {
+            $purgeAt = Clock::parseUtc($row['deleted_at'])?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => $row['trash_id'],
+                'label' => $row['trash_label'],
+                'dataset' => self::TRASH_KINDS[$row['trash_kind']],
+                'deleted_at' => (string) $row['deleted_at'],
+                'deleted_by' => $row['deleted_by'],
+                'purge_at' => $purgeAt === null ? null : Clock::utc($purgeAt),
+                'can_restore' => $canRestore,
+                'can_purge' => $canPurge,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->require('update', null, 'Vous n’avez pas le droit de restaurer des données du budget.');
+        [$kind, $localId] = $this->parseTrashId($id);
+        $row = $this->findTrashedRow($kind, $localId);
+        if ($row === null) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille du budget.');
+        }
+        match ($kind) {
+            'transaction' => $this->transactionRepo()->restore($localId),
+            'account' => $this->accountRepo()->restore($localId),
+            'recurring' => $this->recurringRepo()->restore($localId),
+            'goal' => $this->savingsRepo()->restoreGoal($localId),
+            default => $this->savingsRepo()->restoreSaving($localId),
+        };
+        $this->log('budget.restore', 'success', 'budget_' . $kind . ':' . $localId, 'Restauré depuis la corbeille : ' . $row['trash_label']);
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete', null, 'Vous n’avez pas le droit de supprimer définitivement des données du budget.');
+        [$kind, $localId] = $this->parseTrashId($id);
+        $row = $this->findTrashedRow($kind, $localId);
+        if ($row === null) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille du budget.');
+        }
+        $this->destroy($kind, $localId);
+        $this->log('budget.purge', 'success', 'budget_' . $kind . ':' . $localId, 'Supprimé définitivement depuis la corbeille : ' . $row['trash_label']);
+    }
+
+    /** Rétention de la corbeille (trash.retention_days) : purge physique des éléments expirés. */
+    public function purge(): string
+    {
+        $days = $this->retentionDays();
+        $counts = [];
+        $sources = [
+            'transaction' => $this->transactionRepo()->expiredTrashIds($days),
+            'account' => $this->accountRepo()->expiredTrashIds($days),
+            'recurring' => $this->recurringRepo()->expiredTrashIds($days),
+            'goal' => $this->savingsRepo()->expiredTrashGoalIds($days),
+            'saving' => $this->savingsRepo()->expiredTrashSavingIds($days),
+        ];
+        foreach ($sources as $kind => $ids) {
+            $counts[$kind] = 0;
+            foreach ($ids as $localId) {
+                // Une opération peut avoir été purgée avec son compte au tour précédent.
+                if ($this->findTrashedRow($kind, $localId) === null) {
+                    continue;
+                }
+                $this->destroy($kind, $localId);
+                $this->log('budget.purge', 'success', 'budget_' . $kind . ':' . $localId, ucfirst($kind) . ' purgé par la rétention (' . $days . ' jours)');
+                $counts[$kind]++;
+            }
+        }
+        return sprintf('%d opération(s), %d compte(s), %d récurrence(s), %d objectif(s) et %d économie(s) purgés de la corbeille du budget (> %d jours)', $counts['transaction'], $counts['account'], $counts['recurring'], $counts['goal'], $counts['saving'], $days);
     }
 
     public function categoriesDefaults(Request $request, array $params): ActionResult
@@ -1209,6 +1353,137 @@ final class BudgetModule extends AbstractModule
     // =====================================================================
     // Interne
     // =====================================================================
+
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
+
+    /**
+     * Lignes de la corbeille, tous types confondus, décorées de trash_kind / trash_id / trash_label,
+     * les plus récemment supprimées d'abord.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function trashRows(int $retention): array
+    {
+        $rows = [];
+        foreach ($this->transactionRepo()->trashed($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('transaction', $row);
+        }
+        foreach ($this->accountRepo()->trashed($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('account', $row);
+        }
+        foreach ($this->recurringRepo()->trashed($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('recurring', $row);
+        }
+        foreach ($this->savingsRepo()->trashedGoals($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('goal', $row);
+        }
+        foreach ($this->savingsRepo()->trashedSavings($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('saving', $row);
+        }
+        usort($rows, static fn (array $a, array $b): int => strcmp((string) $b['deleted_at'], (string) $a['deleted_at']) ?: strcmp($a['trash_id'], $b['trash_id']));
+        $now = Clock::now();
+        foreach ($rows as &$row) {
+            $deletedAt = Clock::parseUtc($row['deleted_at']);
+            $row['expires_in_days'] = $deletedAt === null ? 0 : max(0, $retention - (int) $deletedAt->diff($now)->days);
+        }
+        unset($row);
+        return $rows;
+    }
+
+    /** @param array<string, mixed> $row @return array<string, mixed> */
+    private function decorateTrashRow(string $kind, array $row): array
+    {
+        $row['trash_kind'] = $kind;
+        $row['trash_id'] = $kind . ':' . $row['id'];
+        $row['trash_label'] = match ($kind) {
+            'transaction' => 'Opération du ' . Period::dayLabel($row['done_at']) . ' — ' . $row['label'] . ' — ' . Money::format($row['amount'], '', true),
+            'account' => 'Compte « ' . $row['name'] . ' »',
+            'recurring' => 'Récurrence « ' . $row['label'] . ' » — ' . Money::format($row['amount'], '', true) . ' ' . $this->intervalLabel($row),
+            'goal' => 'Objectif d’épargne « ' . $row['name'] . ' » — ' . Money::format($row['target']),
+            default => 'Économie « ' . $row['label'] . ' » — ' . Money::format($row['amount']) . ' ' . strtolower(SavingsRepository::SAVING_KINDS[$row['kind']] ?? ''),
+        };
+        $row['trash_type'] = match ($kind) {
+            'transaction' => 'Opération',
+            'account' => 'Compte',
+            'recurring' => 'Récurrence',
+            'goal' => 'Objectif',
+            default => 'Économie',
+        };
+        return $row;
+    }
+
+    /** @return array{0: string, 1: int} type et identifiant local d'un identifiant « type:id » */
+    private function parseTrashId(string $id): array
+    {
+        $parts = explode(':', trim($id), 2);
+        $kind = $parts[0] ?? '';
+        $localId = (int) ($parts[1] ?? 0);
+        if (!isset(self::TRASH_KINDS[$kind]) || $localId <= 0) {
+            throw new NotFoundException('Identifiant de corbeille invalide.');
+        }
+        return [$kind, $localId];
+    }
+
+    /** @return array<string, mixed>|null ligne en corbeille décorée, ou null */
+    private function findTrashedRow(string $kind, int $localId): ?array
+    {
+        $row = match ($kind) {
+            'transaction' => $this->transactionRepo()->findTrashed($localId),
+            'account' => $this->accountRepo()->findTrashed($localId),
+            'recurring' => $this->recurringRepo()->findTrashed($localId),
+            'goal' => $this->savingsRepo()->findTrashedGoal($localId),
+            'saving' => $this->savingsRepo()->findTrashedSaving($localId),
+            default => null,
+        };
+        return $row === null ? null : $this->decorateTrashRow($kind, $row);
+    }
+
+    /** Libellé d'un élément en corbeille (pour les messages), ou l'identifiant brut s'il est introuvable. */
+    private function trashLabel(string $id): string
+    {
+        try {
+            [$kind, $localId] = $this->parseTrashId($id);
+        } catch (NotFoundException) {
+            return $id;
+        }
+        return $this->findTrashedRow($kind, $localId)['trash_label'] ?? $id;
+    }
+
+    /**
+     * Suppression physique d'un élément en corbeille. Un compte emporte toutes ses opérations
+     * (registre commun nettoyé) et ses récurrences ; ses objectifs repassent en progression manuelle.
+     */
+    private function destroy(string $kind, int $localId): void
+    {
+        $this->ctx->db->transaction(function () use ($kind, $localId): void {
+            switch ($kind) {
+                case 'transaction':
+                    $this->transactionRepo()->purge($localId);
+                    $this->ctx->shared->registry->unregister(self::DATASET_TRANSACTION, (string) $localId);
+                    break;
+                case 'account':
+                    foreach ($this->transactionRepo()->idsForAccount($localId) as $transactionId) {
+                        $this->ctx->shared->registry->unregister(self::DATASET_TRANSACTION, (string) $transactionId);
+                    }
+                    $this->transactionRepo()->deleteForAccount($localId);
+                    $this->recurringRepo()->deleteForAccount($localId);
+                    $this->savingsRepo()->detachAccount($localId);
+                    $this->accountRepo()->purge($localId);
+                    break;
+                case 'recurring':
+                    $this->recurringRepo()->purge($localId);
+                    break;
+                case 'goal':
+                    $this->savingsRepo()->purgeGoal($localId);
+                    break;
+                default:
+                    $this->savingsRepo()->purgeSaving($localId);
+            }
+        });
+    }
 
     /** Crée l'opération d'une récurrence à son échéance courante et avance celle-ci. @param array<string, mixed> $recurring */
     private function postRecurring(array $recurring): int
@@ -1690,6 +1965,9 @@ final class BudgetModule extends AbstractModule
             'accounts' => ['Comptes', 'database'],
             'categories' => ['Catégories', 'tag'],
         ];
+        if ($current === 'trash' || $this->can('delete')) {
+            $links['trash'] = ['Corbeille', 'trash'];
+        }
         $html = '<div class="btn-group" role="group" aria-label="Écrans du module Budget">';
         foreach ($links as $route => [$label, $icon]) {
             $active = $route === $current;

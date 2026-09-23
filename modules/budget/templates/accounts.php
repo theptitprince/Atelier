@@ -29,13 +29,13 @@
                                 <a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="account/<?= (int) $a['id'] ?>/edit" title="Modifier"><?= $module->icon('edit') ?></a>
                                 <button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="account-archive" data-params='{"id":<?= (int) $a['id'] ?>}' title="<?= $a['archived'] ? 'Réactiver' : 'Archiver' ?>"><?= $module->icon($a['archived'] ? 'refresh' : 'archive') ?></button>
                             <?php endif; ?>
-                            <?php if ($rights['delete'] && $a['transaction_count'] === 0): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="account-delete" data-params='{"id":<?= (int) $a['id'] ?>}' data-confirm="Supprimer le compte « <?= $e($a['name']) ?> » ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                            <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="account-delete" data-params='{"id":<?= (int) $a['id'] ?>}' data-confirm="Placer le compte « <?= $e($a['name']) ?> » dans la corbeille ?<?= $a['transaction_count'] > 0 ? ' Ses ' . (int) $a['transaction_count'] . ' opération(s) seront masquées des soldes jusqu’à sa restauration.' : '' ?>" data-danger title="Supprimer (corbeille)"><?= $module->icon('trash') ?></button><?php endif; ?>
                         </span></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
             </table>
         </div>
-        <p class="text-small text-muted">Le solde pointé ne compte que les opérations pointées (celles qui figurent sur le relevé bancaire) : il doit correspondre au solde affiché par la banque. Un compte qui porte des opérations s’archive plutôt qu’il ne se supprime.</p>
+        <p class="text-small text-muted">Le solde pointé ne compte que les opérations pointées (celles qui figurent sur le relevé bancaire) : il doit correspondre au solde affiché par la banque. Archivez un compte clos pour le garder dans l’historique ; un compte supprimé passe en corbeille avec ses opérations (restaurable 30 jours).</p>
     <?php endif; ?>
 </div>
