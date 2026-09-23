@@ -1,0 +1,66 @@
+{
+    "id": "project",
+    "name": "Projets",
+    "version": "1.0.0",
+    "description": "Projets : conteneurs qui regroupent tâches, journal de bord, documents et informations de tous les modules (pages, lieux GPS, opérations du budget, équipements, actualités…)",
+    "author": "Atelier",
+    "icon": "folder",
+    "group": "tools",
+    "order": 12,
+    "status": "active",
+    "namespace": "Atelier\\Modules\\Project",
+    "entry": "ProjectModule",
+    "defaultRoute": "list",
+    "keepAlive": false,
+    "badge": "badge",
+    "permissions": [],
+    "navigation": [
+        { "id": "list", "label": "Tous les projets", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Liste, recherche et filtres par statut ou par tag" },
+        { "id": "new", "label": "Nouveau projet", "route": "new", "order": 2, "permission": "create", "icon": "plus", "description": "Créer un projet (idée, voyage, achat, travaux…)" },
+        { "id": "trash", "label": "Corbeille", "route": "trash", "order": 3, "permission": "delete", "icon": "trash", "description": "Projets supprimés, restauration" }
+    ],
+    "resources": [],
+    "assets": {
+        "css": ["assets/project.css"],
+        "js": ["assets/project.js"],
+        "vendor": []
+    },
+    "datasets": [
+        {
+            "code": "project.project",
+            "name": "Projets",
+            "description": "Projets (titre, statut, résumé, description BBCode, dates, priorité, budget estimé) reliés aux informations des autres modules par le registre commun",
+            "visibility": "shared",
+            "tables": ["project_project", "project_note"],
+            "fields": {
+                "id": "Identifiant",
+                "title": "Titre",
+                "slug": "Identifiant lisible",
+                "status": "Statut (idea, planned, active, done, dropped)",
+                "summary": "Résumé court",
+                "description": "Description (BBCode)",
+                "start_date": "Date de début",
+                "due_date": "Échéance",
+                "budget_estimate": "Budget estimé (centimes)",
+                "priority": "Priorité (1 haute, 2 normale, 3 basse)",
+                "owner_id": "Responsable",
+                "updated_at": "Dernière modification"
+            },
+            "operations": ["read"],
+            "openRoute": "show/{key}",
+            "version": 1
+        },
+        {
+            "code": "project.task",
+            "name": "Tâches de projet",
+            "description": "Liste de tâches ordonnée d’un projet (faite ou non, échéance)",
+            "visibility": "private",
+            "tables": ["project_task"],
+            "fields": { "id": "Identifiant", "project_id": "Projet", "title": "Intitulé", "done": "Faite", "due_date": "Échéance", "position": "Ordre" },
+            "operations": ["read", "create", "update", "delete"],
+            "version": 1
+        }
+    ],
+    "consumes": ["geo.point", "budget.transaction", "wiki.page"],
+    "migrations": "migrations"
+}
