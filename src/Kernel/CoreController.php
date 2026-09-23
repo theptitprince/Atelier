@@ -11,7 +11,6 @@ use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
 use Atelier\Http\Response;
 use Atelier\Security\Acl\AclService;
-use Atelier\Shared\DatasetCatalog;
 use Atelier\Support\Clock;
 use Atelier\Support\Json;
 use Atelier\Support\Str;
@@ -317,17 +316,7 @@ final class CoreController
         if ($attachment === null) {
             throw new NotFoundException('Pièce jointe introuvable.');
         }
-        $allowed = false;
-        if ($attachment['info_id'] !== null) {
-            $info = $this->app->shared->registry->get((string) $attachment['info_id']);
-            if ($info !== null) {
-                $allowed = $this->app->acl->can($userId, DatasetCatalog::resource((string) $info['dataset_code']), 'read');
-            }
-        }
-        if (!$allowed && (int) ($attachment['uploaded_by'] ?? 0) === $userId) {
-            $allowed = true;
-        }
-        if (!$allowed) {
+        if (!$this->app->shared->canReadAttachment($userId, $attachment)) {
             throw new ForbiddenException('Vous ne pouvez pas télécharger cette pièce jointe.');
         }
         $this->app->activity->record('core', 'attachment.download', ActivityLog::SUCCESS, 'attachment:' . $attachmentId, (string) $attachment['original_name']);

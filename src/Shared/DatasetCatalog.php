@@ -86,6 +86,9 @@ final class DatasetCatalog
         if ($dataset === null || !in_array($operation, $dataset['operations'], true)) {
             return false;
         }
+        if ($this->moduleIsClosed($userId, $code)) {
+            return false;
+        }
         return $this->acl->can($userId, self::resource($code), $operation);
     }
 
@@ -94,11 +97,37 @@ final class DatasetCatalog
     {
         $codes = [];
         foreach ($this->shared() as $dataset) {
-            if ($this->acl->can($userId, self::resource($dataset['code']), 'read')) {
+            if (!$this->moduleIsClosed($userId, $dataset['code']) && $this->acl->can($userId, self::resource($dataset['code']), 'read')) {
                 $codes[] = $dataset['code'];
             }
         }
         return $codes;
+    }
+
+    /**
+     * Droit de lecture sur le jeu de données d'une information, partagé ou privé.
+     * Le noyau s'en sert pour les pièces jointes : le fichier suit les droits de sa fiche.
+     */
+    public function canReadData(int $userId, string $code): bool
+    {
+        if ($this->moduleIsClosed($userId, $code)) {
+            return false;
+        }
+        return $this->acl->can($userId, self::resource($code), 'read');
+    }
+
+    /**
+     * Le module producteur est-il fermé à cet utilisateur par un refus explicite ?
+     *
+     * Retirer l'accès à un module en refusant « open » est le geste naturel d'un administrateur :
+     * il doit aussi fermer la lecture indirecte des jeux partagés du module (Explorateur, recherche
+     * transversale, sélecteurs). À l'inverse, l'absence de règle sur le module ne bloque rien : un
+     * droit accordé sur le seul jeu de données reste une délégation volontaire et suffisante.
+     */
+    private function moduleIsClosed(int $userId, string $code): bool
+    {
+        $module = explode('.', $code, 2)[0];
+        return $this->acl->isExplicitlyDenied($userId, AclService::module($module), 'open');
     }
 
     /**

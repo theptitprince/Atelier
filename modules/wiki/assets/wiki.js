@@ -41,6 +41,7 @@
         if (q.length < 2) { results.hidden = true; results.innerHTML = ''; return; }
         try {
           const envelope = await ctx.api.get('lookup?q=' + encodeURIComponent(q));
+          if (input.value.trim() !== q) return; // réponse obsolète : la saisie a changé
           const items = (envelope.data && envelope.data.items) || [];
           results.innerHTML = '';
           if (!items.length) results.appendChild(util.el('li', { class: 'list__item text-muted', text: 'Aucune page trouvée : [[' + q + ']] créera la page.' }));
@@ -58,6 +59,7 @@
         if (q.length < 2) { results.hidden = true; results.innerHTML = ''; return; }
         try {
           const envelope = await Atelier.api.get('/m/geo/lookup?q=' + encodeURIComponent(q));
+          if (input.value.trim() !== q) return; // réponse obsolète : la saisie a changé
           const items = (envelope.data && envelope.data.items) || [];
           results.innerHTML = '';
           if (!items.length) results.appendChild(util.el('li', { class: 'list__item text-muted', text: 'Aucun point trouvé.' }));

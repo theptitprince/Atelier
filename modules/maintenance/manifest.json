@@ -1,7 +1,7 @@
 {
   "id": "maintenance",
   "name": "Entretien",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "GMAO domestique : équipements (voiture, chaudière…), tâches d’entretien planifiées, pannes, rappels anticipés, fiches d’intervention, historique avec documents joints et corbeille",
   "author": "Atelier",
   "icon": "tool",

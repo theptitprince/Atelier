@@ -51,10 +51,12 @@ final class WikiRepository
         $total = $this->db->count('SELECT COUNT(*) FROM wiki_page p WHERE ' . $whereSql, $params);
         $order = (self::SORTS[$sort] ?? 'p.title') . (strtolower($direction) === 'desc' ? ' DESC' : ' ASC');
         $perPage = max(1, min(200, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
+            // Le compteur de rétroliens ne retient que les pages actives, comme backlinks().
             "SELECT p.id, p.slug, p.title, p.revision, p.created_at, p.updated_at, p.updated_by, u.display_name AS updated_by_name, SUBSTR(COALESCE(p.content, ''), 1, 400) AS excerpt,
-                    (SELECT COUNT(*) FROM wiki_link l WHERE l.to_slug = p.slug) AS backlinks
+                    (SELECT COUNT(*) FROM wiki_link l INNER JOIN wiki_page src ON src.id = l.from_page_id WHERE l.to_slug = p.slug AND src.deleted_at IS NULL) AS backlinks
              FROM wiki_page p LEFT JOIN users u ON u.id = p.updated_by WHERE $whereSql ORDER BY $order, p.id ASC LIMIT $perPage OFFSET $offset",
             $params
         );

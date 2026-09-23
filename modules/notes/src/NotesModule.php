@@ -32,6 +32,20 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
 
     private ?NoteRepository $repository = null;
 
+    /**
+     * Jeton de concurrence d'une note enregistrée. L'horodatage de modification ne suffit pas :
+     * il est à la seconde près, deux enregistrements dans la même seconde le laissent identique
+     * et la seconde écriture écraserait silencieusement la première. L'empreinte du titre et du
+     * contenu enregistrés change, elle, à chaque modification réelle.
+     *
+     * @param array<string, mixed> $note ligne de notes_note (updated_at, title, content)
+     */
+    public static function versionToken(array $note): string
+    {
+        $fingerprint = hash('sha256', (string) ($note['title'] ?? '') . "\0" . (string) ($note['content'] ?? ''));
+        return (string) ($note['updated_at'] ?? '') . ':' . substr($fingerprint, 0, 16);
+    }
+
     public function routes(RouteCollection $r): void
     {
         // Vues
@@ -247,9 +261,13 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
             if ($existing === null) {
                 throw new NotFoundException('Note introuvable ou déjà supprimée.');
             }
-            // Contrôle de concurrence : l'horodatage envoyé par le formulaire doit être celui de la base.
-            $sentUpdatedAt = $request->string('updated_at');
-            if ($sentUpdatedAt !== '' && $sentUpdatedAt !== (string) $existing['updated_at']) {
+            // Contrôle de concurrence : le jeton envoyé par le formulaire doit être celui de la base.
+            $sentVersion = $request->string('version');
+            if ($sentVersion === '' && $request->string('updated_at') !== '') {
+                // Formulaire d'une version antérieure du module : jeton inexploitable, on refuse par prudence.
+                throw new ConflictException('Ce formulaire date d’une version antérieure de l’application. Rechargez la note avant d’enregistrer.');
+            }
+            if ($sentVersion !== '' && $sentVersion !== self::versionToken($existing)) {
                 throw new ConflictException('Cette note a été modifiée entre-temps (autre onglet ou autre session). Rechargez-la avant d’enregistrer à nouveau.');
             }
         }
@@ -441,6 +459,7 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
             'note' => $note,
             'tags' => $tags,
             'isNew' => $isNew,
+            'version' => $isNew ? '' : self::versionToken($note),
             'canUpdate' => (bool) ($rights['update'] ?? false),
             'canDelete' => !$isNew && (bool) ($rights['delete'] ?? false),
             'titleMax' => self::TITLE_MAX,

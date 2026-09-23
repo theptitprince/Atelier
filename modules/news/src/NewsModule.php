@@ -217,7 +217,9 @@ final class NewsModule extends AbstractModule implements TrashProviderInterface
         $result = $repository->paginate($filters, $userId, $query['page'], $query['per_page']);
         $rights = $this->rights(['archive', 'update']);
         $categories = $repository->categories();
-        $feeds = $repository->feeds(true);
+        // Tous les flux vivants (actifs ou non) : le fil affiche les entrées déjà récupérées d'un flux
+        // désactivé, le filtre latéral et l'état « aucun flux suivi » doivent donc en tenir compte.
+        $feeds = $repository->feeds();
         $content = $this->render('list', [
             'rows' => $result['rows'],
             'total' => (int) $result['total'],

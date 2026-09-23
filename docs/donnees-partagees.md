@@ -22,7 +22,10 @@ Synchronisé depuis les manifestes (`ModuleSynchronizer::syncDatasets`). Pour ch
 - `findShared($code)` : `null` pour un jeu privé ou absent — un jeu privé n’est **jamais** exposé ;
 - `canAccess($userId, $code, $operation)` : jeu partagé, opération déclarée et droit ACL de l’utilisateur ;
 - `readableCodes($userId)` : codes lisibles, pour alimenter les sélecteurs ;
+- `canReadData($userId, $code)` : droit `read` sur le jeu d’une information, **partagé ou privé** — utilisé par le noyau pour les pièces jointes, dont l’affichage et le téléchargement suivent les droits de la fiche ;
 - `orphaned($moduleStates)` : jeux dont le producteur est désactivé ou absent, avec leurs consommateurs.
+
+**Refus d’ouverture d’un module.** Un refus explicite de la permission `open` sur `atelier/<module>` ferme aussi la lecture transversale de ses jeux partagés : l’Explorateur, la recherche et les sélecteurs n’en montrent plus rien. C’est le geste attendu pour exclure quelqu’un d’un module. À l’inverse, l’**absence** de règle sur le module ne bloque pas : un droit `read` posé sur le seul jeu de données (`atelier/<module>/data/<nom>`) reste une délégation volontaire, qui donne accès aux données sans donner accès aux écrans du module.
 
 ## 3. Accès intermodule
 

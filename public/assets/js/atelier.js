@@ -146,7 +146,15 @@
         const error = envelope.error || {};
         const err = new AtelierError(envelope.message, error.type, response.status, envelope.errorId, error);
         if (err.kind === 'auth') session.expired(error.expired);
-        if (err.kind === 'csrf') session.refreshToken();
+        if (err.kind === 'csrf') {
+          // Jeton périmé (mot de passe changé ailleurs, second onglet du navigateur…) : la requête
+          // a été rejetée avant tout effet de bord, on la rejoue une seule fois avec le jeton frais
+          // plutôt que d'inviter l'utilisateur à recharger la page et à perdre sa saisie.
+          await session.refreshToken();
+          if (!options.retriedCsrf) {
+            return api.request(method, path, body, Object.assign({}, options, { retriedCsrf: true }));
+          }
+        }
         throw err;
       }
       return envelope;
@@ -803,6 +811,16 @@
     }
 
     /**
+     * Une réponse est obsolète si une autre requête l'a devancée dans le même onglet, ou si
+     * l'onglet a été fermé entre-temps. On compare l'objet onglet lui-même et non son
+     * identifiant : un onglet fermé puis rouvert porte le même identifiant, et sa réponse en
+     * vol ne doit surtout pas s'appliquer au nouvel onglet (URL, titre et bandeau faussés).
+     */
+    function isStale(tab, seq) {
+      return seq !== tab.requestSeq || open.get(tab.id) !== tab;
+    }
+
+    /**
      * Charge une route dans l'onglet (crée l'onglet si nécessaire) et l'active.
      */
     async function navigate(id, route, options) {
@@ -828,8 +846,13 @@
       const url = BASE + '/m/' + id + (route ? '/' + String(route).replace(/^\//, '') : '');
       try {
         const envelope = await api.get(url, { signal: tab.abort.signal });
-        if (seq !== tab.requestSeq || !open.has(id)) return tab; // réponse obsolète
+        if (isStale(tab, seq)) return tab; // réponse obsolète
         const view = envelope.data;
+        // Une réponse hors enveloppe JSON (sortie parasite, page d'erreur d'un intermédiaire)
+        // laisserait un panneau vide sans le moindre message : on la traite comme une erreur.
+        if (envelope.raw || !view || typeof view !== 'object') {
+          throw new AtelierError('Réponse inattendue du serveur : le module n’a pas renvoyé de vue exploitable.', 'server');
+        }
         const info = view.module;
         if (info) {
           updateTabInfo(tab, info);
@@ -838,7 +861,9 @@
           const newAssets = wanted.filter((u) => !tab.assets.includes(u));
           if (newAssets.length) {
             await resources.acquireAll({ css: newAssets.filter((u) => (info.assets.css || []).includes(u)), js: newAssets.filter((u) => (info.assets.js || []).includes(u)) });
-            if (seq !== tab.requestSeq || !open.has(id)) return tab;
+            // Réponse devancée ou onglet fermé pendant le chargement des ressources : on rend les
+            // références acquises, sans quoi les feuilles et scripts resteraient dans <head>.
+            if (isStale(tab, seq)) { newAssets.forEach((u) => resources.release(u)); return tab; }
             tab.assets = tab.assets.concat(newAssets);
           }
         }
@@ -865,7 +890,7 @@
         behaviors.autofocus(content);
       } catch (err) {
         if (err && err.name === 'AbortError') return tab;
-        if (seq !== tab.requestSeq || !open.has(id)) return tab;
+        if (isStale(tab, seq)) return tab;
         tab.loaded = false;
         renderError(tab, err instanceof AtelierError ? err : new AtelierError(err && err.message, 'server'));
         if (err instanceof AtelierError && err.kind === 'auth') { /* fenêtre de session */ } else if (!(err instanceof AtelierError)) console.error(err);
@@ -1237,11 +1262,20 @@
       const roots = [tab.panel, tab.bannerEl];
       roots.forEach((root) => {
         root.addEventListener('click', (e) => {
-          const link = e.target.closest('a[data-route], button[data-route], a[href^="' + BASE + '/m/' + tab.id + '"], a[href^="/m/' + tab.id + '"]');
+          const link = e.target.closest('a[data-route], button[data-route], a[href^="' + BASE + '/m/"], a[href^="/m/"]');
           if (link && !link.hasAttribute('data-external') && !link.hasAttribute('download') && !link.target) {
+            // Un lien /m/… n'est pris en charge que s'il vise bien le module de l'onglet : un
+            // identifiant préfixe (« notes » / « notes-archive ») ne doit pas détourner la
+            // navigation vers l'onglet courant. Les autres modules s'ouvrent dans leur onglet.
+            const parsed = link.dataset.route != null ? null : router.parse(link.pathname || '', link.search || '');
+            if (parsed && parsed.module && parsed.module !== tab.id) {
+              e.preventDefault();
+              tabs.open(parsed.module, parsed.route || null, { push: true });
+              return;
+            }
             if (link.getAttribute('aria-disabled') === 'true' || link.disabled) { e.preventDefault(); return; }
             e.preventDefault();
-            const route = link.dataset.route != null ? link.dataset.route : router.parse(link.pathname, link.search).route;
+            const route = link.dataset.route != null ? link.dataset.route : parsed.route;
             tab.ctx.navigate(route);
             return;
           }
@@ -1608,10 +1642,15 @@
         active = index;
         if (index >= 0 && options[index]) { entry.setAttribute('aria-activedescendant', options[index].id); options[index].scrollIntoView({ block: 'nearest' }); }
       }
+      // Numéro de séquence : une réponse lente pour un terme abandonné ne doit jamais écraser
+      // la liste du terme courant (l'utilisateur validerait alors un tag sans rapport).
+      let suggestSeq = 0;
       const fetchSuggestions = util.debounce(async () => {
         const term = entry.value.trim();
+        const seq = ++suggestSeq;
         try {
           const envelope = await api.get('/core/tags?scope=' + encodeURIComponent(scope) + '&q=' + encodeURIComponent(term));
+          if (seq !== suggestSeq || entry.value.trim() !== term) return; // réponse obsolète
           if (document.activeElement === entry) render(envelope.data.tags || []);
         } catch (e) { /* suggestions indisponibles : la saisie libre reste possible */ }
       }, 180);
@@ -1654,7 +1693,15 @@
     const initial = CONFIG.initial || {};
     const fromUrl = router.parse(window.location.pathname, window.location.search);
     const module = initial.module || fromUrl.module || CONFIG.homeModule;
-    const route = initial.module ? (initial.route || null) + (window.location.search || '') : fromUrl.route;
+    // Attention : concaténer directement initial.route produirait la chaîne « null » quand le
+    // serveur n'indique pas de sous-route (URL /m/{module}). On retombe alors sur la page de base
+    // du module, en conservant la chaîne de requête.
+    let route = fromUrl.route;
+    if (initial.module) {
+      const known = nav.moduleInfo(initial.module);
+      const path = initial.route ? String(initial.route) : ((known && known.route) || '');
+      route = (path + (window.location.search || '')) || null;
+    }
     if (module) {
       if (CONFIG.homeModule && module !== CONFIG.homeModule) {
         // L'accueil occupe l'onglet initial ; la vue demandée s'ouvre par-dessus.

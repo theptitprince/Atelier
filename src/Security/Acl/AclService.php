@@ -57,6 +57,19 @@ final class AclService
         return $this->resolve($userId, $resource, $permission)->allowed;
     }
 
+    /**
+     * Le droit est-il refusé par une règle écrite, et non simplement absent ?
+     *
+     * Le refus par défaut (aucune règle) et le refus explicite ont le même effet sur une route,
+     * mais pas la même intention : seul le second exprime « cet utilisateur est exclu ». Les
+     * mécanismes transversaux s'en servent pour fermer aussi les accès indirects.
+     */
+    public function isExplicitlyDenied(int $userId, string $resource, string $permission): bool
+    {
+        $decision = $this->resolve($userId, $resource, $permission);
+        return !$decision->allowed && $decision->winner !== null;
+    }
+
     /** Lève ForbiddenException si le droit n'est pas accordé. */
     public function require(int $userId, string $resource, string $permission, string $message = ''): void
     {

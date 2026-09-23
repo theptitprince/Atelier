@@ -424,8 +424,12 @@ legend { font-weight: 600; padding: 0 var(--sp-2); }
 .dialog__footer:empty { display: none; }
 
 /* ---------- Toaster ---------- */
-.toaster { position: fixed; top: calc(var(--banner-h) + var(--sp-3)); right: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); width: 360px; z-index: 1000; pointer-events: none; }
-.toast { display: flex; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 4px solid var(--c-info); border-radius: var(--radius); box-shadow: var(--shadow); pointer-events: auto; animation: toast-in var(--t-fast) ease-out; font-size: var(--fs-sm); }
+/* La pile est bornée à la hauteur visible : les toasts persistants (erreurs, avertissements) ne
+   doivent jamais sortir de l'écran, sans quoi ils deviennent impossibles à fermer. */
+.toaster { position: fixed; top: calc(var(--banner-h) + var(--sp-3)); right: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-2); width: 360px; max-height: calc(100vh - var(--banner-h) - var(--sp-6)); overflow-y: auto; overscroll-behavior: contain; padding-left: var(--sp-1); z-index: 1000; pointer-events: none; }
+.toaster::-webkit-scrollbar { width: 6px; }
+.toaster::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
+.toast { display: flex; flex-shrink: 0; align-items: flex-start; gap: var(--sp-3); padding: var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4); background: var(--c-surface); border: 1px solid var(--c-border); border-left: 4px solid var(--c-info); border-radius: var(--radius); box-shadow: var(--shadow); pointer-events: auto; animation: toast-in var(--t-fast) ease-out; font-size: var(--fs-sm); }
 .toast--info { border-left-color: var(--c-info); } .toast--info .toast__icon { color: var(--c-info); }
 .toast--success { border-left-color: var(--c-success); } .toast--success .toast__icon { color: var(--c-success); }
 .toast--warning { border-left-color: var(--c-warning); } .toast--warning .toast__icon { color: var(--c-warning); }
