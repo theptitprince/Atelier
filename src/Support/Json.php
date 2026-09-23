@@ -21,6 +21,20 @@ final class Json
         return json_encode($value, $flags);
     }
 
+    /**
+     * Encodage destiné à une réponse HTTP : une séquence UTF-8 invalide (nom de fichier hérité du
+     * système, donnée importée) ne doit pas transformer la réponse en erreur serveur. Les octets
+     * fautifs sont remplacés par le caractère de substitution, la réponse reste exploitable.
+     */
+    public static function encodeForResponse(mixed $value): string
+    {
+        try {
+            return self::encode($value);
+        } catch (JsonException) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+        }
+    }
+
     /** @return mixed */
     public static function decode(string $json, bool $assoc = true): mixed
     {
