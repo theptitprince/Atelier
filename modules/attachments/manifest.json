@@ -1,8 +1,8 @@
 {
   "id": "attachments",
   "name": "Fichiers joints",
-  "version": "1.0.0",
-  "description": "Téléversement, rattachement et téléchargement sécurisé des fichiers joints (chiffrés au repos)",
+  "version": "1.1.0",
+  "description": "Téléversement, nom d’affichage, tags, dossiers virtuels, rattachement et téléchargement sécurisé des fichiers joints (chiffrés au repos)",
   "author": "Atelier",
   "icon": "paperclip",
   "group": "tools",
@@ -17,7 +17,7 @@
     { "code": "assist", "label": "Assistance", "description": "Voir, télécharger et gérer les fichiers de tous les utilisateurs" }
   ],
   "navigation": [
-    { "id": "list", "label": "Mes fichiers", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Fichiers que j’ai téléversés" },
+    { "id": "list", "label": "Mes fichiers", "route": "list", "order": 1, "permission": "open", "icon": "list", "description": "Fichiers que j’ai téléversés, classés par dossiers et tags" },
     { "id": "upload", "label": "Téléverser", "route": "upload", "order": 2, "permission": "create", "icon": "upload", "description": "Ajouter des fichiers, éventuellement rattachés à une information" },
     { "id": "all", "label": "Tous les fichiers", "route": "all", "order": 3, "permission": "assist", "icon": "users", "description": "Fichiers de tous les utilisateurs (assistance)" },
     { "id": "trash", "label": "Corbeille", "route": "trash", "order": 4, "permission": "delete", "icon": "trash", "description": "Fichiers supprimés, restauration" }
@@ -32,23 +32,27 @@
     {
       "code": "attachments.file",
       "name": "Fichiers joints",
-      "description": "Métadonnées des pièces jointes (table détenue par le noyau ; contenu chiffré hors base, accessible uniquement par téléchargement contrôlé)",
-      "visibility": "private",
+      "description": "Métadonnées des pièces jointes (table détenue par le noyau ; contenu chiffré hors base, accessible uniquement par téléchargement contrôlé). Chaque fichier est inscrit au registre commun sous ce jeu (clé = identifiant du fichier) pour porter des tags partagés.",
+      "visibility": "shared",
       "tables": ["attachments"],
       "fields": {
-        "id": "Identifiant interne",
-        "original_name": "Nom du fichier",
+        "id": "Identifiant interne (clé dans le registre commun)",
+        "original_name": "Nom du fichier d’origine (utilisé au téléchargement)",
+        "label": "Nom d’affichage libre (facultatif)",
+        "description": "Description",
         "mime": "Type MIME",
         "size": "Taille (octets)",
         "sha256": "Empreinte SHA-256 du contenu",
         "cipher": "Algorithme de chiffrement au repos",
+        "folder_id": "Dossier virtuel (table attachment_folders du noyau, NULL = non rangé)",
         "info_id": "Information rattachée (registre commun)",
         "uploaded_by": "Auteur",
         "created_at": "Date de téléversement",
         "deleted_at": "Date de mise à la corbeille"
       },
-      "operations": ["read", "create", "update", "delete"],
-      "version": 2
+      "operations": ["read"],
+      "openRoute": "show/{key}",
+      "version": 3
     }
   ],
   "consumes": ["geo.point"]
