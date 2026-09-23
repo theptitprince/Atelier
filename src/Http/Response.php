@@ -77,7 +77,7 @@ final class Response
 
     public static function jsonRaw(mixed $payload, int $status = 200): self
     {
-        return (new self(Json::encode($payload), $status))
+        return (new self(Json::encodeForResponse($payload), $status))
             ->withHeader('Content-Type', 'application/json; charset=UTF-8')
             ->withHeader('Cache-Control', 'no-store');
     }

@@ -37,45 +37,60 @@ final class Backup
         if (!$this->db->isSqlite()) {
             throw new RuntimeException('La sauvegarde intégrée ne prend en charge que SQLite ; utilisez mysqldump pour MariaDB.');
         }
-        $name = Clock::now()->format('Ymd-His') . ($suffix !== '' ? '-' . preg_replace('/[^a-z0-9_-]/i', '', $suffix) : '');
+        // Deux sauvegardes dans la même seconde (double clic, script) ne doivent pas se percuter :
+        // le nom reçoit un suffixe numérique tant qu'un répertoire du même nom existe.
+        $base = Clock::now()->format('Ymd-His') . ($suffix !== '' ? '-' . preg_replace('/[^a-z0-9_-]/i', '', $suffix) : '');
+        $name = $base;
+        for ($attempt = 2; is_dir($this->directory() . '/' . $name) && $attempt <= 100; $attempt++) {
+            $name = $base . '-' . $attempt;
+        }
         $target = $this->directory() . '/' . $name;
+        if (is_dir($target)) {
+            throw new RuntimeException('Impossible de créer un nom de sauvegarde unique dans ' . $this->directory() . '.');
+        }
         Files::ensureDirectory($target);
+        try {
 
-        // Base : VACUUM INTO produit une copie cohérente même en mode WAL.
-        $dbCopy = $target . '/atelier.sqlite';
-        $this->db->execute('VACUUM INTO ' . $this->db->pdo()->quote(str_replace('\\', '/', $dbCopy)));
+            // Base : VACUUM INTO produit une copie cohérente même en mode WAL.
+            $dbCopy = $target . '/atelier.sqlite';
+            $this->db->execute('VACUUM INTO ' . $this->db->pdo()->quote(str_replace('\\', '/', $dbCopy)));
 
-        // Pièces jointes
-        $attachments = $this->config->path('attachments');
-        if (is_dir($attachments)) {
-            Files::copyDirectory($attachments, $target . '/attachments');
+            // Pièces jointes
+            $attachments = $this->config->path('attachments');
+            if (is_dir($attachments)) {
+                Files::copyDirectory($attachments, $target . '/attachments');
+            }
+
+            // Clé de chiffrement des pièces jointes : indispensable pour relire les fichiers restaurés.
+            $keyFile = $this->config->path('attachments_key');
+            if ($keyFile !== '' && is_file($keyFile)) {
+                copy($keyFile, $target . '/attachments.key');
+                @chmod($target . '/attachments.key', 0600);
+            }
+
+            // Configuration des modules
+            $modulesConfig = $this->config->path('modules_config');
+            if (is_file($modulesConfig)) {
+                copy($modulesConfig, $target . '/modules.json');
+            }
+
+            $counts = [];
+            foreach ($this->db->tables() as $table) {
+                $counts[$table] = $this->db->count('SELECT COUNT(*) FROM ' . $this->db->quoteIdentifier($table));
+            }
+            Json::writeFile($target . '/manifest.json', [
+                'name' => $name,
+                'created_at' => Clock::utc(),
+                'app_version' => $this->config->string('app.version'),
+                'database_sha256' => hash_file('sha256', $dbCopy),
+                'tables' => $counts,
+                'attachments_size' => Files::directorySize($target . '/attachments'),
+            ]);
+        } catch (\Throwable $e) {
+            // Une sauvegarde incomplète ne doit pas subsister : elle serait proposée à la restauration.
+            $this->removeDirectory($target);
+            throw $e;
         }
-
-        // Clé de chiffrement des pièces jointes : indispensable pour relire les fichiers restaurés.
-        $keyFile = $this->config->path('attachments_key');
-        if ($keyFile !== '' && is_file($keyFile)) {
-            copy($keyFile, $target . '/attachments.key');
-            @chmod($target . '/attachments.key', 0600);
-        }
-
-        // Configuration des modules
-        $modulesConfig = $this->config->path('modules_config');
-        if (is_file($modulesConfig)) {
-            copy($modulesConfig, $target . '/modules.json');
-        }
-
-        $counts = [];
-        foreach ($this->db->tables() as $table) {
-            $counts[$table] = $this->db->count('SELECT COUNT(*) FROM ' . $this->db->quoteIdentifier($table));
-        }
-        Json::writeFile($target . '/manifest.json', [
-            'name' => $name,
-            'created_at' => Clock::utc(),
-            'app_version' => $this->config->string('app.version'),
-            'database_sha256' => hash_file('sha256', $dbCopy),
-            'tables' => $counts,
-            'attachments_size' => Files::directorySize($target . '/attachments'),
-        ]);
         return $name;
     }
 

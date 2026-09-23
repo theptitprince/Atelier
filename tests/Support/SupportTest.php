@@ -58,6 +58,19 @@ final class SupportTest extends TestCase
         $this->assertTrue(Request::create('GET', '/', [], [], ['X-Atelier-Request' => 'json'])->wantsJson());
     }
 
+    /**
+     * Une séquence UTF-8 invalide (nom de fichier hérité du système, donnée importée) ne doit pas
+     * transformer la réponse en erreur serveur : les octets fautifs sont remplacés.
+     */
+    public function testResponseSurvivesInvalidUtf8(): void
+    {
+        $response = Response::json(['name' => "Facture \xE9t\xE9"]);
+        $this->assertSame(200, $response->status());
+        $decoded = $response->decodedJson();
+        $this->assertTrue($decoded['ok']);
+        $this->assertStringContains('Facture', (string) $decoded['data']['name']);
+    }
+
     public function testJsonEnvelopes(): void
     {
         $ok = Response::json(['a' => 1], 'Fait');
