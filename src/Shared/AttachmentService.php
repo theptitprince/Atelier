@@ -136,6 +136,9 @@ final class AttachmentService
         if ($label === null) {
             return null;
         }
+        if (!mb_check_encoding($label, 'UTF-8')) {
+            throw ValidationException::single('label', 'Le nom doit être encodé en UTF-8.');
+        }
         $label = trim(preg_replace('/\s+/u', ' ', $label) ?? $label);
         return $label === '' ? null : mb_substr($label, 0, 200, 'UTF-8');
     }
@@ -365,6 +368,8 @@ final class AttachmentService
         if (is_file($path) && !@unlink($path)) {
             return false;
         }
+        // Le fichier lui-même peut être inscrit au registre commun (tags, relations) : on retire cette entrée.
+        $this->db->delete('info_registry', 'dataset_code = :d AND local_key = :k', ['d' => 'attachments.file', 'k' => $id]);
         $this->db->delete('attachments', 'id = :id', ['id' => $id]);
         return true;
     }
