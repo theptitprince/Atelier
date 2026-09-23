@@ -39,7 +39,7 @@ cp config/env.php.dist config/env.local.php
 
 `config/env.local.php` n’est pas versionné et ne contient que les clés à modifier (`app.env`, `app.debug`, `app.base_url`, `database.*`, `session.cookie_secure`…). Les variables d’environnement `ATELIER_*` ont la priorité finale : `ATELIER_APP_DEBUG=0`, `ATELIER_DATABASE_SQLITE_PATH=/srv/atelier/var/data/atelier.sqlite`, `ATELIER_DATABASE_DRIVER=mysql`.
 
-Environnements distincts : `app.env` = `dev`, `test` ou `prod`. En `prod`, désactiver `app.debug`, forcer `session.cookie_secure = true` et servir uniquement en HTTPS.
+Environnements distincts : `app.env` = `dev`, `test` ou `prod`. **`config/app.php` étant versionné, il est livré réglé pour la production (`env = prod`, `debug = false`)** : un dépôt déployé tel quel ne divulgue ni trace d’appel, ni chemin de fichier, ni requête SQL. Le serveur de développement (`start.bat`, `tools/dev-router.php`) rétablit `dev` et `debug` localement ; pour un autre poste de développement, décommenter ces deux clés dans `config/env.local.php`. En production, forcer en plus `session.cookie_secure = true` et servir uniquement en HTTPS.
 
 ### Fichier de configuration des modules
 

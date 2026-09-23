@@ -65,15 +65,28 @@ final class ModuleSynchronizer
         foreach ($migrator->migrate('core', $this->coreMigrationsDirectory) as $done) {
             $log[] = 'Migration appliquée : ' . $done;
         }
+        // Un module dont l'installation échoue est isolé, les autres continuent : même principe
+        // qu'un manifeste invalide (cahier des charges §6.2.1).
+        $this->modules->clearFailures();
+        $failed = [];
         foreach ($this->modules->all() as $descriptor) {
             if ($descriptor->manifest === null) {
                 continue;
             }
             $directory = $descriptor->manifest->migrationsDirectory();
-            if (is_dir($directory)) {
+            if (!is_dir($directory)) {
+                continue;
+            }
+            try {
                 foreach ($migrator->migrate($descriptor->id, $directory) as $done) {
                     $log[] = 'Migration appliquée : ' . $done;
                 }
+            } catch (\Throwable $e) {
+                $reason = 'Installation impossible : ' . $e->getMessage();
+                $failed[$descriptor->id] = $reason;
+                $this->modules->markFailed($descriptor->id, $reason);
+                $log[] = 'ÉCHEC du module ' . $descriptor->id . ' : ' . $e->getMessage();
+                $this->activity?->technical($descriptor->id, 'module.migration_failed', \Atelier\Activity\ActivityLog::ERROR, $reason, ['exception' => $e::class], 'module:' . $descriptor->id);
             }
         }
         $this->syncResources();

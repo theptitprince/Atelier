@@ -59,7 +59,8 @@ final class AssetRepository
         $orderBy = (self::SORTS[$sort] ?? self::SORTS['name']) . (strtolower($direction) === 'desc' ? ' DESC' : ' ASC');
         $total = $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE . " a WHERE $where", $params);
         $perPage = max(1, min(500, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select('SELECT ' . self::COLUMNS . ' FROM ' . self::TABLE . " a WHERE $where ORDER BY $orderBy, a.id ASC LIMIT $perPage OFFSET $offset", $params);
         return ['rows' => array_map([$this, 'hydrate'], $rows), 'total' => $total];
     }

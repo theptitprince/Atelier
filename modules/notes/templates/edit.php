@@ -2,7 +2,7 @@
 /**
  * Éditeur de note (création et modification).
  * Variables : $note (array : id, title, content, created_at, updated_at), $tags (list<string>), $isNew,
- *             $canUpdate, $canDelete, $titleMax, $contentMax, $module, $e, $datetime.
+ *             $version (jeton de concurrence), $canUpdate, $canDelete, $titleMax, $contentMax, $module, $e, $datetime.
  */
 $readonly = !$canUpdate;
 $contentLength = mb_strlen((string) ($note['content'] ?? ''), 'UTF-8');
@@ -10,7 +10,7 @@ $contentLength = mb_strlen((string) ($note['content'] ?? ''), 'UTF-8');
 <div class="module module-notes">
     <form class="notes__editor card" data-action="save"<?= $readonly ? '' : ' data-track-dirty data-save-shortcut' ?> novalidate>
         <input type="hidden" name="id" value="<?= $isNew ? '' : (int) $note['id'] ?>">
-        <input type="hidden" name="updated_at" value="<?= $e($note['updated_at'] ?? '') ?>">
+        <input type="hidden" name="version" value="<?= $e($version) ?>">
 
         <div class="card__body">
             <?php if ($readonly): ?>

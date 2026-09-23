@@ -76,6 +76,12 @@ final class WikiRenderer
     {
         $file = $this->ctx->shared->attachments->find($id);
         $base = $this->ctx->baseUrl() . '/files/' . $id;
+        // Le nom d'origine et la taille sont des informations en soi : un lecteur qui n'a pas le
+        // droit de télécharger le fichier ne doit pas les voir parce qu'un tiers a cité son
+        // identifiant dans une page. Un fichier inaccessible se présente comme un fichier absent.
+        if ($file !== null && !$this->ctx->shared->canReadAttachment($this->ctx->userId(), $file)) {
+            $file = null;
+        }
         if ($file === null) {
             return '<span class="wiki__missing-file" title="Pièce jointe introuvable">[fichier ' . Str::e(substr($id, 0, 8)) . '… absent]</span>';
         }
@@ -90,7 +96,11 @@ final class WikiRenderer
     private function pointLink(int $id, string $label): string
     {
         try {
-            $point = $this->ctx->moduleService('geo')->find($id);
+            // Les points GPS portent un identifiant séquentiel, donc énumérable : sans contrôle,
+            // une page suffisait à révéler le libellé et les coordonnées de n'importe lequel.
+            $point = $this->ctx->shared->catalog->canReadData($this->ctx->userId(), 'geo.point')
+                ? $this->ctx->moduleService('geo')->find($id)
+                : null;
         } catch (\Throwable) {
             $point = null;
         }

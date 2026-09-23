@@ -1,7 +1,7 @@
 {
     "id": "project",
     "name": "Projets",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Projets : conteneurs qui regroupent tâches, journal de bord, documents et informations de tous les modules (pages, lieux GPS, opérations du budget, équipements, actualités…)",
     "author": "Atelier",
     "icon": "folder",

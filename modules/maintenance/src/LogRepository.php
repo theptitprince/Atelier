@@ -51,7 +51,8 @@ final class LogRepository
         $total = $this->db->count('SELECT COUNT(*)' . self::FROM . " WHERE $where", $params);
         $cost = (int) ($this->db->scalar('SELECT COALESCE(SUM(l.cost), 0)' . self::FROM . " WHERE $where", $params) ?? 0);
         $perPage = max(1, min(500, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select('SELECT ' . self::COLUMNS . self::FROM . " WHERE $where ORDER BY l.done_at DESC, l.id DESC LIMIT $perPage OFFSET $offset", $params);
         return ['rows' => array_map([$this, 'hydrate'], $rows), 'total' => $total, 'cost' => $cost];
     }

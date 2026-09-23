@@ -7,6 +7,7 @@ namespace Atelier\Tests\Modules;
 use Atelier\Http\Request;
 use Atelier\Kernel\Application;
 use Atelier\Security\Acl\AclService;
+use Atelier\Support\Clock;
 use Atelier\Testing\TestCase;
 
 /**
@@ -236,5 +237,31 @@ final class ProjectModuleTest extends TestCase
         $this->assertSame(403, $this->post('project', 'task-add', ['id' => $projectId, 'title' => 'x'])->status());
         $this->assertSame(403, $this->post('project', 'set-status', ['id' => $projectId, 'status' => 'done'])->status());
         $this->assertSame(403, $this->get('new')->status());
+    }
+
+    /**
+     * Non-régression : le module raisonnait sur la date UTC alors que les échéances sont des jours
+     * calendaires affichés en heure de Paris. Entre minuit et 2 h, les retards du jour étaient manqués.
+     */
+    public function testLateTasksUseTheDisplayTimezone(): void
+    {
+        // 23/09/2026 22:30 UTC = 24/09/2026 00:30 à Paris : une échéance au 23/09 est dépassée.
+        Clock::freeze(new \DateTimeImmutable('2026-09-23 22:30:00', new \DateTimeZone('UTC')));
+        try {
+            $projectId = (int) $this->post('project', 'save', ['title' => 'Chantier', 'status' => 'active'])->decodedJson()['data']['id'];
+            $this->assertSame(200, $this->post('project', 'task-add', ['id' => $projectId, 'title' => 'Commander le bois', 'due_date' => '2026-09-23'])->status());
+
+            $badge = $this->get('badge')->decodedJson()['data'];
+            $this->assertSame(1, (int) $badge['count'], 'la tâche du 23/09 est en retard le 24/09 à Paris');
+            $this->assertStringContains('en retard', (string) $badge['label']);
+            $this->assertStringContains('retard', $this->view('show/' . $projectId)['content']);
+            $this->assertStringContains('retard', $this->view('list')['content']);
+
+            // La veille au soir à Paris (22:30 heure de Paris), la même échéance n'est pas encore dépassée.
+            Clock::freeze(new \DateTimeImmutable('2026-09-23 20:30:00', new \DateTimeZone('UTC')));
+            $this->assertSame(0, (int) $this->get('badge')->decodedJson()['data']['count']);
+        } finally {
+            Clock::freeze(null);
+        }
     }
 }

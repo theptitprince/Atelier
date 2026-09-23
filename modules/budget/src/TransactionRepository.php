@@ -61,7 +61,8 @@ final class TransactionRepository
         [$where, $params] = $this->where($criteria);
         $totals = $this->db->selectOne('SELECT COUNT(*) AS n, COALESCE(SUM(t.amount), 0) AS s, COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) AS i, COALESCE(SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END), 0) AS e' . self::FROM . " WHERE $where", $params) ?? ['n' => 0, 's' => 0, 'i' => 0, 'e' => 0];
         $perPage = max(1, min(500, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select('SELECT ' . self::COLUMNS . self::FROM . " WHERE $where ORDER BY t.done_at DESC, t.id DESC LIMIT $perPage OFFSET $offset", $params);
         return ['rows' => array_map([$this, 'hydrate'], $rows), 'total' => (int) $totals['n'], 'sum' => (int) $totals['s'], 'income' => (int) $totals['i'], 'expense' => (int) $totals['e']];
     }

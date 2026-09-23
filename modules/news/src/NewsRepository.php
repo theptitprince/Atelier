@@ -289,7 +289,8 @@ final class NewsRepository
         $params['user'] = $userId;
         $total = $this->db->count('SELECT COUNT(*) ' . self::ITEM_FROM . " WHERE $where", $params);
         $perPage = max(1, min(200, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $order = !empty($filters['archived']) ? 'i.archived_at DESC, i.id DESC' : 'i.published_at DESC, i.id DESC';
         $rows = $this->db->select(self::ITEM_SELECT . ' ' . self::ITEM_FROM . " WHERE $where ORDER BY $order LIMIT $perPage OFFSET $offset", $params);
         $this->attachInterests($rows);
@@ -308,10 +309,15 @@ final class NewsRepository
         return $rows[0];
     }
 
+    /**
+     * Entrées non lues du fil. Le critère est celui du fil (voir where()) : un flux simplement
+     * désactivé n'est plus récupéré mais ses entrées restent affichées, donc elles restent comptées ;
+     * seul un flux en corbeille masque les siennes.
+     */
     public function unreadCount(int $userId, ?int $categoryId = null): int
     {
         $params = ['user' => $userId];
-        $sql = 'SELECT COUNT(*) FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 AND i.deleted_at IS NULL AND f.is_active = 1 AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM news_read r WHERE r.item_id = i.id AND r.user_id = :user)';
+        $sql = 'SELECT COUNT(*) FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 AND i.deleted_at IS NULL AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM news_read r WHERE r.item_id = i.id AND r.user_id = :user)';
         if ($categoryId !== null) {
             $sql .= ' AND f.category_id = :c';
             $params['c'] = $categoryId;

@@ -10,6 +10,16 @@ declare(strict_types=1);
  * tout le reste passe par public/index.php. Reproduit le comportement du .htaccess.
  */
 
+// config/app.php est réglé pour la production (pas de trace d'appel renvoyée au client). Le
+// serveur intégré ne sert qu'au développement : on y rétablit le mode debug, sauf si
+// l'environnement en décide autrement (ATELIER_APP_ENV / ATELIER_APP_DEBUG déjà positionnés).
+if (getenv('ATELIER_APP_ENV') === false) {
+    putenv('ATELIER_APP_ENV=dev');
+}
+if (getenv('ATELIER_APP_DEBUG') === false) {
+    putenv('ATELIER_APP_DEBUG=1');
+}
+
 $publicDir = realpath(dirname(__DIR__) . '/public');
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 $file = $publicDir . str_replace('/', DIRECTORY_SEPARATOR, rawurldecode($path));

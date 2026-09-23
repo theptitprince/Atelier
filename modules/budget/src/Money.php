@@ -46,9 +46,14 @@ final class Money
             $negative = true;
             $clean = $m[1];
         }
-        if ($clean !== '' && ($clean[0] === '-' || $clean[0] === '−' || $clean[0] === '+')) {
-            $negative = $negative || $clean[0] !== '+';
-            $clean = substr($clean, $clean[0] === '−' ? 3 : 1);
+        // Le signe peut être ASCII (-, +) ou le moins typographique « − » (U+2212, 3 octets) que
+        // format() produit : la comparaison porte sur le préfixe, pas sur le premier octet.
+        foreach (['-' => true, '−' => true, '+' => false] as $sign => $isNegative) {
+            if (str_starts_with($clean, (string) $sign)) {
+                $negative = $negative || $isNegative;
+                $clean = substr($clean, strlen((string) $sign));
+                break;
+            }
         }
         // « 1.250,50 » (séparateur de milliers point) ou « 1,250.50 » : le dernier séparateur est la décimale.
         $lastComma = strrpos($clean, ',');

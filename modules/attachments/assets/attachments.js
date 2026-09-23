@@ -149,6 +149,7 @@
         if (q.length < 2) { results.hidden = true; results.innerHTML = ''; return; }
         try {
           const envelope = await ctx.api.post('search-info', { q });
+          if (input.value.trim() !== q) return; // réponse obsolète : la saisie a changé
           const items = (envelope.data && envelope.data.items) || [];
           results.innerHTML = '';
           if (!items.length) results.appendChild(util.el('li', { class: 'list__item text-muted', text: 'Aucune information trouvée.' }));

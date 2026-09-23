@@ -42,7 +42,8 @@ final class NoteRepository
         [$where, $params] = $this->whereActive($ownerId, $search);
         $orderBy = $this->orderBy($sort, $direction);
         $total = $this->db->count("SELECT COUNT(*) FROM " . self::TABLE . " n WHERE $where", $params);
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l'entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             "SELECT n.id, n.owner_id, n.title, n.content, n.created_at, n.updated_at
              FROM " . self::TABLE . " n WHERE $where ORDER BY $orderBy, n.id DESC LIMIT $perPage OFFSET $offset",

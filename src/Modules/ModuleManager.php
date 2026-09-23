@@ -36,6 +36,9 @@ final class ModuleManager
     /** @var array<string, mixed>|null */
     private ?array $overrides = null;
 
+    /** @var array<string, array{hash: string, reason: string}>|null échecs d'installation enregistrés */
+    private ?array $failures = null;
+
     private bool $discovered = false;
 
     public function __construct(
@@ -85,7 +88,11 @@ final class ModuleManager
                 }
                 $seen[$manifest->id()] = true;
                 $this->autoloader->addNamespace($manifest->namespace(), $manifest->sourceDirectory());
-                $this->descriptors[$id] = new ModuleDescriptor($id, $directory, $manifest, [], $moduleOverrides);
+                // Un module dont l'installation a échoué (migration défectueuse) reste isolé tant
+                // que son manifeste n'a pas changé ou qu'une resynchronisation n'a pas réussi.
+                $failure = $this->failures()[$id] ?? null;
+                $failed = $failure !== null && ($failure['hash'] ?? '') === $manifest->hash() ? [(string) $failure['reason']] : [];
+                $this->descriptors[$id] = new ModuleDescriptor($id, $directory, $manifest, $failed, $moduleOverrides);
             } catch (ManifestException $e) {
                 $this->logger->warning('Manifeste invalide : ' . $id, ['errors' => $e->errors]);
                 $this->descriptors[$id] = new ModuleDescriptor($id, $directory, null, $e->errors, $moduleOverrides);
@@ -142,7 +149,9 @@ final class ModuleManager
             $message = match ($descriptor->state()) {
                 'maintenance' => 'Le module « ' . $descriptor->name() . ' » est en maintenance.',
                 'inactive' => 'Le module « ' . $descriptor->name() . ' » est désactivé.',
-                default => 'Le module « ' . $descriptor->name() . ' » est indisponible (manifeste invalide).',
+                // L'état « error » couvre un manifeste invalide comme une installation échouée :
+                // on reprend le motif exact plutôt qu'une cause supposée.
+                default => 'Le module « ' . $descriptor->name() . ' » est indisponible : ' . ($descriptor->errors[0] ?? 'cause inconnue'),
             };
             throw new ModuleUnavailableException($message, $id, $descriptor->state());
         }
@@ -230,6 +239,70 @@ final class ModuleManager
         }
         uasort($groups, static fn (array $a, array $b): int => [$a['order'], $a['label']] <=> [$b['order'], $b['label']]);
         return $groups;
+    }
+
+    // ----- Échecs d'installation (migrations) -----
+
+    /**
+     * Échecs enregistrés, par identifiant de module : empreinte du manifeste au moment de l'échec
+     * et motif. Conservés dans le cache pour que le module reste isolé d'une requête à l'autre.
+     *
+     * @return array<string, array{hash: string, reason: string}>
+     */
+    private function failures(): array
+    {
+        if ($this->failures === null) {
+            $this->failures = [];
+            $file = $this->failuresFile();
+            if (is_file($file)) {
+                try {
+                    /** @var array<string, array{hash: string, reason: string}> $data */
+                    $data = Json::readFile($file);
+                    $this->failures = $data;
+                } catch (Throwable) {
+                    $this->failures = [];
+                }
+            }
+        }
+        return $this->failures;
+    }
+
+    private function failuresFile(): string
+    {
+        return rtrim($this->config->path('cache'), '/') . '/module-failures.json';
+    }
+
+    /** Isole un module dont l'installation a échoué ; les autres modules continuent de fonctionner. */
+    public function markFailed(string $id, string $reason): void
+    {
+        $descriptor = $this->descriptors[$id] ?? null;
+        $failures = $this->failures();
+        $failures[$id] = ['hash' => $descriptor?->manifest?->hash() ?? '', 'reason' => $reason];
+        $this->failures = $failures;
+        $this->writeFailures($failures);
+        if ($descriptor !== null) {
+            $this->descriptors[$id] = new ModuleDescriptor($id, $descriptor->directory, $descriptor->manifest, array_merge($descriptor->errors, [$reason]), $descriptor->overrides);
+        }
+    }
+
+    /** Oublie tous les échecs enregistrés : la prochaine synchronisation réessaie chaque module. */
+    public function clearFailures(): void
+    {
+        $this->failures = [];
+        $file = $this->failuresFile();
+        if (is_file($file)) {
+            @unlink($file);
+        }
+    }
+
+    /** @param array<string, array{hash: string, reason: string}> $failures */
+    private function writeFailures(array $failures): void
+    {
+        try {
+            Json::writeFile($this->failuresFile(), $failures);
+        } catch (Throwable $e) {
+            $this->logger->error('Échecs de modules non enregistrés', ['error' => $e->getMessage()]);
+        }
     }
 
     /** @return array<string, mixed> */

@@ -1,7 +1,7 @@
 {
   "id": "news",
   "name": "Actualités",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Veille d’actualité à partir de flux RSS, Atom ou JSON Feed choisis, classés par catégorie et par centre d’intérêt, avec archivage des faits à conserver et corbeille (flux et faits archivés restaurables 30 jours)",
   "author": "Atelier",
   "icon": "rss",

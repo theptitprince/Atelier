@@ -819,9 +819,14 @@ final class ProjectModule extends AbstractModule implements TrashProviderInterfa
         return max(1, $this->ctx->config->int('trash.retention_days', 30));
     }
 
+    /**
+     * Date du jour dans le fuseau d'affichage : les échéances (project_project.due_date,
+     * project_task.due_date) sont des jours calendaires, pas des instants UTC. Sans conversion,
+     * entre minuit et 2 h à Paris le module raisonne encore sur la veille et manque les retards.
+     */
     private function today(): string
     {
-        return Clock::now()->format('Y-m-d');
+        return Clock::now()->setTimezone(new \DateTimeZone($this->ctx->config->string('app.timezone', 'Europe/Paris')))->format('Y-m-d');
     }
 
     private function requireId(Request $request, string $key = 'id'): int

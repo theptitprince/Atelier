@@ -259,4 +259,30 @@ final class NewsModuleTest extends TestCase
         $this->assertSame(403, $this->post('category-save', ['name' => 'X'])->status());
         $this->assertSame(200, $this->post('read', ['id' => $itemId, 'read' => true])->status(), 'la lecture est personnelle');
     }
+
+    /**
+     * Non-régression : un flux simplement désactivé (donc plus récupéré, mais pas en corbeille)
+     * faisait afficher « Aucun flux suivi » et comptait 0 non lue alors que ses entrées restaient
+     * dans le fil. Seule la corbeille masque les entrées.
+     */
+    public function testDeactivatedFeedKeepsItsEntriesAndCountersConsistent(): void
+    {
+        $feedId = (int) $this->post('feed-save', ['url' => 'https://exemple.test/rss', 'refresh_minutes' => 60, 'retention_days' => 30, 'is_active' => 1])->decodedJson()['data']['id'];
+        $this->assertSame(2, $this->get('badge')->decodedJson()['data']['count']);
+
+        $this->assertSame(200, $this->post('feed-toggle', ['id' => $feedId])->status());
+        $this->assertSame(0, (int) $this->app->db->scalar('SELECT is_active FROM news_feed WHERE id = :id', ['id' => $feedId]));
+
+        $data = $this->get('list', ['norefresh' => 1])->decodedJson()['data'];
+        $this->assertStringContains('Fusée Ariane', $data['content'], 'les entrées déjà récupérées restent lisibles');
+        $this->assertFalse(str_contains($data['content'], 'Aucun flux suivi'));
+        $this->assertStringContains('2 entrée(s) · 2 non lue(s)', $data['banner']);
+        $this->assertSame(2, $this->get('badge')->decodedJson()['data']['count']);
+
+        // La corbeille, elle, masque bien les entrées et remet les compteurs à zéro.
+        $this->assertSame(200, $this->post('feed-delete', ['id' => $feedId])->status());
+        $data = $this->get('list', ['norefresh' => 1])->decodedJson()['data'];
+        $this->assertFalse(str_contains($data['content'], 'Fusée Ariane'));
+        $this->assertSame(0, $this->get('badge')->decodedJson()['data']['count']);
+    }
 }

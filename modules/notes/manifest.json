@@ -1,7 +1,7 @@
 {
   "id": "notes",
   "name": "Bloc-notes",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Notes personnelles : rédaction, recherche, tags partagés et corbeille",
   "author": "Atelier",
   "icon": "note",

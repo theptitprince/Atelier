@@ -11,12 +11,21 @@ namespace Atelier\Modules\Budget;
 final class Forecast
 {
     /**
+     * Nombre maximal d'itérations : borne le rattrapage des échéances antérieures à la fenêtre
+     * (une récurrence quotidienne dont next_at date de plusieurs années) sans tronquer la collecte.
+     */
+    private const MAX_STEPS = 20000;
+
+    /**
      * Occurrences d'une récurrence entre deux jours inclus (bornée par ends_at et un plafond de sécurité).
+     *
+     * $max borne le nombre d'occurrences retournées : il doit couvrir le plus large horizon proposé
+     * (24 mois d'une récurrence quotidienne, soit un peu plus de 730 jours).
      *
      * @param array<string, mixed> $recurring next_at, interval_unit, interval_count, ends_at, active
      * @return list<string> jours AAAA-MM-JJ
      */
-    public static function occurrences(array $recurring, string $from, string $to, int $max = 400): array
+    public static function occurrences(array $recurring, string $from, string $to, int $max = 1000): array
     {
         if (empty($recurring['active']) && isset($recurring['active'])) {
             return [];
@@ -24,15 +33,24 @@ final class Forecast
         $days = [];
         $day = (string) $recurring['next_at'];
         $end = $recurring['ends_at'] ?? null;
-        $guard = 0;
-        while ($day <= $to && $guard++ < $max) {
+        $unit = (string) $recurring['interval_unit'];
+        $count = (int) $recurring['interval_count'];
+        $steps = 0;
+        while ($day <= $to && $steps++ < self::MAX_STEPS) {
             if ($end !== null && $day > $end) {
                 break;
             }
             if ($day >= $from) {
                 $days[] = $day;
+                if (count($days) >= $max) {
+                    break;
+                }
             }
-            $day = Period::addInterval($day, (string) $recurring['interval_unit'], (int) $recurring['interval_count']);
+            $next = Period::addInterval($day, $unit, $count);
+            if ($next <= $day) {
+                break; // périodicité incohérente : on n'avance pas, inutile de boucler
+            }
+            $day = $next;
         }
         return $days;
     }

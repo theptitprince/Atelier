@@ -110,4 +110,35 @@ final class SharedServicesTest extends TestCase
         $this->assertFalse($catalog->canAccess($userId, 'demo.secret', 'read'), 'un jeu privé n’est jamais exposé');
         $this->assertSame(['demo.item'], $catalog->readableCodes($userId));
     }
+
+    /**
+     * Refuser l'ouverture d'un module doit aussi fermer ses jeux partagés : sans cela un compte
+     * exclu du module continuait d'en lire toutes les données par l'Explorateur.
+     */
+    public function testExplicitModuleDenyAlsoClosesItsSharedDatasets(): void
+    {
+        $acl = new AclService($this->db);
+        $catalog = new DatasetCatalog($this->db, $acl);
+        $now = Clock::utc();
+        $this->db->insert('datasets', ['code' => 'demo.item', 'module_id' => 'demo', 'name' => 'Items', 'visibility' => 'shared', 'tables' => Json::encode(['demo_item']), 'fields' => '{}', 'operations' => Json::encode(['read', 'update']), 'structure_version' => 1, 'is_present' => 1, 'updated_at' => $now]);
+        $userId = $this->db->insert('users', ['username' => 'bruno', 'display_name' => 'Bruno', 'password_hash' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+        $acl->setRule('user', $userId, 'atelier/demo', 'read', 'allow');
+        $this->assertTrue($catalog->canAccess($userId, 'demo.item', 'read'), 'droit hérité du module');
+        $this->assertSame(['demo.item'], $catalog->readableCodes($userId));
+
+        $acl->setRule('user', $userId, 'atelier/demo', 'open', 'deny');
+        $acl->clearCache();
+        $this->assertFalse($acl->can($userId, 'atelier/demo', 'open'));
+        $this->assertFalse($catalog->canAccess($userId, 'demo.item', 'read'), 'module fermé : plus de lecture transversale');
+        $this->assertSame([], $catalog->readableCodes($userId));
+
+        // L'absence de règle sur le module ne bloque pas : un droit posé sur le seul jeu de
+        // données reste une délégation volontaire et suffisante.
+        $other = $this->db->insert('users', ['username' => 'dora', 'display_name' => 'Dora', 'password_hash' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+        $acl->setRule('user', $other, 'atelier/demo/data/item', 'read', 'allow');
+        $acl->clearCache();
+        $this->assertFalse($acl->can($other, 'atelier/demo', 'open'), 'aucune règle : refus par défaut');
+        $this->assertTrue($catalog->canAccess($other, 'demo.item', 'read'));
+        $this->assertSame(['demo.item'], $catalog->readableCodes($other));
+    }
 }

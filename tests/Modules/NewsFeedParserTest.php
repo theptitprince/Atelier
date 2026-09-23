@@ -105,4 +105,35 @@ XML;
         $this->assertSame(304, $response['status']);
         $this->assertSame('"abc"', $response['etag']);
     }
+
+    /**
+     * Les écritures numériques d'une IPv4 et les IPv4 encapsulées dans une IPv6 joignaient le
+     * réseau interne : curl les comprend, le garde-fou ne les reconnaissait pas comme des IP.
+     */
+    public function testFetcherRefusesEncodedInternalAddresses(): void
+    {
+        $encodees = [
+            'http://2130706433/' => '127.0.0.1 en décimal',
+            'http://0x7f000001/' => '127.0.0.1 en hexadécimal',
+            'http://0177.0.0.1/' => '127.0.0.1 en octal',
+            'http://127.1/' => '127.0.0.1 abrégé',
+            'http://2852039166/' => '169.254.169.254 (métadonnées) en décimal',
+            'http://3232235777/' => '192.168.1.1 en décimal',
+            'http://0xC0A80001/' => '192.168.0.1 en hexadécimal',
+            'http://[::ffff:127.0.0.1]/' => 'IPv4 encapsulée dans une IPv6',
+            'http://[::ffff:7f00:1]/' => 'IPv4 encapsulée, écriture hexadécimale',
+            'http://[0:0:0:0:0:0:0:1]/' => 'bouclage IPv6 non abrégé',
+            'http://[::]/' => 'adresse IPv6 indéterminée',
+            'http://0/' => 'adresse nulle',
+            'http://127.0.0.1.:8000/feed' => 'point final ajouté au nom',
+        ];
+        foreach (array_keys($encodees) as $url) {
+            $this->assertThrows(\InvalidArgumentException::class, fn () => FeedFetcher::assertSafeUrl($url), null);
+        }
+        // Une IP publique en notation pointée reste acceptée.
+        FeedFetcher::assertSafeUrl('http://93.184.216.34/rss');
+        // Mais la même IP en décimal est refusée : seule la notation usuelle est admise, pour que
+        // ce qui est contrôlé soit exactement ce que curl joint.
+        $this->assertThrows(\InvalidArgumentException::class, static fn () => FeedFetcher::assertSafeUrl('http://1572395042/rss'), null);
+    }
 }

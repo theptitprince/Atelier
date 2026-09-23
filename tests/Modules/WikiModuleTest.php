@@ -190,4 +190,76 @@ final class WikiModuleTest extends TestCase
         $this->assertSame(403, $this->post('wiki', 'save', ['title' => 'Autre'])->status());
         $this->assertSame(403, $this->app->handle(Request::create('GET', '/m/wiki/new', [], [], $this->headers()))->status());
     }
+
+    /**
+     * Non-régression : le compteur de rétroliens de la liste comptait aussi les pages en corbeille,
+     * alors que la fiche n'en affiche que les pages actives.
+     */
+    public function testBacklinkCounterIgnoresTrashedPages(): void
+    {
+        $this->post('wiki', 'save', ['title' => 'Cible', 'content' => 'Page cible.']);
+        $this->post('wiki', 'save', ['title' => 'Source vivante', 'content' => 'Voir [[Cible]].']);
+        $doomed = (int) $this->post('wiki', 'save', ['title' => 'Source supprimée', 'content' => 'Voir [[Cible]].'])->decodedJson()['data']['id'];
+
+        $repository = new \Atelier\Modules\Wiki\WikiRepository($this->app->db);
+        $counter = static function () use ($repository): int {
+            foreach ($repository->paginate('Cible', 1, 10)['rows'] as $row) {
+                if ((string) $row['slug'] === 'cible') {
+                    return (int) $row['backlinks'];
+                }
+            }
+            return -1;
+        };
+        $this->assertSame(2, $counter());
+        $this->assertCount(2, $repository->backlinks('cible'));
+
+        $this->assertSame(200, $this->post('wiki', 'delete', ['id' => $doomed])->status());
+        $this->assertCount(1, $repository->backlinks('cible'), 'la page en corbeille ne pointe plus');
+        $this->assertSame(1, $counter(), 'le compteur de la liste suit la fiche');
+
+        $this->assertSame(200, $this->post('wiki', 'restore', ['id' => $doomed])->status());
+        $this->assertSame(2, $counter());
+    }
+
+    /** Non-régression : un numéro de page démesuré débordait l'entier et cassait la clause OFFSET (erreur 500). */
+    public function testHugePageNumberReturnsAnEmptyPageInsteadOfAnError(): void
+    {
+        $this->post('wiki', 'save', ['title' => 'Une page', 'content' => 'Texte']);
+        foreach (['0', '-3', '9223372036854775807', '999999999999999999'] as $page) {
+            $response = $this->app->handle(Request::create('GET', '/m/wiki/list', ['page' => $page], [], $this->headers()));
+            $this->assertSame(200, $response->status(), 'page=' . $page . ' : ' . $response->body());
+        }
+    }
+
+    /**
+     * Non-régression : le rendu révélait le nom et la taille d'une pièce jointe, ainsi que le
+     * libellé et les coordonnées d'un point GPS, sans vérifier les droits du lecteur. Il suffisait
+     * d'en citer l'identifiant dans une page pour les faire apparaître à n'importe qui.
+     */
+    public function testRestrictedFilesAndPointsAreHiddenFromOtherReaders(): void
+    {
+        $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+        $file = $this->app->shared->attachments->storeContent($png, 'plan-confidentiel.png', null, $this->userId);
+        $pointId = (int) $this->post('geo', 'save', ['name' => 'Entrepôt secret', 'coordinates' => '48.85, 2.35'])->decodedJson()['data']['id'];
+        $this->post('wiki', 'save', ['title' => 'Note de service', 'content' => 'Plan : [file=' . $file['id'] . '] Lieu : [point=' . $pointId . ']']);
+
+        // Alice a déposé le fichier et administre le module Coordonnées GPS : elle voit tout.
+        $vuAlice = $this->view('show/note-de-service')['content'];
+        $this->assertStringContains('plan-confidentiel.png', $vuAlice);
+        $this->assertStringContains('Entrepôt secret', $vuAlice);
+
+        // Bob lit la même page sans droit sur le fichier ni sur les points GPS.
+        $bob = $this->app->users->create(['username' => 'bob', 'password_hash' => $this->app->passwords->hash('Mot-de-passe-solide'), 'must_change_password' => 0]);
+        $this->app->acl->setRule('user', $bob, AclService::module('wiki'), 'admin', 'allow');
+        $this->app->acl->clearCache();
+        $this->app->auth->logout();
+        $_SESSION = [];
+        $this->app->auth->login('bob', 'Mot-de-passe-solide', '127.0.0.1');
+
+        $vuBob = $this->view('show/note-de-service')['content'];
+        $this->assertFalse(str_contains($vuBob, 'plan-confidentiel.png'), 'le nom du fichier ne doit pas fuiter');
+        $this->assertFalse(str_contains($vuBob, 'Entrepôt secret'), 'le libellé du point ne doit pas fuiter');
+        $this->assertStringContains('absent', $vuBob);
+        $this->assertStringContains('indisponible', $vuBob);
+    }
 }

@@ -32,6 +32,11 @@ final class BudgetHelpersTest extends TestCase
         $this->assertNull(Money::parse('abc'));
         $this->assertNull(Money::parse('12,345'));
         $this->assertNull(Money::parse(''));
+        // Non-régression : le moins typographique produit par format() doit être relu (le test du
+        // premier octet ne pouvait jamais reconnaître « − », codé sur trois octets en UTF-8).
+        $this->assertSame(-4520, Money::parse('−45,20'));
+        $this->assertSame(-125050, Money::parse('−1 250,50 €'));
+        $this->assertSame(-4520, Money::parse(Money::format(-4520)), 'aller-retour format() → parse()');
         $this->assertSame('1 250,50 €', Money::format(125050));
         $this->assertSame('−12,00 €', Money::format(-1200));
         $this->assertSame('+12,00 €', Money::format(1200, '', true));
@@ -80,6 +85,32 @@ final class BudgetHelpersTest extends TestCase
         $this->assertFalse(in_array('Loyer', array_column($rows[2]['items'], 'label'), true));
         $this->assertFalse(in_array('Inactive', array_column($rows[0]['items'], 'label'), true));
         $this->assertSame(['2026-10-05', '2026-11-05'], Forecast::occurrences($recurrings[1], '2026-10-01', '2027-03-31'));
+    }
+
+    /**
+     * Non-régression : le plafond de sécurité des occurrences tronquait la projection à 24 mois
+     * d'une récurrence quotidienne (400 occurrences au lieu de 731), faussant le solde projeté.
+     */
+    public function testDailyRecurringIsNotTruncatedOverTwoYears(): void
+    {
+        $daily = ['label' => 'Café', 'amount' => -100, 'interval_unit' => 'day', 'interval_count' => 1, 'next_at' => '2026-09-01', 'ends_at' => null, 'active' => true];
+        $this->assertCount(731, Forecast::occurrences($daily, '2026-09-01', '2028-08-31'), 'du 01/09/2026 au 31/08/2028 inclus');
+
+        $rows = Forecast::project(0, '2026-09', 24, [$daily]);
+        $this->assertCount(24, $rows);
+        $this->assertSame(-73100, $rows[23]['closing'], '731 jours à 1,00 €');
+        $this->assertSame(-3000, $rows[0]['closing'], 'septembre 2026 : 30 jours');
+
+        // Une récurrence dont l'échéance traîne depuis des années reste rattrapée sans être tronquée.
+        $late = $daily;
+        $late['next_at'] = '2020-01-01';
+        $this->assertCount(731, Forecast::occurrences($late, '2026-09-01', '2028-08-31'));
+
+        // ends_at et le nombre maximal d'occurrences restent respectés.
+        $bounded = $daily;
+        $bounded['ends_at'] = '2026-09-10';
+        $this->assertCount(10, Forecast::occurrences($bounded, '2026-09-01', '2028-08-31'));
+        $this->assertCount(5, Forecast::occurrences($daily, '2026-09-01', '2028-08-31', 5));
     }
 
     public function testRealizedSavings(): void

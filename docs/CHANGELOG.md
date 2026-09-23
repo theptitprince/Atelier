@@ -2,6 +2,40 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.8.1 — 23/09/2026
+
+Version de correction issue d’une revue systématique : sécurité, noyau, modules métier et client.
+
+### Sécurité
+- **Actualités 1.2.2 — falsification de requête côté serveur (SSRF) corrigée.** Le garde-fou anti-adresses-internes ne reconnaissait pas les écritures numériques d’une IPv4 : `http://2130706433/` (soit 127.0.0.1 en décimal), ses variantes hexadécimale et octale, la forme abrégée `127.1` et les IPv4 encapsulées dans une IPv6 étaient acceptées, alors que curl les joignait. Un compte ordinaire autorisé à ajouter un flux pouvait ainsi faire interroger le réseau interne par le serveur et en lire le contenu dans l’application. Toutes ces écritures sont désormais ramenées à leur forme canonique puis refusées, la résolution de nom contrôle **chaque** adresse obtenue, et les redirections sont suivies manuellement : chaque saut repasse par les contrôles et l’adresse validée est épinglée côté curl (protection contre le DNS-rebinding).
+- **Refus d’ouverture d’un module : les données suivent.** Un refus explicite de la permission `open` sur un module ne portait que sur ses écrans ; ses jeux de données partagés restaient lisibles par l’Explorateur, la recherche transversale et les sélecteurs. Retirer l’accès à un module ferme maintenant aussi ses données. L’absence de règle, elle, ne bloque rien : un droit accordé sur un seul jeu de données reste une délégation volontaire.
+- **Pièces jointes et points GPS cités dans une page.** Le rendu des pages révélait le nom d’origine et la taille d’un fichier, ainsi que le libellé et les coordonnées d’un point GPS, sans vérifier les droits du lecteur. Une règle unique du noyau gouverne désormais l’affichage comme le téléchargement ; un élément inaccessible se présente comme absent.
+- **Mode débogage.** `config/app.php`, qui est versionné, livrait `env = dev` et `debug = true` : déployé tel quel, il renvoyait au client les traces d’appel, les chemins absolus et les requêtes SQL. Le fichier est désormais réglé pour la production ; le serveur de développement (`start.bat`, `tools/dev-router.php`) rétablit le mode debug localement.
+
+### Corrections du noyau
+- Un module dont l’installation échoue est isolé : sa migration défectueuse mettait l’application entière en erreur 500. Les autres modules s’installent, le module fautif passe à l’état « erreur » avec sa cause, et son ouverture donne une indisponibilité explicite.
+- Deux sauvegardes déclenchées dans la même seconde se percutaient (erreur 500) ; le nom est rendu unique et une sauvegarde interrompue est nettoyée au lieu d’être proposée à la restauration.
+- Une réponse contenant de l’UTF-8 invalide provoquait une erreur 500 : l’encodage JSON est tolérant à la frontière HTTP.
+- `backup:restore` sur un nom inexistant créait malgré tout une sauvegarde de sécurité complète ; l’existence est vérifiée d’abord. La console n’affiche plus de trace d’appel pour une erreur d’usage (sauf `--verbose`).
+- Un échec de lecture de la session n’est plus mémorisé comme « non connecté » : l’application signale une indisponibilité de stockage au lieu de déconnecter.
+
+### Corrections des modules
+- **Budget 1.1.1** : la projection était tronquée à 400 occurrences (une récurrence quotidienne s’arrêtait avant deux ans) ; `Money::parse` refusait le signe moins typographique que `Money::format` produit.
+- **Projets 1.0.1** : les retards étaient calculés en UTC et non en heure de Paris, donc invisibles entre minuit et 2 h.
+- **Bloc-notes 1.2.1** : deux enregistrements dans la même seconde échappaient au contrôle de concurrence et l’un écrasait l’autre sans avertissement ; l’empreinte de version ne dépend plus de la seule date.
+- **Actualités 1.2.2** : un flux simplement désactivé rendait ses entrées inatteignables et remettait le compteur de non-lues à zéro.
+- **Pages 1.2.3** : le compteur de rétroliens comptait les pages en corbeille.
+- **Entretien 1.2.1, Coordonnées GPS 1.1.1 et cinq autres modules** : un numéro de page démesuré débordait le calcul du décalage et donnait une erreur 500 ; la page est bornée.
+
+### Corrections du client (JavaScript et feuille de style)
+- Ouverture directe d’une URL de module sans sous-route (`/m/notes`, lien « ouvrir dans un nouvel onglet » depuis la colonne, F5) : la route valait littéralement la chaîne « null » et la vue affichait « Route inconnue ». La page de base du module est désormais utilisée, chaîne de requête conservée.
+- Onglet fermé puis rouvert pendant le chargement de ses ressources : la réponse de l’onglet disparu s’appliquait au nouvel onglet (URL, titre, bandeau et colonne faussés). La détection de réponse obsolète compare maintenant l’onglet lui-même et non son seul identifiant ; les ressources acquises pour une réponse abandonnée sont rendues.
+- Réponse hors enveloppe JSON (sortie parasite, page d’erreur d’un intermédiaire) : le panneau restait vide et sans message, et l’onglet se croyait chargé. Elle est maintenant traitée comme une erreur technique, avec bouton « Réessayer ».
+- Jeton CSRF périmé (mot de passe changé ailleurs, second onglet du navigateur) : la requête est rejouée une seule fois avec le jeton rafraîchi au lieu d’afficher « Actualisez la page puis réessayez ».
+- Suggestions de tags : une réponse lente pour un terme abandonné écrasait la liste du terme courant. Même correction dans les recherches des modules Fichiers joints, Coordonnées GPS et Pages.
+- Liens `/m/…` dans un panneau : un identifiant de module préfixe d’un autre détournait la navigation vers l’onglet courant ; le module visé s’ouvre désormais dans son propre onglet.
+- Toaster : la pile est bornée à la hauteur visible et défilante ; les avertissements et erreurs persistants ne sortent plus de l’écran hors de portée.
+
 ## 0.8.0 — 23/09/2026
 
 ### Corbeille globale pour tous les modules
