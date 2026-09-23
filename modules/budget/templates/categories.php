@@ -23,7 +23,7 @@ $rowHtml = static function (array $c, bool $child) use ($module, $e, $rights, $e
             . '<button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="category-archive" data-params=\'{"id":' . (int) $c['id'] . '}\' title="' . ($c['archived'] ? 'Réactiver' : 'Archiver') . '">' . $module->icon($c['archived'] ? 'refresh' : 'archive') . '</button>';
     }
     if ($rights['delete']) {
-        $html .= '<button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="category-delete" data-params=\'{"id":' . (int) $c['id'] . '}\' data-confirm="Supprimer « ' . $e($c['name']) . ' » ? Ses opérations resteront sans catégorie." data-danger title="Supprimer">' . $module->icon('trash') . '</button>';
+        $html .= '<button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="category-delete" data-params=\'{"id":' . (int) $c['id'] . '}\' data-confirm="Supprimer définitivement « ' . $e($c['name']) . ' » ? Refusé si des opérations, budgets, récurrences ou économies s’y rattachent (archivez-la plutôt)." data-danger title="Supprimer">' . $module->icon('trash') . '</button>';
     }
     return $html . '</span></td></tr>';
 };

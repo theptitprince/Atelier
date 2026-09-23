@@ -69,7 +69,7 @@
                                     <td class="col-num"><?= $module->amountHtml($s['realized']) ?></td>
                                     <td class="col-actions"><span class="table-actions">
                                         <?php if ($rights['update']): ?><a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="saving/<?= (int) $s['id'] ?>/edit" title="Modifier"><?= $module->icon('edit') ?></a><?php endif; ?>
-                                        <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="saving-delete" data-params='{"id":<?= (int) $s['id'] ?>}' data-confirm="Supprimer « <?= $e($s['label']) ?> » ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                                        <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="saving-delete" data-params='{"id":<?= (int) $s['id'] ?>}' data-confirm="Placer « <?= $e($s['label']) ?> » dans la corbeille ?" data-danger title="Supprimer (corbeille)"><?= $module->icon('trash') ?></button><?php endif; ?>
                                     </span></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -96,7 +96,7 @@
                                 </div>
                                 <?= $module->bar($g['progress'], $g['target'], false) ?>
                                 <div class="text-small text-muted"><?= $g['account_name'] !== null ? 'solde de « ' . $e($g['account_name']) . ' »' : 'montant saisi à la main' ?><?= $g['due_at'] !== null ? ' · échéance ' . $e($module->day($g['due_at'])) : '' ?><?= !$g['reached'] ? ' · reste ' . $e($module->money(max(0, $g['target'] - $g['progress']))) : '' ?></div>
-                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--ghost budget__goal-delete" data-action="goal-delete" data-params='{"id":<?= (int) $g['id'] ?>}' data-confirm="Supprimer l’objectif « <?= $e($g['name']) ?> » ?" data-danger><?= $module->icon('trash', 'icon--sm') ?></button><?php endif; ?>
+                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--ghost budget__goal-delete" data-action="goal-delete" data-params='{"id":<?= (int) $g['id'] ?>}' data-confirm="Placer l’objectif « <?= $e($g['name']) ?> » dans la corbeille ?" data-danger title="Supprimer (corbeille)"><?= $module->icon('trash', 'icon--sm') ?></button><?php endif; ?>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>

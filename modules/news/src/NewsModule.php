@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Atelier\Modules\News;
 
+use Atelier\Error\ConflictException;
 use Atelier\Error\NotFoundException;
 use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
@@ -12,6 +13,7 @@ use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
 use Atelier\View\BbCode;
@@ -20,9 +22,16 @@ use Atelier\View\BbCode;
  * Module « Actualités » : veille sur des flux RSS / Atom / JSON Feed choisis, classés par catégorie
  * et par centre d'intérêt (mots-clés), lecture par utilisateur, archivage à la demande des faits
  * à conserver (note, tags, inscription au registre commun pour les relier aux autres modules).
+ * Les flux retirés et les faits archivés supprimés passent par la corbeille (suppression logique,
+ * restaurable pendant trash.retention_days) ; les entrées non archivées suivent la rétention du flux.
  */
-final class NewsModule extends AbstractModule
+final class NewsModule extends AbstractModule implements TrashProviderInterface
 {
+    public const DATASET_FEED = 'news.feed';
+
+    /** Types d'éléments de la corbeille : préfixe d'identifiant => jeu de données. */
+    private const TRASH_KINDS = ['feed' => self::DATASET_FEED, 'archive' => NewsService::DATASET];
+
     private const PER_PAGE_CHOICES = [20, 50, 100];
     private const AUTO_REFRESH_MAX_FEEDS = 3;
     private const AUTO_REFRESH_BUDGET = 8.0;
@@ -90,8 +99,12 @@ final class NewsModule extends AbstractModule
         $r->view('feeds/new', [$this, 'feedNew'], permission: 'create');
         $r->view('feeds/edit/{id}', [$this, 'feedEdit'], permission: 'update');
         $r->view('taxonomy', [$this, 'taxonomy'], permission: 'update');
+        $r->view('trash', [$this, 'trash'], permission: 'delete');
 
         $r->action('filter', [$this, 'filter'], permission: 'open');
+        $r->action('archive-delete', [$this, 'archiveDelete'], permission: 'archive');
+        $r->action('trash-restore', [$this, 'trashRestore'], permission: 'open'); // droit précis revérifié selon le type
+        $r->action('trash-purge', [$this, 'trashPurge'], permission: 'delete');
         $r->action('read', [$this, 'markRead'], permission: 'open');
         $r->action('content-fetch', [$this, 'contentFetch'], permission: 'open');
         $r->action('read-all', [$this, 'readAll'], permission: 'open');
@@ -142,10 +155,33 @@ final class NewsModule extends AbstractModule
         return count($feeds) . ' flux, 3 catégories et 3 centres d’intérêt d’exemple créés (récupération à la première ouverture)';
     }
 
-    /** Rétention : supprime les entrées non archivées plus anciennes que la rétention de leur flux. */
+    /**
+     * Rétention : supprime les entrées non archivées plus anciennes que la rétention de leur flux, puis
+     * purge physiquement les flux et faits archivés en corbeille depuis plus de trash.retention_days.
+     * Un flux en corbeille qui porte encore des faits archivés n'est jamais purgé automatiquement.
+     */
     public function purge(): string
     {
-        return $this->repository()->purgeExpired() . ' entrée(s) d’actualité purgée(s) (archives conservées)';
+        $expired = $this->repository()->purgeExpired();
+        $days = $this->retentionDays();
+        $feeds = 0;
+        $kept = 0;
+        foreach ($this->repository()->expiredTrashFeedIds($days) as $id) {
+            if ($this->repository()->archivedCountForFeed($id) > 0) {
+                $kept++;
+                continue;
+            }
+            $this->repository()->purgeFeed($id);
+            $this->log('news.purge', 'success', 'news_feed:' . $id, 'Flux purgé par la rétention de la corbeille (' . $days . ' jours)');
+            $feeds++;
+        }
+        $archives = 0;
+        foreach ($this->repository()->expiredTrashItemIds($days) as $id) {
+            $this->destroyArchive($id);
+            $this->log('news.purge', 'success', 'news_item:' . $id, 'Fait archivé purgé par la rétention de la corbeille (' . $days . ' jours)');
+            $archives++;
+        }
+        return $expired . ' entrée(s) d’actualité purgée(s) (archives conservées) ; corbeille : ' . $feeds . ' flux et ' . $archives . ' fait(s) archivé(s) purgés (> ' . $days . ' jours)' . ($kept > 0 ? ', ' . $kept . ' flux conservé(s) car porteur(s) de faits archivés' : '');
     }
 
     /**
@@ -330,6 +366,21 @@ final class NewsModule extends AbstractModule
         return ModuleView::make('Actualités · classement')->banner($banner)->content($content)->status('Catégories et centres d’intérêt');
     }
 
+    /** Corbeille du module : flux et faits archivés supprimés depuis moins de N jours. */
+    public function trash(Request $request, array $params): ModuleView
+    {
+        $retention = $this->retentionDays();
+        $rows = $this->trashRows($retention);
+        $content = $this->render('trash', ['rows' => $rows, 'retention' => $retention, 'rights' => $this->rights(['update', 'archive', 'delete'])]);
+        $actions = '<a class="btn btn--ghost" href="#" data-route="feeds">' . $this->icon('globe') . '<span>Flux suivis</span></a><a class="btn btn--ghost" href="#" data-route="archives">' . $this->icon('archive') . '<span>Archives</span></a>';
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-open-module="trash" title="Corbeille globale : tous les modules et les pièces jointes">' . $this->icon('trash') . '<span>Voir toute la corbeille</span></a>';
+        }
+        $subtitle = count($rows) . ' élément' . (count($rows) > 1 ? 's' : '') . ' · purge automatique après ' . $retention . ' jours';
+        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille des actualités', 'subtitle' => $subtitle, 'actions' => $actions]);
+        return ModuleView::make('Actualités · corbeille')->banner($banner)->content($content)->status($subtitle);
+    }
+
     // =====================================================================
     // Actions : lecture, archivage
     // =====================================================================
@@ -411,6 +462,32 @@ final class NewsModule extends AbstractModule
         $this->repository()->unarchive((int) $item['id']);
         $this->log('news.unarchive', 'success', 'news_item:' . $item['id'], 'Archive retirée : ' . $item['title']);
         return ActionResult::ok(null, 'Fait retiré des archives ; il suivra la rétention de son flux.')->navigate('archives');
+    }
+
+    /** Mise en corbeille d'un fait archivé : note, tags, relations et pièces jointes conservés jusqu'à la purge. */
+    public function archiveDelete(Request $request, array $params): ActionResult
+    {
+        $item = $this->requireArchived($this->requireId($request));
+        $this->repository()->softDeleteItem((int) $item['id'], $this->ctx->userId());
+        $this->log('news.archive_delete', 'success', 'news_item:' . $item['id'], 'Fait archivé placé dans la corbeille : ' . $item['title']);
+        return ActionResult::ok(['id' => (int) $item['id']], '« ' . mb_substr((string) $item['title'], 0, 80, 'UTF-8') . ' » placé dans la corbeille.')->navigate('archives');
+    }
+
+    /** Restaure un élément depuis la vue corbeille du module : { id: "feed:3" | "archive:9" }. */
+    public function trashRestore(Request $request, array $params): ActionResult
+    {
+        $id = $request->string('id');
+        $this->restoreTrashItem($id);
+        return ActionResult::ok(['id' => $id], '« ' . $this->trashLabel($id) . ' » restauré.')->refresh();
+    }
+
+    /** Supprime définitivement un élément depuis la vue corbeille du module. */
+    public function trashPurge(Request $request, array $params): ActionResult
+    {
+        $id = $request->string('id');
+        $label = $this->trashLabel($id);
+        $this->purgeTrashItem($id);
+        return ActionResult::ok(['id' => $id], '« ' . $label . ' » supprimé définitivement.')->refresh();
     }
 
     /** Indicateur de la colonne : entrées non lues. */
@@ -498,12 +575,13 @@ final class NewsModule extends AbstractModule
         return ActionResult::ok(['added' => count($added)], count($added) . ' flux ajouté(s) : ' . implode(', ', array_slice($added, 0, 5)) . (count($added) > 5 ? '…' : '') . '. Récupération au prochain passage de la tâche de fond ou via « Tout actualiser ».')->refresh();
     }
 
+    /** Mise en corbeille d'un flux : ses entrées non archivées sont masquées ; ses faits archivés restent consultables. */
     public function feedDelete(Request $request, array $params): ActionResult
     {
         $feed = $this->requireFeed($this->requireId($request));
-        $this->repository()->deleteFeed((int) $feed['id']);
-        $this->log('news.feed_delete', 'success', 'news_feed:' . $feed['id'], 'Flux retiré : ' . $feed['title'], ['url' => $feed['url']]);
-        return ActionResult::ok(null, 'Flux « ' . $feed['title'] . ' » retiré avec ses entrées non archivées.')->refresh();
+        $this->repository()->softDeleteFeed((int) $feed['id'], $this->ctx->userId());
+        $this->log('news.feed_delete', 'success', 'news_feed:' . $feed['id'], 'Flux placé dans la corbeille : ' . $feed['title'], ['url' => $feed['url']]);
+        return ActionResult::ok(null, 'Flux « ' . $feed['title'] . ' » placé dans la corbeille ; ses faits archivés restent consultables.')->refresh();
     }
 
     public function feedToggle(Request $request, array $params): ActionResult
@@ -586,6 +664,73 @@ final class NewsModule extends AbstractModule
     }
 
     // =====================================================================
+    // Corbeille globale (TrashProviderInterface)
+    // =====================================================================
+
+    /**
+     * Éléments en corbeille visibles par l'utilisateur courant. Flux : restauration = update ;
+     * faits archivés : restauration = archive ; suppression définitive = delete dans les deux cas.
+     */
+    public function trashItems(): array
+    {
+        $retention = $this->retentionDays();
+        $canUpdate = $this->can('update');
+        $canArchive = $this->can('archive');
+        $canPurge = $this->can('delete');
+        $items = [];
+        foreach ($this->trashRows($retention) as $row) {
+            $purgeAt = $row['trash_kind'] === 'feed' && (int) $row['archived_count'] > 0 ? null : Clock::parseUtc($row['deleted_at'])?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => $row['trash_id'],
+                'label' => $row['trash_label'],
+                'dataset' => self::TRASH_KINDS[$row['trash_kind']],
+                'deleted_at' => (string) $row['deleted_at'],
+                'deleted_by' => $row['deleted_by'] === null ? null : (int) $row['deleted_by'],
+                'purge_at' => $purgeAt === null ? null : Clock::utc($purgeAt),
+                'can_restore' => $row['trash_kind'] === 'feed' ? $canUpdate : $canArchive,
+                'can_purge' => $canPurge,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        [$kind, $localId] = $this->parseTrashId($id);
+        $this->require($kind === 'feed' ? 'update' : 'archive', null, 'Vous n’avez pas le droit de restaurer cet élément.');
+        $row = $this->findTrashedRow($kind, $localId);
+        if ($row === null) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille des actualités.');
+        }
+        if ($kind === 'feed') {
+            $this->repository()->restoreFeed($localId);
+        } else {
+            $this->repository()->restoreItem($localId);
+        }
+        $this->log('news.restore', 'success', 'news_' . ($kind === 'feed' ? 'feed' : 'item') . ':' . $localId, 'Restauré depuis la corbeille : ' . $row['trash_label']);
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete', null, 'Vous n’avez pas le droit de supprimer définitivement cet élément.');
+        [$kind, $localId] = $this->parseTrashId($id);
+        $row = $this->findTrashedRow($kind, $localId);
+        if ($row === null) {
+            throw new NotFoundException('Cet élément n’est pas dans la corbeille des actualités.');
+        }
+        if ($kind === 'feed') {
+            $archived = $this->repository()->archivedCountForFeed($localId);
+            if ($archived > 0) {
+                throw new ConflictException('Le flux « ' . $row['title'] . ' » porte ' . $archived . ' fait(s) archivé(s) : supprimez-les définitivement (ou restaurez le flux) avant de le purger.');
+            }
+            $this->repository()->purgeFeed($localId);
+        } else {
+            $this->destroyArchive($localId);
+        }
+        $this->log('news.purge', 'success', 'news_' . ($kind === 'feed' ? 'feed' : 'item') . ':' . $localId, 'Supprimé définitivement depuis la corbeille : ' . $row['trash_label']);
+    }
+
+    // =====================================================================
     // Helpers publics (gabarits)
     // =====================================================================
 
@@ -650,6 +795,94 @@ final class NewsModule extends AbstractModule
     // Interne
     // =====================================================================
 
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
+
+    /**
+     * Lignes de la corbeille (flux puis faits archivés), décorées de trash_kind / trash_id / trash_label /
+     * expires_in_days, les plus récemment supprimées d'abord.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function trashRows(int $retention): array
+    {
+        $rows = [];
+        foreach ($this->repository()->trashedFeeds($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('feed', $row);
+        }
+        foreach ($this->repository()->trashedItems($retention) as $row) {
+            $rows[] = $this->decorateTrashRow('archive', $row);
+        }
+        usort($rows, static fn (array $a, array $b): int => strcmp((string) $b['deleted_at'], (string) $a['deleted_at']) ?: strcmp($a['trash_id'], $b['trash_id']));
+        $now = Clock::now();
+        foreach ($rows as &$row) {
+            $deletedAt = Clock::parseUtc($row['deleted_at']);
+            $row['expires_in_days'] = $deletedAt === null ? 0 : max(0, $retention - (int) $deletedAt->diff($now)->days);
+        }
+        unset($row);
+        return $rows;
+    }
+
+    /** @param array<string, mixed> $row @return array<string, mixed> */
+    private function decorateTrashRow(string $kind, array $row): array
+    {
+        $row['trash_kind'] = $kind;
+        $row['trash_id'] = $kind . ':' . $row['id'];
+        $row['archived_count'] = (int) ($row['archived_count'] ?? 0);
+        $row['trash_label'] = $kind === 'feed'
+            ? 'Flux « ' . $row['title'] . ' »'
+            : 'Fait archivé « ' . mb_substr((string) $row['title'], 0, 120, 'UTF-8') . ' » — ' . $row['feed_title'];
+        $row['trash_type'] = $kind === 'feed' ? 'Flux' : 'Fait archivé';
+        return $row;
+    }
+
+    /** @return array{0: string, 1: int} type et identifiant local d'un identifiant « type:id » */
+    private function parseTrashId(string $id): array
+    {
+        $parts = explode(':', trim($id), 2);
+        $kind = $parts[0] ?? '';
+        $localId = (int) ($parts[1] ?? 0);
+        if (!isset(self::TRASH_KINDS[$kind]) || $localId <= 0) {
+            throw new NotFoundException('Identifiant de corbeille invalide.');
+        }
+        return [$kind, $localId];
+    }
+
+    /** @return array<string, mixed>|null ligne en corbeille décorée, ou null */
+    private function findTrashedRow(string $kind, int $localId): ?array
+    {
+        $row = $kind === 'feed' ? $this->repository()->findTrashedFeed($localId) : $this->repository()->findTrashedItem($localId);
+        if ($row === null) {
+            return null;
+        }
+        if ($kind === 'feed') {
+            $row['archived_count'] = $this->repository()->archivedCountForFeed($localId);
+        }
+        return $this->decorateTrashRow($kind, $row);
+    }
+
+    /** Libellé d'un élément en corbeille (messages), ou l'identifiant brut s'il est introuvable. */
+    private function trashLabel(string $id): string
+    {
+        try {
+            [$kind, $localId] = $this->parseTrashId($id);
+        } catch (NotFoundException) {
+            return $id;
+        }
+        return $this->findTrashedRow($kind, $localId)['trash_label'] ?? $id;
+    }
+
+    /** Suppression physique d'un fait archivé en corbeille et retrait du registre commun (tags, relations). */
+    private function destroyArchive(int $id): void
+    {
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->repository()->purgeItem($id);
+            $this->ctx->shared->registry->unregister(NewsService::DATASET, (string) $id);
+        });
+    }
+
     /** @param list<array{status: string, new: int, message: string, feed: array<string, mixed>}> $results */
     private function refreshResult(array $results): ActionResult
     {
@@ -682,7 +915,7 @@ final class NewsModule extends AbstractModule
             $errors['url'] = 'L’adresse ne peut dépasser 500 caractères.';
         }
         if (!isset($errors['url']) && $this->repository()->feedUrlExists($url, $exceptId)) {
-            $errors['url'] = 'Ce flux est déjà suivi.';
+            $errors['url'] = $this->repository()->findTrashedFeedByUrl($url) !== null ? 'Ce flux est dans la corbeille : restaurez-le plutôt que de le recréer.' : 'Ce flux est déjà suivi.';
         }
         $title = $request->string('title');
         if (mb_strlen($title, 'UTF-8') > 250) {

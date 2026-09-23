@@ -87,7 +87,7 @@ final class BudgetService
         return $this->transactions->create($columns, $userId);
     }
 
-    /** Supprime l'opération liée à une référence d'origine (si elle existe). */
+    /** Place dans la corbeille l'opération liée à une référence d'origine (si elle existe) ; restaurable 30 jours. */
     public function removeExternal(int $userId, string $sourceRef): bool
     {
         $existing = $this->transactions->findBySourceRef($sourceRef);
@@ -95,7 +95,7 @@ final class BudgetService
             return false;
         }
         $this->assertAccess($userId, self::DATASET_TRANSACTION, 'delete');
-        return $this->transactions->delete($existing['id']);
+        return $this->transactions->softDelete($existing['id'], $userId);
     }
 
     /** Opération liée à une référence d'origine (champs publics), ou null. @return array{id: int, amount: int, done_at: string, account_name: string, label: string}|null */

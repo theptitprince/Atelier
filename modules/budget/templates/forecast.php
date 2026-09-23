@@ -96,7 +96,7 @@ $minClosing = $projection === [] ? $opening : min(array_column($projection, 'clo
                                     </span>
                                     <?= $module->amountHtml($r['amount']) ?>
                                     <?php if ($isDue && $rights['create']): ?><button type="button" class="btn btn--sm btn--icon" data-action="recurring-post" data-params='{"id":<?= (int) $r['id'] ?>}' title="Poster l’échéance"><?= $module->icon('check') ?></button><?php endif; ?>
-                                    <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="recurring-delete" data-params='{"id":<?= (int) $r['id'] ?>}' data-confirm="Supprimer la récurrence « <?= $e($r['label']) ?> » ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                                    <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="recurring-delete" data-params='{"id":<?= (int) $r['id'] ?>}' data-confirm="Placer la récurrence « <?= $e($r['label']) ?> » dans la corbeille ?" data-danger title="Supprimer (corbeille)"><?= $module->icon('trash') ?></button><?php endif; ?>
                                 </li>
                             <?php endforeach; ?>
                         </ul>

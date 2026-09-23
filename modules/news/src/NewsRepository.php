@@ -10,19 +10,26 @@ use Atelier\Support\Clock;
 /**
  * Accès aux tables du module Actualités : catégories, centres d'intérêt, flux, entrées,
  * correspondances et marques de lecture. Les contrôles de droits sont réalisés par le module.
+ *
+ * Corbeille : un flux (news_feed.deleted_at) ou un fait archivé (news_item.deleted_at) en corbeille
+ * est exclu de toutes les lectures métier ; un flux en corbeille masque ses entrées non archivées
+ * (fil, badge, tâches de fond) mais ses faits archivés restent consultables.
  */
 final class NewsRepository
 {
+    private const ITEM_SELECT = 'SELECT i.*, f.title AS feed_title, f.site_url AS feed_site_url, f.deleted_at AS feed_deleted_at, c.id AS category_id, c.name AS category_name, c.color AS category_color, CASE WHEN r.item_id IS NULL THEN 0 ELSE 1 END AS is_read';
+    private const ITEM_FROM = 'FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id LEFT JOIN news_category c ON c.id = f.category_id LEFT JOIN news_read r ON r.item_id = i.id AND r.user_id = :user';
+
     public function __construct(private readonly Database $db)
     {
     }
 
     // ----- Catégories -----
 
-    /** @return list<array<string, mixed>> avec feed_count */
+    /** @return list<array<string, mixed>> avec feed_count (flux vivants) */
     public function categories(): array
     {
-        return $this->db->select('SELECT c.*, (SELECT COUNT(*) FROM news_feed f WHERE f.category_id = c.id) AS feed_count FROM news_category c ORDER BY c.position, c.name');
+        return $this->db->select('SELECT c.*, (SELECT COUNT(*) FROM news_feed f WHERE f.category_id = c.id AND f.deleted_at IS NULL) AS feed_count FROM news_category c ORDER BY c.position, c.name');
     }
 
     /** @return array<string, mixed>|null */
@@ -96,23 +103,24 @@ final class NewsRepository
 
     // ----- Flux -----
 
-    /** @return list<array<string, mixed>> avec category_name et item_count */
+    /** @return list<array<string, mixed>> flux vivants avec category_name et item_count */
     public function feeds(bool $activeOnly = false): array
     {
         return $this->db->select(
             'SELECT f.*, c.name AS category_name, c.color AS category_color,
-                    (SELECT COUNT(*) FROM news_item i WHERE i.feed_id = f.id) AS item_count
-             FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id'
-            . ($activeOnly ? ' WHERE f.is_active = 1' : '') . ' ORDER BY f.title'
+                    (SELECT COUNT(*) FROM news_item i WHERE i.feed_id = f.id AND i.deleted_at IS NULL) AS item_count
+             FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id WHERE f.deleted_at IS NULL'
+            . ($activeOnly ? ' AND f.is_active = 1' : '') . ' ORDER BY f.title'
         );
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null flux vivant */
     public function findFeed(int $id): ?array
     {
-        return $this->db->selectOne('SELECT f.*, c.name AS category_name FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id WHERE f.id = :id', ['id' => $id]);
+        return $this->db->selectOne('SELECT f.*, c.name AS category_name FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id WHERE f.id = :id AND f.deleted_at IS NULL', ['id' => $id]);
     }
 
+    /** L'adresse est unique en base : un flux en corbeille compte aussi (voir findTrashedFeedByUrl). */
     public function feedUrlExists(string $url, ?int $exceptId = null): bool
     {
         $params = ['u' => $url];
@@ -122,6 +130,12 @@ final class NewsRepository
             $params['id'] = $exceptId;
         }
         return $this->db->scalar($sql, $params) !== null;
+    }
+
+    /** @return array<string, mixed>|null flux en corbeille portant cette adresse */
+    public function findTrashedFeedByUrl(string $url): ?array
+    {
+        return $this->db->selectOne('SELECT * FROM news_feed WHERE url = :u AND deleted_at IS NOT NULL', ['u' => $url]);
     }
 
     /** @param array<string, mixed> $data */
@@ -148,9 +162,55 @@ final class NewsRepository
         $this->db->update('news_feed', ['is_active' => $active ? 1 : 0, 'updated_at' => Clock::utc()], 'id = :id', ['id' => $id]);
     }
 
-    public function deleteFeed(int $id): bool
+    // ----- Flux : corbeille -----
+
+    public function softDeleteFeed(int $id, ?int $userId): bool
     {
-        return $this->db->delete('news_feed', 'id = :id', ['id' => $id]) > 0;
+        return $this->db->update('news_feed', ['deleted_at' => Clock::utc(), 'deleted_by' => $userId], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
+    }
+
+    public function restoreFeed(int $id): bool
+    {
+        return $this->db->update('news_feed', ['deleted_at' => null, 'deleted_by' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'un flux en corbeille ; ses entrées suivent (clé étrangère en cascade). */
+    public function purgeFeed(int $id): bool
+    {
+        return $this->db->delete('news_feed', 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return array<string, mixed>|null */
+    public function findTrashedFeed(int $id): ?array
+    {
+        return $this->db->selectOne('SELECT f.*, c.name AS category_name FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id WHERE f.id = :id AND f.deleted_at IS NOT NULL', ['id' => $id]);
+    }
+
+    /** @return list<array<string, mixed>> flux en corbeille depuis moins de $retentionDays jours, avec archived_count */
+    public function trashedFeeds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return $this->db->select(
+            'SELECT f.*, c.name AS category_name,
+                    (SELECT COUNT(*) FROM news_item i WHERE i.feed_id = f.id AND i.is_archived = 1) AS archived_count,
+                    (SELECT COUNT(*) FROM news_item i WHERE i.feed_id = f.id AND i.is_archived = 0) AS item_count
+             FROM news_feed f LEFT JOIN news_category c ON c.id = f.category_id
+             WHERE f.deleted_at IS NOT NULL AND f.deleted_at >= :l ORDER BY f.deleted_at DESC, f.id DESC',
+            ['l' => $limit]
+        );
+    }
+
+    /** @return list<int> */
+    public function expiredTrashFeedIds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM news_feed WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
+    }
+
+    /** Faits archivés d'un flux, corbeille comprise (un flux qui en porte ne se purge pas). */
+    public function archivedCountForFeed(int $feedId): int
+    {
+        return $this->db->count('SELECT COUNT(*) FROM news_item WHERE feed_id = :f AND is_archived = 1', ['f' => $feedId]);
     }
 
     /**
@@ -226,32 +286,20 @@ final class NewsRepository
     public function paginate(array $filters, int $userId, int $page, int $perPage): array
     {
         [$where, $params] = $this->where($filters, $userId);
-        $from = 'FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id LEFT JOIN news_category c ON c.id = f.category_id LEFT JOIN news_read r ON r.item_id = i.id AND r.user_id = :user';
         $params['user'] = $userId;
-        $total = $this->db->count("SELECT COUNT(*) $from WHERE $where", $params);
+        $total = $this->db->count('SELECT COUNT(*) ' . self::ITEM_FROM . " WHERE $where", $params);
         $perPage = max(1, min(200, $perPage));
         $offset = max(0, ($page - 1) * $perPage);
         $order = !empty($filters['archived']) ? 'i.archived_at DESC, i.id DESC' : 'i.published_at DESC, i.id DESC';
-        $rows = $this->db->select(
-            "SELECT i.*, f.title AS feed_title, f.site_url AS feed_site_url, c.id AS category_id, c.name AS category_name, c.color AS category_color,
-                    CASE WHEN r.item_id IS NULL THEN 0 ELSE 1 END AS is_read
-             $from WHERE $where ORDER BY $order LIMIT $perPage OFFSET $offset",
-            $params
-        );
+        $rows = $this->db->select(self::ITEM_SELECT . ' ' . self::ITEM_FROM . " WHERE $where ORDER BY $order LIMIT $perPage OFFSET $offset", $params);
         $this->attachInterests($rows);
         return ['rows' => $rows, 'total' => $total];
     }
 
-    /** @return array<string, mixed>|null entrée avec flux, catégorie et centres d'intérêt */
+    /** @return array<string, mixed>|null entrée vivante avec flux, catégorie et centres d'intérêt */
     public function findItem(int $id, ?int $userId = null): ?array
     {
-        $row = $this->db->selectOne(
-            'SELECT i.*, f.title AS feed_title, f.site_url AS feed_site_url, c.name AS category_name, c.color AS category_color,
-                    CASE WHEN r.item_id IS NULL THEN 0 ELSE 1 END AS is_read
-             FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id LEFT JOIN news_category c ON c.id = f.category_id
-             LEFT JOIN news_read r ON r.item_id = i.id AND r.user_id = :user WHERE i.id = :id',
-            ['id' => $id, 'user' => $userId ?? 0]
-        );
+        $row = $this->db->selectOne(self::ITEM_SELECT . ' ' . self::ITEM_FROM . ' WHERE i.id = :id AND i.deleted_at IS NULL', ['id' => $id, 'user' => $userId ?? 0]);
         if ($row === null) {
             return null;
         }
@@ -263,7 +311,7 @@ final class NewsRepository
     public function unreadCount(int $userId, ?int $categoryId = null): int
     {
         $params = ['user' => $userId];
-        $sql = 'SELECT COUNT(*) FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 AND f.is_active = 1 AND NOT EXISTS (SELECT 1 FROM news_read r WHERE r.item_id = i.id AND r.user_id = :user)';
+        $sql = 'SELECT COUNT(*) FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 AND i.deleted_at IS NULL AND f.is_active = 1 AND f.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM news_read r WHERE r.item_id = i.id AND r.user_id = :user)';
         if ($categoryId !== null) {
             $sql .= ' AND f.category_id = :c';
             $params['c'] = $categoryId;
@@ -271,11 +319,11 @@ final class NewsRepository
         return $this->db->count($sql, $params);
     }
 
-    /** Nombre d'entrées non archivées par catégorie (clé 0 = sans catégorie). @return array<int, int> */
+    /** Nombre d'entrées non archivées par catégorie (clé 0 = sans catégorie), flux vivants. @return array<int, int> */
     public function countsByCategory(): array
     {
         $counts = [];
-        foreach ($this->db->select('SELECT COALESCE(f.category_id, 0) AS cid, COUNT(*) AS c FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 GROUP BY COALESCE(f.category_id, 0)') as $row) {
+        foreach ($this->db->select('SELECT COALESCE(f.category_id, 0) AS cid, COUNT(*) AS c FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.is_archived = 0 AND i.deleted_at IS NULL AND f.deleted_at IS NULL GROUP BY COALESCE(f.category_id, 0)') as $row) {
             $counts[(int) $row['cid']] = (int) $row['c'];
         }
         return $counts;
@@ -300,7 +348,7 @@ final class NewsRepository
         $filters['archived'] = false;
         [$where, $params] = $this->where($filters, $userId);
         $params['user'] = $userId;
-        $ids = $this->db->select("SELECT i.id FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id LEFT JOIN news_category c ON c.id = f.category_id LEFT JOIN news_read r ON r.item_id = i.id AND r.user_id = :user WHERE $where", $params);
+        $ids = $this->db->select('SELECT i.id ' . self::ITEM_FROM . " WHERE $where", $params);
         $now = Clock::utc();
         $this->db->transaction(function (Database $db) use ($ids, $userId, $now): void {
             foreach ($ids as $row) {
@@ -315,11 +363,11 @@ final class NewsRepository
         $this->db->update('news_item', ['is_archived' => 1, 'archived_at' => Clock::utc(), 'archived_by' => $userId, 'archive_note' => $note], 'id = :id', ['id' => $itemId]);
     }
 
-    /** Entrées dont la copie locale n'a pas encore été tentée, flux avec copie activée, les plus récentes d'abord. @return list<array<string, mixed>> */
+    /** Entrées dont la copie locale n'a pas encore été tentée, flux vivants avec copie activée, les plus récentes d'abord. @return list<array<string, mixed>> */
     public function pendingContent(int $limit): array
     {
         return $this->db->select(
-            'SELECT i.* FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.content_status IS NULL AND i.url IS NOT NULL AND f.fetch_content = 1 AND f.is_active = 1 ORDER BY i.published_at DESC, i.id DESC LIMIT ' . max(1, min(500, $limit))
+            'SELECT i.* FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.content_status IS NULL AND i.url IS NOT NULL AND i.deleted_at IS NULL AND f.fetch_content = 1 AND f.is_active = 1 AND f.deleted_at IS NULL ORDER BY i.published_at DESC, i.id DESC LIMIT ' . max(1, min(500, $limit))
         );
     }
 
@@ -336,7 +384,7 @@ final class NewsRepository
     public function localCopyCounts(): array
     {
         $counts = [];
-        foreach ($this->db->select("SELECT feed_id, COUNT(*) AS c FROM news_item WHERE content_status = 'ok' GROUP BY feed_id") as $row) {
+        foreach ($this->db->select("SELECT feed_id, COUNT(*) AS c FROM news_item WHERE content_status = 'ok' AND deleted_at IS NULL GROUP BY feed_id") as $row) {
             $counts[(int) $row['feed_id']] = (int) $row['c'];
         }
         return $counts;
@@ -352,7 +400,45 @@ final class NewsRepository
         $this->db->update('news_item', ['is_archived' => 0, 'archived_at' => null, 'archived_by' => null, 'archive_note' => null], 'id = :id', ['id' => $itemId]);
     }
 
-    /** Supprime les entrées non archivées plus anciennes que la rétention de leur flux. */
+    // ----- Faits archivés : corbeille -----
+
+    public function softDeleteItem(int $id, ?int $userId): bool
+    {
+        return $this->db->update('news_item', ['deleted_at' => Clock::utc(), 'deleted_by' => $userId], 'id = :id AND is_archived = 1 AND deleted_at IS NULL', ['id' => $id]) > 0;
+    }
+
+    public function restoreItem(int $id): bool
+    {
+        return $this->db->update('news_item', ['deleted_at' => null, 'deleted_by' => null], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'un fait archivé en corbeille (correspondances et marques de lecture en cascade). */
+    public function purgeItem(int $id): bool
+    {
+        return $this->db->delete('news_item', 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return array<string, mixed>|null fait archivé en corbeille (son flux peut l'être aussi) */
+    public function findTrashedItem(int $id): ?array
+    {
+        return $this->db->selectOne('SELECT i.*, f.title AS feed_title, f.deleted_at AS feed_deleted_at FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.id = :id AND i.deleted_at IS NOT NULL', ['id' => $id]);
+    }
+
+    /** @return list<array<string, mixed>> faits archivés en corbeille depuis moins de $retentionDays jours */
+    public function trashedItems(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return $this->db->select('SELECT i.*, f.title AS feed_title, f.deleted_at AS feed_deleted_at FROM news_item i INNER JOIN news_feed f ON f.id = i.feed_id WHERE i.deleted_at IS NOT NULL AND i.deleted_at >= :l ORDER BY i.deleted_at DESC, i.id DESC', ['l' => $limit]);
+    }
+
+    /** @return list<int> */
+    public function expiredTrashItemIds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM news_item WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
+    }
+
+    /** Supprime les entrées non archivées plus anciennes que la rétention de leur flux (flux vivants). */
     public function purgeExpired(): int
     {
         $deleted = 0;
@@ -365,7 +451,7 @@ final class NewsRepository
 
     public function countItems(): int
     {
-        return $this->db->count('SELECT COUNT(*) FROM news_item');
+        return $this->db->count('SELECT COUNT(*) FROM news_item WHERE deleted_at IS NULL');
     }
 
     // ----- Interne -----
@@ -376,7 +462,8 @@ final class NewsRepository
      */
     private function where(array $filters, int $userId): array
     {
-        $where = [!empty($filters['archived']) ? 'i.is_archived = 1' : 'i.is_archived = 0'];
+        // Les faits archivés d'un flux en corbeille restent consultables ; le fil ne montre que les flux vivants.
+        $where = [!empty($filters['archived']) ? 'i.is_archived = 1 AND i.deleted_at IS NULL' : 'i.is_archived = 0 AND i.deleted_at IS NULL AND f.deleted_at IS NULL'];
         $params = [];
         if (!empty($filters['category_id'])) {
             $where[] = 'f.category_id = :category';

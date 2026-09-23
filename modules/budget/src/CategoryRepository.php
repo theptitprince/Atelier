@@ -138,6 +138,23 @@ final class CategoryRepository
         $this->db->update(self::TABLE, ['archived' => $archived, 'updated_at' => $now], 'id = :id OR parent_id = :p', ['id' => $id, 'p' => $id]);
     }
 
+    /**
+     * Données rattachées à une catégorie (corbeille comprise) : la suppression physique est refusée
+     * tant que l'un de ces compteurs n'est pas nul.
+     *
+     * @return array{transactions: int, envelopes: int, recurrings: int, savings: int}
+     */
+    public function usage(int $id): array
+    {
+        return [
+            'transactions' => $this->db->count('SELECT COUNT(*) FROM budget_transaction WHERE category_id = :c', ['c' => $id]),
+            'envelopes' => $this->db->count('SELECT COUNT(*) FROM ' . self::ENVELOPES . ' WHERE category_id = :c', ['c' => $id]),
+            'recurrings' => $this->db->count('SELECT COUNT(*) FROM budget_recurring WHERE category_id = :c', ['c' => $id]),
+            'savings' => $this->db->count('SELECT COUNT(*) FROM budget_saving WHERE category_id = :c', ['c' => $id]),
+        ];
+    }
+
+    /** Suppression physique d'une catégorie sans rattachement (voir usage()). */
     public function delete(int $id): void
     {
         $this->db->delete(self::ENVELOPES, 'category_id = :c', ['c' => $id]);

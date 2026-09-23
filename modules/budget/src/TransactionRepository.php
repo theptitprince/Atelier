@@ -10,33 +10,43 @@ use Atelier\Support\Clock;
 /**
  * Accès à la table budget_transaction : opérations datées à montant signé (négatif = dépense).
  * Les lignes sont retournées avec le nom du compte et le chemin de la catégorie.
+ *
+ * Suppression logique : une opération dont deleted_at est renseigné est en corbeille ; une opération
+ * dont le compte est en corbeille est masquée (listes, soldes, totaux) sans être elle-même supprimée.
+ * Toutes les lectures « métier » appliquent la condition ALIVE ; seules les méthodes de corbeille
+ * (findTrashed, trashed, expiredTrashIds) voient les lignes supprimées.
  */
 final class TransactionRepository
 {
     public const TABLE = 'budget_transaction';
     public const SOURCES = ['manual' => 'Saisie', 'import' => 'Import', 'recurring' => 'Récurrence', 'maintenance' => 'Entretien'];
 
-    private const COLUMNS = 't.id, t.account_id, t.category_id, t.done_at, t.amount, t.label, t.payee, t.notes, t.cleared, t.source, t.source_ref, t.recurring_id, t.import_hash, t.created_by, t.created_at, t.updated_at, a.name AS account_name, c.name AS category_name, c.kind AS category_kind, p.name AS category_parent_name';
+    private const COLUMNS = 't.id, t.account_id, t.category_id, t.done_at, t.amount, t.label, t.payee, t.notes, t.cleared, t.source, t.source_ref, t.recurring_id, t.import_hash, t.created_by, t.created_at, t.updated_at, t.deleted_at, t.deleted_by, a.name AS account_name, a.deleted_at AS account_deleted_at, c.name AS category_name, c.kind AS category_kind, p.name AS category_parent_name';
     private const FROM = ' FROM budget_transaction t INNER JOIN budget_account a ON a.id = t.account_id LEFT JOIN budget_category c ON c.id = t.category_id LEFT JOIN budget_category p ON p.id = c.parent_id';
+    /** Opération vivante sur un compte vivant (alias t et a obligatoires). */
+    private const ALIVE = 't.deleted_at IS NULL AND a.deleted_at IS NULL';
+    /** Jointure minimale pour les agrégats (pas de catégorie). */
+    private const FROM_ALIVE = ' FROM budget_transaction t INNER JOIN budget_account a ON a.id = t.account_id WHERE t.deleted_at IS NULL AND a.deleted_at IS NULL';
 
     public function __construct(private readonly Database $db)
     {
     }
 
-    /** @return array<string, mixed>|null */
+    /** @return array<string, mixed>|null opération vivante */
     public function find(int $id): ?array
     {
-        $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.id = :id', ['id' => $id]);
+        $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.id = :id AND ' . self::ALIVE, ['id' => $id]);
         return $row === null ? null : $this->hydrate($row);
     }
 
-    /** @return array<string, mixed>|null opération créée par un autre module (référence d'origine) */
+    /** @return array<string, mixed>|null opération vivante créée par un autre module (référence d'origine) */
     public function findBySourceRef(string $sourceRef): ?array
     {
-        $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.source_ref = :r', ['r' => $sourceRef]);
+        $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.source_ref = :r AND ' . self::ALIVE . ' ORDER BY t.id DESC', ['r' => $sourceRef]);
         return $row === null ? null : $this->hydrate($row);
     }
 
+    /** Une empreinte d'import reste connue tant que la ligne existe, corbeille comprise (pas de doublon à la restauration). */
     public function hashExists(string $hash): bool
     {
         return $this->db->scalar('SELECT id FROM ' . self::TABLE . ' WHERE import_hash = :h', ['h' => $hash]) !== null;
@@ -66,7 +76,7 @@ final class TransactionRepository
     /** @return list<array<string, mixed>> dernières opérations */
     public function recent(int $limit = 10): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' ORDER BY t.done_at DESC, t.id DESC LIMIT ' . max(1, $limit)));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE ' . self::ALIVE . ' ORDER BY t.done_at DESC, t.id DESC LIMIT ' . max(1, $limit)));
     }
 
     /**
@@ -77,7 +87,7 @@ final class TransactionRepository
     public function sumByCategory(string $from, string $to): array
     {
         $result = [];
-        foreach ($this->db->select('SELECT COALESCE(t.category_id, 0) AS cid, SUM(t.amount) AS s FROM ' . self::TABLE . ' t WHERE t.done_at >= :f AND t.done_at <= :t GROUP BY COALESCE(t.category_id, 0)', ['f' => $from, 't' => $to]) as $row) {
+        foreach ($this->db->select('SELECT COALESCE(t.category_id, 0) AS cid, SUM(t.amount) AS s' . self::FROM_ALIVE . ' AND t.done_at >= :f AND t.done_at <= :t GROUP BY COALESCE(t.category_id, 0)', ['f' => $from, 't' => $to]) as $row) {
             $result[(int) $row['cid']] = (int) $row['s'];
         }
         return $result;
@@ -91,7 +101,7 @@ final class TransactionRepository
     public function sumByMonthAndCategory(string $from, string $to): array
     {
         $result = [];
-        foreach ($this->db->select('SELECT SUBSTR(t.done_at, 1, 7) AS m, COALESCE(t.category_id, 0) AS cid, SUM(t.amount) AS s FROM ' . self::TABLE . ' t WHERE t.done_at >= :f AND t.done_at <= :t GROUP BY SUBSTR(t.done_at, 1, 7), COALESCE(t.category_id, 0)', ['f' => $from, 't' => $to]) as $row) {
+        foreach ($this->db->select('SELECT SUBSTR(t.done_at, 1, 7) AS m, COALESCE(t.category_id, 0) AS cid, SUM(t.amount) AS s' . self::FROM_ALIVE . ' AND t.done_at >= :f AND t.done_at <= :t GROUP BY SUBSTR(t.done_at, 1, 7), COALESCE(t.category_id, 0)', ['f' => $from, 't' => $to]) as $row) {
             $result[(string) $row['m']][(int) $row['cid']] = (int) $row['s'];
         }
         return $result;
@@ -100,32 +110,40 @@ final class TransactionRepository
     /** @return array{income: int, expense: int} totaux d'une période */
     public function totals(string $from, string $to): array
     {
-        $row = $this->db->selectOne('SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0) AS i, COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0) AS e FROM ' . self::TABLE . ' WHERE done_at >= :f AND done_at <= :t', ['f' => $from, 't' => $to]);
+        $row = $this->db->selectOne('SELECT COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END), 0) AS i, COALESCE(SUM(CASE WHEN t.amount < 0 THEN t.amount ELSE 0 END), 0) AS e' . self::FROM_ALIVE . ' AND t.done_at >= :f AND t.done_at <= :t', ['f' => $from, 't' => $to]);
         return ['income' => (int) ($row['i'] ?? 0), 'expense' => (int) ($row['e'] ?? 0)];
     }
 
-    /** Catégorie de la dernière opération portant le même libellé (auto-catégorisation). */
+    /** Catégorie de la dernière opération vivante portant le même libellé (auto-catégorisation). */
     public function guessCategory(string $label): ?int
     {
-        $value = $this->db->scalar('SELECT category_id FROM ' . self::TABLE . ' WHERE ' . $this->db->lower('label') . ' = :l AND category_id IS NOT NULL ORDER BY done_at DESC, id DESC LIMIT 1', ['l' => mb_strtolower(trim($label), 'UTF-8')]);
+        $value = $this->db->scalar('SELECT category_id FROM ' . self::TABLE . ' WHERE ' . $this->db->lower('label') . ' = :l AND category_id IS NOT NULL AND deleted_at IS NULL ORDER BY done_at DESC, id DESC LIMIT 1', ['l' => mb_strtolower(trim($label), 'UTF-8')]);
         return $value === null ? null : (int) $value;
     }
 
     /** @return list<int> années présentes, décroissantes */
     public function years(): array
     {
-        $rows = $this->db->select('SELECT DISTINCT SUBSTR(done_at, 1, 4) AS y FROM ' . self::TABLE . ' ORDER BY y DESC');
+        $rows = $this->db->select('SELECT DISTINCT SUBSTR(t.done_at, 1, 4) AS y' . self::FROM_ALIVE . ' ORDER BY y DESC');
         return array_values(array_filter(array_map(static fn (array $r): int => (int) $r['y'], $rows), static fn (int $y): bool => $y > 0));
     }
 
+    /** Nombre d'opérations vivantes. */
     public function count(): int
     {
-        return $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE);
+        return $this->db->count('SELECT COUNT(*)' . self::FROM_ALIVE);
     }
 
+    /** Opérations rattachées à une catégorie, corbeille comprise (garde-fou de suppression). */
     public function countForCategory(int $categoryId): int
     {
         return $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE . ' WHERE category_id = :c', ['c' => $categoryId]);
+    }
+
+    /** Opérations vivantes d'un compte (masquées si le compte passe en corbeille). */
+    public function countForAccount(int $accountId): int
+    {
+        return $this->db->count('SELECT COUNT(*) FROM ' . self::TABLE . ' WHERE account_id = :a AND deleted_at IS NULL', ['a' => $accountId]);
     }
 
     /** @param array<string, mixed> $data */
@@ -160,27 +178,76 @@ final class TransactionRepository
         }
         $params['set_updated_at'] = Clock::utc();
         $sets[] = 'updated_at = :set_updated_at';
-        return $this->db->execute('UPDATE ' . self::TABLE . ' SET ' . implode(', ', $sets) . ' WHERE id IN (' . $in . ')', $params);
-    }
-
-    public function delete(int $id): bool
-    {
-        return $this->db->delete(self::TABLE, 'id = :id', ['id' => $id]) > 0;
-    }
-
-    /** @param list<int> $ids */
-    public function deleteMany(array $ids): int
-    {
-        if ($ids === []) {
-            return 0;
-        }
-        [$in, $params] = $this->inClause($ids);
-        return $this->db->execute('DELETE FROM ' . self::TABLE . ' WHERE id IN (' . $in . ')', $params);
+        return $this->db->execute('UPDATE ' . self::TABLE . ' SET ' . implode(', ', $sets) . ' WHERE deleted_at IS NULL AND id IN (' . $in . ')', $params);
     }
 
     public function detachCategory(int $categoryId): int
     {
         return $this->db->update(self::TABLE, ['category_id' => null, 'updated_at' => Clock::utc()], 'category_id = :c', ['c' => $categoryId]);
+    }
+
+    // ----- Corbeille -----
+
+    /** Mise en corbeille d'une opération vivante. */
+    public function softDelete(int $id, ?int $userId): bool
+    {
+        return $this->db->update(self::TABLE, ['deleted_at' => Clock::utc(), 'deleted_by' => $userId], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
+    }
+
+    /** @param list<int> $ids @return int nombre d'opérations placées en corbeille */
+    public function softDeleteMany(array $ids, ?int $userId): int
+    {
+        if ($ids === []) {
+            return 0;
+        }
+        [$in, $params] = $this->inClause($ids);
+        $params['deleted_at'] = Clock::utc();
+        $params['deleted_by'] = $userId;
+        return $this->db->execute('UPDATE ' . self::TABLE . ' SET deleted_at = :deleted_at, deleted_by = :deleted_by WHERE deleted_at IS NULL AND id IN (' . $in . ')', $params);
+    }
+
+    public function restore(int $id): bool
+    {
+        return $this->db->update(self::TABLE, ['deleted_at' => null, 'deleted_by' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'une opération en corbeille. */
+    public function purge(int $id): bool
+    {
+        return $this->db->delete(self::TABLE, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return list<int> identifiants de toutes les opérations d'un compte (purge physique du compte) */
+    public function idsForAccount(int $accountId): array
+    {
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE account_id = :a', ['a' => $accountId]));
+    }
+
+    /** Suppression physique de toutes les opérations d'un compte (purge du compte). */
+    public function deleteForAccount(int $accountId): int
+    {
+        return $this->db->delete(self::TABLE, 'account_id = :a', ['a' => $accountId]);
+    }
+
+    /** @return array<string, mixed>|null opération en corbeille (son compte peut l'être aussi) */
+    public function findTrashed(int $id): ?array
+    {
+        $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.id = :id AND t.deleted_at IS NOT NULL', ['id' => $id]);
+        return $row === null ? null : $this->hydrate($row);
+    }
+
+    /** @return list<array<string, mixed>> opérations en corbeille depuis moins de $retentionDays jours */
+    public function trashed(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.deleted_at IS NOT NULL AND t.deleted_at >= :l ORDER BY t.deleted_at DESC, t.id DESC', ['l' => $limit]));
+    }
+
+    /** @return list<int> */
+    public function expiredTrashIds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
     }
 
     /** @param array<string, mixed> $data @return array<string, mixed> */
@@ -206,7 +273,7 @@ final class TransactionRepository
     /** @return array{0: string, 1: array<string, mixed>} */
     private function where(array $criteria): array
     {
-        $where = ['1 = 1'];
+        $where = [self::ALIVE];
         $params = [];
         if (($criteria['account'] ?? 0) > 0) {
             $where[] = 't.account_id = :account';
@@ -265,7 +332,7 @@ final class TransactionRepository
         foreach (['id', 'account_id', 'amount'] as $key) {
             $row[$key] = (int) $row[$key];
         }
-        foreach (['category_id', 'recurring_id', 'created_by'] as $key) {
+        foreach (['category_id', 'recurring_id', 'created_by', 'deleted_by'] as $key) {
             $row[$key] = $row[$key] === null ? null : (int) $row[$key];
         }
         $row['cleared'] = (bool) $row['cleared'];

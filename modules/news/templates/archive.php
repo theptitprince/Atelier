@@ -58,7 +58,8 @@ $id = (int) $item['id'];
                             <button type="submit" class="btn btn--primary"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> Enregistrer</button>
                             <span class="text-muted text-small">Ctrl+S</span>
                             <span class="toolbar__spacer grow"></span>
-                            <button type="button" class="btn btn--outline-danger" data-action="unarchive" data-params='{"id":<?= $id ?>}' data-confirm="Retirer ce fait des archives ? Sa note, ses tags et ses relations seront supprimés ; l’entrée suivra ensuite la rétention de son flux." data-danger><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Désarchiver</button>
+                            <button type="button" class="btn btn--ghost" data-action="unarchive" data-params='{"id":<?= $id ?>}' data-confirm="Retirer ce fait des archives ? Sa note, ses tags et ses relations seront supprimés ; l’entrée suivra ensuite la rétention de son flux." data-danger><svg class="icon" aria-hidden="true"><use href="#i-archive"></use></svg> Désarchiver</button>
+                            <button type="button" class="btn btn--outline-danger" data-action="archive-delete" data-params='{"id":<?= $id ?>}' data-confirm="Placer ce fait archivé dans la corbeille ? Sa note, ses tags, ses relations et ses pièces jointes sont conservés ; restaurable pendant 30 jours." data-danger><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Supprimer</button>
                         </div>
                     </form>
                 <?php else: ?>
