@@ -68,7 +68,8 @@ final class ExplorerQueries
         $total = $this->db->count("SELECT COUNT(*) FROM info_registry r WHERE $whereSql", $params);
         $order = self::SORTS[$sort] ?? self::SORTS['label'];
         $perPage = max(1, min(200, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l’entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             'SELECT r.*, ' . $this->countColumns() . " FROM info_registry r WHERE $whereSql ORDER BY $order LIMIT $perPage OFFSET $offset",
             $params
@@ -154,7 +155,8 @@ final class ExplorerQueries
         $from = 'FROM relations rel INNER JOIN info_registry f ON f.id = rel.from_info INNER JOIN info_registry t ON t.id = rel.to_info';
         $total = $this->db->count("SELECT COUNT(*) $from WHERE $whereSql", $params);
         $perPage = max(1, min(200, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l’entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             "SELECT rel.*, u.username AS creator,
                     f.label AS from_label, f.dataset_code AS from_dataset, f.module_id AS from_module, f.local_key AS from_key,
@@ -216,7 +218,8 @@ final class ExplorerQueries
         $from = 'FROM attachments a INNER JOIN info_registry r ON r.id = a.info_id';
         $totals = $this->db->selectOne("SELECT COUNT(*) AS c, COALESCE(SUM(a.size), 0) AS s $from WHERE $whereSql", $params) ?? ['c' => 0, 's' => 0];
         $perPage = max(1, min(200, $perPage));
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l’entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             "SELECT a.*, u.username AS uploader, r.label AS info_label, r.dataset_code AS info_dataset, r.module_id AS info_module, r.local_key AS info_key
              $from LEFT JOIN users u ON u.id = a.uploaded_by

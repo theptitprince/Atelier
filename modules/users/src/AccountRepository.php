@@ -43,7 +43,8 @@ final class AccountRepository
         [$whereSql, $params] = $this->where($filters);
         $orderBy = $this->orderBy($sort, $direction);
         $total = $this->db->count("SELECT COUNT(*) FROM users u WHERE $whereSql", $params);
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l’entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             "SELECT u.id, u.username, u.display_name, u.email, u.status, u.must_change_password, u.failed_attempts,
                     u.locked_until, u.last_login_at, u.created_at, u.updated_at, u.disabled_at

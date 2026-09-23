@@ -18,6 +18,8 @@ Version de correction issue d’une revue systématique : sécurité, noyau, mod
 - Une réponse contenant de l’UTF-8 invalide provoquait une erreur 500 : l’encodage JSON est tolérant à la frontière HTTP.
 - `backup:restore` sur un nom inexistant créait malgré tout une sauvegarde de sécurité complète ; l’existence est vérifiée d’abord. La console n’affiche plus de trace d’appel pour une erreur d’usage (sauf `--verbose`).
 - Un échec de lecture de la session n’est plus mémorisé comme « non connecté » : l’application signale une indisponibilité de stockage au lieu de déconnecter.
+- Pièces jointes orphelines : la clé étrangère étant `ON DELETE SET NULL`, chaque suppression définitive (page, projet, note, intervention…) laissait ses fichiers en base et sur le disque, sans propriétaire et invisibles. La désinscription du registre les purge, corbeille comprise.
+- Explorateur, Comptes et Démonstration : un numéro de page démesuré débordait le calcul du décalage et donnait une erreur 500, comme dans les sept modules déjà corrigés.
 
 ### Corrections des modules
 - **Budget 1.1.1** : la projection était tronquée à 400 occurrences (une récurrence quotidienne s’arrêtait avant deux ans) ; `Money::parse` refusait le signe moins typographique que `Money::format` produit.

@@ -97,11 +97,13 @@ final class Application
         $this->acl = new AclService($this->db);
         $this->settings = new Settings($this->db);
         $this->modules = new ModuleManager($this->config->path('modules'), $this->config->path('modules_config'), $this->autoloader, $this->config, $this->logger);
+        $attachments = new AttachmentService($this->db, $this->config, $this->config->bool('attachments.encryption', true) ? new FileCrypto($this->config->path('attachments_key')) : null);
         $this->shared = new SharedServices(
-            new InfoRegistry($this->db),
+            // Le registre purge les pièces jointes de l'information qu'il désinscrit.
+            new InfoRegistry($this->db, $attachments),
             new TagService($this->db),
             new RelationService($this->db),
-            new AttachmentService($this->db, $this->config, $this->config->bool('attachments.encryption', true) ? new FileCrypto($this->config->path('attachments_key')) : null),
+            $attachments,
             new DatasetCatalog($this->db, $this->acl),
             new \Atelier\Shared\AttachmentFolderService($this->db),
         );

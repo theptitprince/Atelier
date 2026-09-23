@@ -152,4 +152,35 @@ final class AttachmentServiceTest extends TestCase
         $this->assertSame('en clair', $this->service->contents($record['id']));
         $this->assertTrue($this->service->verify($record['id'])['ok']);
     }
+
+    /**
+     * Non-régression : la clé étrangère des pièces jointes étant ON DELETE SET NULL, la purge
+     * définitive d'une information laissait ses fichiers en base et sur le disque, sans
+     * propriétaire et invisibles dans l'interface.
+     */
+    public function testUnregisteringAnInfoPurgesItsAttachments(): void
+    {
+        $registry = new \Atelier\Shared\InfoRegistry($this->db, $this->service);
+        $infoId = $registry->register('wiki.page', '42', 'Une page', 1);
+        $vivante = $this->service->storeContent('contenu', 'notice.txt', $infoId, 1);
+        $corbeille = $this->service->storeContent('brouillon', 'ancien.txt', $infoId, 1);
+        $this->service->softDelete($corbeille['id']);
+        $chemins = [
+            $this->service->directory() . '/' . $vivante['storage_path'],
+            $this->service->directory() . '/' . $corbeille['storage_path'],
+        ];
+        foreach ($chemins as $chemin) {
+            $this->assertTrue(is_file($chemin));
+        }
+
+        $registry->unregister('wiki.page', '42');
+
+        $this->assertNull($registry->find('wiki.page', '42'));
+        $this->assertNull($this->service->find($vivante['id'], true), 'la pièce jointe vivante est purgée');
+        $this->assertNull($this->service->find($corbeille['id'], true), 'celle en corbeille aussi');
+        foreach ($chemins as $chemin) {
+            $this->assertFalse(is_file($chemin), 'le fichier ne doit plus être sur le disque : ' . $chemin);
+        }
+        $this->assertSame(0, $this->db->count('SELECT COUNT(*) FROM attachments'));
+    }
 }
