@@ -77,7 +77,8 @@ final class ItemRepository
     {
         [$where, $params] = $this->whereClause($criteria);
         $total = $this->db->count('SELECT COUNT(*) FROM demo_item' . $where, $params);
-        $offset = max(0, ($page - 1) * $perPage);
+        // Garde-fou : un numéro de page démesuré déborderait l’entier et rendrait la clause OFFSET invalide.
+        $offset = max(0, (min($page, 1000000) - 1) * $perPage);
         $rows = $this->db->select(
             'SELECT * FROM demo_item' . $where . $this->orderClause($sort, $direction) . ' LIMIT ' . $perPage . ' OFFSET ' . $offset,
             $params

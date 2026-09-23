@@ -15,7 +15,7 @@ use Atelier\Support\Str;
  */
 final class InfoRegistry
 {
-    public function __construct(private readonly Database $db)
+    public function __construct(private readonly Database $db, private readonly ?AttachmentService $attachments = null)
     {
     }
 
@@ -63,9 +63,25 @@ final class InfoRegistry
     }
 
     /** Supprime l'entrée (et par cascade ses tags, relations ; les pièces jointes sont détachées). */
+    /**
+     * Retire définitivement une information du registre, avec ses pièces jointes.
+     *
+     * La clé étrangère des pièces jointes est ON DELETE SET NULL : sans cette purge, chaque
+     * suppression définitive (page, projet, note, intervention…) laissait des fichiers sans
+     * propriétaire, invisibles dans l'interface et jamais effacés du disque.
+     */
     public function unregister(string $datasetCode, string $localKey): void
     {
-        $this->db->delete('info_registry', 'dataset_code = :d AND local_key = :k', ['d' => $datasetCode, 'k' => $localKey]);
+        $info = $this->find($datasetCode, $localKey);
+        if ($info === null) {
+            return;
+        }
+        if ($this->attachments !== null) {
+            foreach ($this->attachments->allFor((string) $info['id']) as $attachment) {
+                $this->attachments->purge((string) $attachment['id']);
+            }
+        }
+        $this->db->delete('info_registry', 'id = :id', ['id' => $info['id']]);
     }
 
     /**

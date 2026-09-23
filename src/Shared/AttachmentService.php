@@ -189,6 +189,17 @@ final class AttachmentService
         return $this->db->select($this->selectSql() . ' WHERE a.info_id = :i AND a.deleted_at IS NULL ORDER BY a.created_at DESC', ['i' => $infoId]);
     }
 
+    /**
+     * Toutes les pièces jointes d'une information, y compris celles en corbeille.
+     * Utilisé par la purge définitive : rien ne doit subsister sur le disque.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function allFor(string $infoId): array
+    {
+        return $this->db->select('SELECT id FROM attachments WHERE info_id = :i', ['i' => $infoId]);
+    }
+
     public function countFor(string $infoId): int
     {
         return $this->db->count('SELECT COUNT(*) FROM attachments WHERE info_id = :i AND deleted_at IS NULL', ['i' => $infoId]);
