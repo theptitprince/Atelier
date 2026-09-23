@@ -50,10 +50,35 @@ final class AttachmentsModuleTest extends TestCase
 
     private function upload(string $name, string $content, array $post = []): Request
     {
-        $file = $this->tmp . '/' . bin2hex(random_bytes(4)) . '.tmp';
-        file_put_contents($file, $content);
-        $files = ['files' => ['name' => [$name], 'type' => ['application/octet-stream'], 'tmp_name' => [$file], 'error' => [UPLOAD_ERR_OK], 'size' => [strlen($content)]]];
-        return new Request('POST', '/m/attachments/upload', [], $post, $files, [], $this->headers(), ['REMOTE_ADDR' => '127.0.0.1']);
+        return $this->uploadMany([$name => $content], $post);
+    }
+
+    /** @param array<string, string> $files nom => contenu */
+    private function uploadMany(array $files, array $post = []): Request
+    {
+        $entry = ['name' => [], 'type' => [], 'tmp_name' => [], 'error' => [], 'size' => []];
+        foreach ($files as $name => $content) {
+            $file = $this->tmp . '/' . bin2hex(random_bytes(4)) . '.tmp';
+            file_put_contents($file, $content);
+            $entry['name'][] = $name;
+            $entry['type'][] = 'application/octet-stream';
+            $entry['tmp_name'][] = $file;
+            $entry['error'][] = UPLOAD_ERR_OK;
+            $entry['size'][] = strlen($content);
+        }
+        return new Request('POST', '/m/attachments/upload', [], $post, ['files' => $entry], [], $this->headers(), ['REMOTE_ADDR' => '127.0.0.1']);
+    }
+
+    private function post(string $route, array $data): \Atelier\Http\Response
+    {
+        return $this->app->handle(Request::create('POST', '/m/attachments/' . $route, [], $data, $this->headers()));
+    }
+
+    private function view(string $route, array $query = []): string
+    {
+        $response = $this->app->handle(Request::create('GET', '/m/attachments/' . $route, $query, [], $this->headers()));
+        $this->assertSame(200, $response->status(), $response->body());
+        return (string) $response->decodedJson()['data']['content'];
     }
 
     public function testUploadEncryptsAndOwnerDownloadsDecrypted(): void
@@ -170,5 +195,169 @@ final class AttachmentsModuleTest extends TestCase
         $sheet = $this->app->handle(Request::create('GET', '/m/geo/show/' . $pointId, [], [], $this->headers()))->decodedJson()['data']['content'];
         $this->assertStringContains('plan.txt', $sheet);
         $this->assertStringContains('/files/' . $response->decodedJson()['data']['files'][0]['id'], $sheet);
+    }
+
+    public function testDisplayLabelIsAppliedAndSuffixedForMultipleFiles(): void
+    {
+        $this->login('alice');
+        $attachments = $this->app->shared->attachments;
+
+        // Un seul fichier : nom d'affichage appliqué tel quel ; le téléchargement garde le nom d'origine.
+        $response = $this->app->handle($this->upload('scan-0001.txt', 'contenu', ['label' => '  Facture   EDF ']));
+        $this->assertSame(200, $response->status(), $response->body());
+        $id = $response->decodedJson()['data']['files'][0]['id'];
+        $record = $attachments->find($id);
+        $this->assertSame('Facture EDF', $record['label']);
+        $this->assertSame('Facture EDF', $attachments::displayName($record));
+        $this->assertSame('scan-0001.txt', $record['original_name']);
+        $download = $this->app->handle(Request::create('GET', '/m/attachments/download/' . $id, [], [], $this->headers()));
+        $this->assertStringContains('filename="scan-0001.txt"', (string) $download->header('Content-Disposition'));
+        $this->assertStringContains('Facture EDF', $this->view('list'));
+        $show = $this->view('show/' . $id);
+        $this->assertStringContains('Facture EDF', $show);
+        $this->assertStringContains('scan-0001.txt', $show, 'le nom d’origine reste visible sur la fiche');
+
+        // Le fichier est inscrit au registre commun sous attachments.file avec son nom d'affichage.
+        $info = $this->app->shared->registry->find('attachments.file', $id);
+        $this->assertNotNull($info);
+        $this->assertSame('Facture EDF', $info['label']);
+
+        // Renommage : label modifié, puis effacé (champ transmis vide), puis conservé (champ absent).
+        $this->assertSame(200, $this->post('rename', ['id' => $id, 'name' => 'scan-0001.txt', 'label' => 'Facture EDF 2026'])->status());
+        $this->assertSame('Facture EDF 2026', $attachments->find($id)['label']);
+        $this->assertSame('Facture EDF 2026', $this->app->shared->registry->find('attachments.file', $id)['label']);
+        $this->assertSame(200, $this->post('rename', ['id' => $id, 'name' => 'scan-0001.txt'])->status());
+        $this->assertSame('Facture EDF 2026', $attachments->find($id)['label'], 'sans champ label, le nom d’affichage est conservé');
+        $this->assertSame(200, $this->post('rename', ['id' => $id, 'name' => 'scan-0001.txt', 'label' => ''])->status());
+        $this->assertNull($attachments->find($id)['label']);
+        $this->assertSame('scan-0001.txt', $this->app->shared->registry->find('attachments.file', $id)['label']);
+        $this->assertSame(422, $this->post('rename', ['id' => $id, 'name' => 'scan-0001.txt', 'label' => str_repeat('x', 201)])->status());
+
+        // Plusieurs fichiers dans un même envoi : nom suffixé d'un numéro d'ordre.
+        $response = $this->app->handle($this->uploadMany(['a.txt' => 'aaa', 'b.txt' => 'bbb'], ['label' => 'Rapport']));
+        $this->assertSame(200, $response->status(), $response->body());
+        $files = $response->decodedJson()['data']['files'];
+        $this->assertSame('Rapport (1)', $attachments->find($files[0]['id'])['label']);
+        $this->assertSame('Rapport (2)', $attachments->find($files[1]['id'])['label']);
+    }
+
+    public function testTagsOnFiles(): void
+    {
+        $this->login('alice');
+        $response = $this->app->handle($this->upload('contrat.txt', 'contrat', ['tags' => 'Urgent, #edf, urgent, ']));
+        $this->assertSame(200, $response->status(), $response->body());
+        $id = $response->decodedJson()['data']['files'][0]['id'];
+        $infoId = $this->app->shared->registry->find('attachments.file', $id)['id'];
+        $names = array_map(static fn (array $t): string => $t['name'], $this->app->shared->tags->tagsOf($infoId));
+        $this->assertSame(['edf', 'Urgent'], $names, 'tags dédoublonnés, # retiré');
+
+        // Filtre par tag et puces cliquables
+        $this->assertStringContains('contrat.txt', $this->view('list', ['tag' => 'edf']));
+        $this->assertStringContains('contrat.txt', $this->view('list', ['tag' => 'URGENT']), 'filtre insensible à la casse');
+        $this->assertFalse(str_contains($this->view('list', ['tag' => 'inconnu']), 'contrat.txt'));
+        $list = $this->view('list');
+        $this->assertStringContains('data-route="list?tag=edf"', $list);
+        $this->assertStringContains('edf (1)', $list, 'le filtre « Tag » liste les tags portés par des fichiers');
+        $this->assertStringContains('data-tags-input', $this->view('show/' . $id));
+        $this->assertStringContains('data-tags-input', $this->view('upload'));
+
+        // Remplacement depuis la fiche
+        $this->assertSame(200, $this->post('tags-save', ['id' => $id, 'tags' => 'archive'])->status());
+        $names = array_map(static fn (array $t): string => $t['name'], $this->app->shared->tags->tagsOf($infoId));
+        $this->assertSame(['archive'], $names);
+        $this->assertSame(422, $this->post('tags-save', ['id' => $id, 'tags' => str_repeat('x', 61)])->status());
+        $this->assertSame(200, $this->post('tags-save', ['id' => $id, 'tags' => ''])->status());
+        $this->assertSame([], $this->app->shared->tags->tagsOf($infoId));
+
+        // Un fichier antérieur (non inscrit) est inscrit au premier besoin
+        $this->app->shared->registry->unregister('attachments.file', $id);
+        $this->assertSame(200, $this->post('tags-save', ['id' => $id, 'tags' => 'retard'])->status());
+        $this->assertNotNull($this->app->shared->registry->find('attachments.file', $id));
+
+        // Un fichier ne peut pas être rattaché à un autre fichier ; Bob ne gère pas les tags d'Alice
+        $other = $this->app->handle($this->upload('autre.txt', 'autre contenu'))->decodedJson()['data']['files'][0]['id'];
+        $fileInfo = $this->app->shared->registry->find('attachments.file', $other)['id'];
+        $this->assertSame(422, $this->post('link', ['id' => $id, 'info_id' => $fileInfo])->status());
+        $this->login('bob');
+        $this->assertSame(403, $this->post('tags-save', ['id' => $id, 'tags' => 'pirate'])->status());
+    }
+
+    public function testVirtualFoldersLifecycle(): void
+    {
+        $this->login('alice');
+        $attachments = $this->app->shared->attachments;
+        $folders = $this->app->shared->folders;
+
+        // Création d'un dossier et d'un sous-dossier
+        $response = $this->post('folder-create', ['name' => 'Factures', 'parent_id' => '']);
+        $this->assertSame(200, $response->status(), $response->body());
+        $factures = (int) $response->decodedJson()['data']['id'];
+        $this->assertSame('list?folder=' . $factures, $response->decodedJson()['directives']['navigate'] ?? null);
+        $response = $this->post('folder-create', ['name' => '2026', 'parent_id' => $factures]);
+        $this->assertSame(200, $response->status(), $response->body());
+        $sub = (int) $response->decodedJson()['data']['id'];
+        $this->assertSame('/Factures/2026', $response->decodedJson()['data']['path']);
+        $this->assertSame(422, $this->post('folder-create', ['name' => '2026', 'parent_id' => $factures])->status(), 'doublon refusé');
+        $this->assertSame(422, $this->post('folder-create', ['name' => 'X', 'parent_id' => 999999])->status());
+
+        // Téléversement direct dans le sous-dossier, avec nom et tags
+        $response = $this->app->handle($this->upload('edf.txt', 'edf', ['label' => 'EDF janvier', 'tags' => 'edf', 'folder_id' => $sub]));
+        $this->assertSame(200, $response->status(), $response->body());
+        $id = $response->decodedJson()['data']['files'][0]['id'];
+        $this->assertSame($sub, (int) $attachments->find($id)['folder_id']);
+        $this->assertSame(422, $this->app->handle($this->upload('x.txt', 'x', ['folder_id' => 999999]))->status());
+
+        // Listes : dossier courant, non rangés, tout ; fil d'Ariane et arbre
+        $inFolder = $this->view('list', ['folder' => (string) $sub]);
+        $this->assertStringContains('EDF janvier', $inFolder);
+        $this->assertStringContains('Factures', $inFolder);
+        $this->assertStringContains('aria-current="page"', $inFolder);
+        $this->assertFalse(str_contains($this->view('list', ['folder' => 'root']), 'EDF janvier'));
+        $this->assertFalse(str_contains($this->view('list', ['folder' => (string) $factures]), 'EDF janvier'), 'un dossier ne montre pas les fichiers de ses sous-dossiers');
+        $all = $this->view('list');
+        $this->assertStringContains('EDF janvier', $all);
+        $this->assertStringContains('data-route="list?folder=' . $sub . '"', $all);
+        $this->assertStringContains('Déplacer vers', $all);
+        $this->assertStringContains('option value="' . $sub . '" selected', $this->view('upload', ['folder' => (string) $sub]), 'dossier courant présélectionné au téléversement');
+        $this->assertSame(404, $this->app->handle(Request::create('GET', '/m/attachments/list', ['folder' => '999999'], [], $this->headers()))->status());
+
+        // Renommage et déplacement du dossier
+        $this->assertSame(200, $this->post('folder-rename', ['id' => $sub, 'name' => '2026-T1'])->status());
+        $this->assertSame('/Factures/2026-T1', $folders->find($sub)['path']);
+        $this->assertSame(200, $this->post('folder-move', ['id' => $sub, 'parent_id' => ''])->status());
+        $this->assertSame('/2026-T1', $folders->find($sub)['path']);
+        $this->assertSame(422, $this->post('folder-move', ['id' => $factures, 'parent_id' => $factures])->status());
+        $this->assertSame(200, $this->post('folder-move', ['id' => $sub, 'parent_id' => $factures])->status());
+
+        // Déplacement du fichier : à la racine (fiche), puis en masse vers le sous-dossier (liste)
+        $this->assertSame(200, $this->post('move', ['id' => $id, 'folder_id' => ''])->status());
+        $this->assertNull($attachments->find($id)['folder_id']);
+        $this->assertStringContains('EDF janvier', $this->view('list', ['folder' => 'root']));
+        $response = $this->post('move', ['ids' => [$id], 'folder_id' => $sub]);
+        $this->assertSame(200, $response->status(), $response->body());
+        $this->assertSame(1, $response->decodedJson()['data']['moved']);
+        $this->assertSame($sub, (int) $attachments->find($id)['folder_id']);
+        $this->assertSame(422, $this->post('move', ['ids' => [], 'folder_id' => $sub])->status());
+
+        // Bob ne peut ni déplacer le fichier d'Alice ni le voir dans le dossier
+        $this->login('bob');
+        $this->assertSame(403, $this->post('move', ['id' => $id, 'folder_id' => ''])->status());
+        $this->assertFalse(str_contains($this->view('list', ['folder' => (string) $sub]), 'EDF janvier'));
+        $this->assertSame($sub, (int) $attachments->find($id)['folder_id']);
+
+        // Suppression du sous-dossier : le fichier remonte dans « Factures » ; puis du parent : à la racine
+        $this->login('alice');
+        $response = $this->post('folder-delete', ['id' => $sub]);
+        $this->assertSame(200, $response->status(), $response->body());
+        $this->assertStringContains('1 fichier(s) remonté(s) dans « /Factures »', $response->decodedJson()['message']);
+        $this->assertSame('list?folder=' . $factures, $response->decodedJson()['directives']['navigate'] ?? null);
+        $this->assertNull($folders->find($sub));
+        $this->assertSame($factures, (int) $attachments->find($id)['folder_id']);
+        $response = $this->post('folder-delete', ['id' => $factures]);
+        $this->assertSame(200, $response->status());
+        $this->assertStringContains('la racine', $response->decodedJson()['message']);
+        $this->assertNull($attachments->find($id)['folder_id']);
+        $this->assertSame(404, $this->post('folder-delete', ['id' => $factures])->status());
+        $this->assertSame('edf', $this->app->handle(Request::create('GET', '/m/attachments/download/' . $id, [], [], $this->headers()))->streamToString());
     }
 }
