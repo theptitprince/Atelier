@@ -28,6 +28,13 @@ final class TrashModule extends AbstractModule
 
     private ?TrashAggregator $aggregator = null;
 
+    /** Un agrégateur (et son cache) par requête : indispensable quand une même instance sert plusieurs requêtes (tests). */
+    public function boot(\Atelier\Modules\ModuleContext $context): void
+    {
+        parent::boot($context);
+        $this->aggregator = null;
+    }
+
     public function routes(RouteCollection $r): void
     {
         $r->view('list', [$this, 'list'], permission: 'open');

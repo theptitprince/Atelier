@@ -56,6 +56,14 @@ final class Migrator
             }
         }
         usort($migrations, static fn (array $a, array $b): int => $a['version'] <=> $b['version']);
+        // Deux fichiers de même numéro seraient appliqués une fois et ignorés ensuite : erreur explicite.
+        $seen = [];
+        foreach ($migrations as $migration) {
+            if (isset($seen[$migration['version']])) {
+                throw new RuntimeException(sprintf('Migrations en doublon pour la version %03d dans %s : %s et %s.', $migration['version'], $directory, basename($seen[$migration['version']]), basename($migration['file'])));
+            }
+            $seen[$migration['version']] = $migration['file'];
+        }
         return $migrations;
     }
 
