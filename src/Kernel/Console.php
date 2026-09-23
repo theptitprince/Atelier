@@ -76,7 +76,10 @@ final class Console
             return is_int($result) ? $result : 0;
         } catch (Throwable $e) {
             $this->error($e->getMessage());
-            if ($this->app->config->isDebug()) {
+            // Une erreur d'utilisation (argument invalide, ressource absente) n'affiche pas de trace :
+            // elle est déjà expliquée par son message. La trace reste utile pour un incident réel.
+            $expected = $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException || $e instanceof \Atelier\Error\AtelierException;
+            if (!$expected || $this->hasOption('verbose')) {
                 $this->line($e->getTraceAsString());
             }
             return 1;
@@ -322,6 +325,12 @@ final class Console
             return 1;
         }
         $backup = Backup::forApplication($this->app);
+        // La sauvegarde demandée est vérifiée avant de créer la sauvegarde de sécurité : une faute
+        // de frappe ne doit pas copier la base et les pièces jointes pour rien.
+        if (!is_dir($backup->directory() . '/' . basename($name)) || !is_file($backup->directory() . '/' . basename($name) . '/atelier.sqlite')) {
+            $this->error('Sauvegarde introuvable : ' . $name . '. Utilisez backup:list pour voir les sauvegardes disponibles.');
+            return 1;
+        }
         $safety = $backup->create('avant-restauration');
         $this->line('  Sauvegarde de sécurité : ' . $safety);
         $report = $backup->restore($name);

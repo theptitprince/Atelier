@@ -45,10 +45,12 @@ final class Auth
         if ($this->resolved) {
             return $this->user;
         }
-        $this->resolved = true;
-
+        // La résolution n'est mémorisée qu'une fois aboutie : si la lecture du compte échoue
+        // (stockage indisponible), l'exception doit remonter à chaque appel plutôt que de faire
+        // passer l'utilisateur pour non connecté.
         $userId = $this->session->get(self::KEY_USER);
         if (!is_int($userId)) {
+            $this->resolved = true;
             return null;
         }
 
@@ -58,15 +60,18 @@ final class Auth
         if ($now - $lastActivity > $this->config->int('session.idle_timeout', 3600)) {
             $this->expiryReason = 'idle';
             $this->clearSession();
+            $this->resolved = true;
             return null;
         }
         if ($now - $loginAt > $this->config->int('session.absolute_timeout', 43200)) {
             $this->expiryReason = 'absolute';
             $this->clearSession();
+            $this->resolved = true;
             return null;
         }
 
         $user = $this->users->find($userId);
+        $this->resolved = true;
         if ($user === null || $user['status'] !== 'active') {
             $this->clearSession();
             return null;
