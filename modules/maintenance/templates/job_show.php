@@ -117,7 +117,7 @@ $stateClass = match ($job['state']['code']) { 'overdue', 'due' => 'alert--error'
                                         <td><?= $log['performed_by'] !== null ? $e($log['performed_by']) : $dash ?></td>
                                         <td class="col-actions"><span class="table-actions">
                                             <?php if ($rights['update']): ?><a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="log/<?= (int) $log['id'] ?>/edit" title="Modifier, joindre une facture"><?= $module->icon('edit') ?></a><?php endif; ?>
-                                            <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="log-delete" data-params='{"id":<?= (int) $log['id'] ?>}' data-confirm="Supprimer cette réalisation de l’historique ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                                            <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="log-delete" data-params='{"id":<?= (int) $log['id'] ?>}' data-confirm="Mettre cette intervention à la corbeille ?" data-danger title="Mettre à la corbeille"><?= $module->icon('trash') ?></button><?php endif; ?>
                                         </span></td>
                                     </tr>
                                 <?php endforeach; ?>

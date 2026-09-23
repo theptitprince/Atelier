@@ -1,8 +1,8 @@
 {
   "id": "maintenance",
   "name": "Entretien",
-  "version": "1.1.0",
-  "description": "GMAO domestique : équipements (voiture, chaudière…), tâches d’entretien planifiées, pannes, rappels anticipés, fiches d’intervention et historique",
+  "version": "1.2.0",
+  "description": "GMAO domestique : équipements (voiture, chaudière…), tâches d’entretien planifiées, pannes, rappels anticipés, fiches d’intervention, historique avec documents joints et corbeille",
   "author": "Atelier",
   "icon": "tool",
   "group": "tools",
@@ -22,7 +22,7 @@
     { "id": "job-new", "label": "Nouvelle tâche", "route": "job/new", "order": 1, "permission": "create", "icon": "plus", "description": "Planifier un entretien", "parent": "jobs" },
     { "id": "defects", "label": "Pannes et défauts", "route": "defects", "order": 4, "permission": "open", "icon": "warning", "description": "Défauts constatés à corriger (interventions non planifiées)" },
     { "id": "history", "label": "Historique", "route": "history", "order": 5, "permission": "open", "icon": "activity", "description": "Interventions réalisées, coûts, factures jointes" },
-    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 6, "permission": "delete", "icon": "trash", "description": "Équipements supprimés, restauration" }
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 6, "permission": "delete", "icon": "trash", "description": "Équipements, tâches et interventions supprimés : restauration ou suppression définitive" }
   ],
   "resources": [
     { "path": "action/export", "label": "Export CSV et calendrier", "kind": "action", "permissions": ["export"], "description": "Exporter l’historique au format CSV et les rappels au format iCalendar" }

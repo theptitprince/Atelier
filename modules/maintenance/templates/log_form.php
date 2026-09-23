@@ -1,7 +1,8 @@
 <?php
 /**
  * Enregistrement / modification d'une intervention réalisée. À la création depuis une tâche, la tâche
- * est replanifiée (ou clôturée) et le compteur de l'équipement mis à jour.
+ * est replanifiée (ou clôturée) et le compteur de l'équipement mis à jour. Les documents (facture, photos)
+ * se déposent dès la création (champ files[] du formulaire, envoi multipart) puis depuis le panneau latéral.
  * @var array<string, mixed> $log
  * @var bool $isNew
  * @var array<string, mixed>|null $job tâche d'origine
@@ -116,6 +117,19 @@ $lockedJob = $job !== null && $isNew;
                         <textarea class="textarea" id="ml-notes" name="notes" rows="6" maxlength="20000" data-editor="bbcode" placeholder="Ce qui a été fait, pièces remplacées, observations, prochaine fois…"><?= $e($log['notes'] ?? '') ?></textarea>
                         <span class="field__error"></span>
                     </div>
+                    <?php if ($isNew): ?>
+                        <div class="field field--full">
+                            <label class="field__label" for="ml-files"><?= $module->icon('paperclip', 'icon--sm') ?> Documents à joindre</label>
+                            <input class="input" type="file" id="ml-files" name="files[]" multiple>
+                            <span class="field__help">Facture, ticket, photos… Plusieurs fichiers possibles ; ils seront rattachés à l’intervention dès son enregistrement.</span>
+                            <span class="field__error"></span>
+                        </div>
+                        <div class="field field--full">
+                            <label class="field__label" for="ml-files-desc">Description des documents</label>
+                            <input class="input" type="text" id="ml-files-desc" name="files_description" maxlength="500" placeholder="Facture garage Martin, photo avant/après… — facultatif">
+                            <span class="field__error"></span>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <div class="form-actions form-actions--end">
                     <a class="btn btn--ghost" href="#" data-route="<?= $job !== null ? 'job/' . (int) $job['id'] : ($assetId > 0 ? 'asset/' . $assetId : 'history') ?>">Annuler</a>
@@ -141,7 +155,7 @@ $lockedJob = $job !== null && $isNew;
                     <div class="card__body">
                         <ul class="mb-0">
                             <li>L’intervention apparaît dans l’historique de l’équipement et dans l’historique global.</li>
-                            <li>Vous pourrez joindre la facture ou des photos depuis la ligne de l’historique (icône <?= $module->icon('edit', 'icon--sm') ?>).</li>
+                            <li>Les documents choisis ci-contre sont joints immédiatement ; vous pourrez en ajouter à tout moment depuis l’historique (dépliant « documents ») ou la fiche de l’intervention (icône <?= $module->icon('edit', 'icon--sm') ?>).</li>
                             <li>Le coût alimente le total des 12 derniers mois du tableau de bord.</li>
                         </ul>
                     </div>

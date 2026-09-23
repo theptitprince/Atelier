@@ -30,3 +30,10 @@
 .module-maintenance .maintenance__description { white-space: normal; }
 .module-maintenance .maintenance__attach-form .input[type="file"] { padding: 3px; }
 .module-maintenance details > summary { cursor: pointer; }
+
+/* Historique : dépliant des documents d'une intervention (liste, téléchargement, dépôt) */
+.module-maintenance .maintenance__docs { margin-top: 4px; }
+.module-maintenance .maintenance__docs > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 4px; }
+.module-maintenance .maintenance__docs > summary::-webkit-details-marker { display: none; }
+.module-maintenance .maintenance__docs[open] > summary { margin-bottom: 6px; }
+.module-maintenance .maintenance__docs-body { min-width: 320px; max-width: 560px; padding: 8px 10px; border: 1px solid var(--c-border); border-radius: var(--radius, 6px); background: var(--c-surface-2); white-space: normal; }
