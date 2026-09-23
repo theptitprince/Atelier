@@ -227,9 +227,21 @@ final class MaintenanceModuleTest extends TestCase
         // Clôture / réouverture / suppression : l'historique est conservé.
         $this->assertSame(200, $this->post('job-close', ['id' => $ct])['_status']);
         $this->assertSame(200, $this->post('job-reopen', ['id' => $ct])['_status']);
-        $this->assertSame(200, $this->post('job-delete', ['id' => $vidange])['_status']);
-        $this->assertNull($this->app->shared->registry->find('maintenance.job', (string) $vidange));
+        $deleted = $this->post('job-delete', ['id' => $vidange]);
+        $this->assertSame(200, $deleted['_status']);
+        $this->assertStringContains('corbeille', $deleted['message']);
+        // Suppression logique (1.2.0) : la tâche disparaît des listes mais reste inscrite au registre jusqu'à la purge.
+        $this->assertNotNull($this->app->shared->registry->find('maintenance.job', (string) $vidange));
+        $this->assertSame(404, $this->view('job/' . $vidange)['_status']);
+        $this->assertFalse(str_contains($this->view('jobs')['data']['content'], 'Vidange'), 'la tâche en corbeille disparaît de la liste');
         $this->assertStringContains('Vidange', $this->view('history')['data']['content']);
+        $this->assertStringContains('Vidange', $this->view('trash')['data']['content']);
+        $this->assertSame(200, $this->post('trash-restore', ['id' => 'job:' . $vidange])['_status']);
+        $this->assertSame(200, $this->view('job/' . $vidange)['_status']);
+        $this->post('job-delete', ['id' => $vidange]);
+        $this->assertSame(200, $this->post('trash-purge', ['id' => 'job:' . $vidange])['_status']);
+        $this->assertNull($this->app->shared->registry->find('maintenance.job', (string) $vidange));
+        $this->assertStringContains('Vidange', $this->view('history')['data']['content'], 'les interventions de la tâche purgée restent dans l’historique');
     }
 
     public function testAttachmentsOnAssetJobAndLog(): void

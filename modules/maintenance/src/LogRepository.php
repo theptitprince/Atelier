@@ -10,12 +10,14 @@ use Atelier\Support\Clock;
 /**
  * Accès à la table maintenance_log : interventions réalisées (historique). Une intervention est
  * rattachée à un équipement et, facultativement, à la tâche qui l'a déclenchée.
+ * Suppression logique (deleted_at = corbeille) : les lectures excluent les lignes en corbeille
+ * sauf demande explicite ; la purge physique est réalisée par le module (rétention ou corbeille).
  */
 final class LogRepository
 {
     public const TABLE = 'maintenance_log';
 
-    private const COLUMNS = 'l.id, l.asset_id, l.job_id, l.done_at, l.meter_value, l.title, l.notes, l.cost, l.performed_by, l.created_by, l.created_at, l.updated_at, a.name AS asset_name, a.meter_unit AS asset_meter_unit, j.title AS job_title';
+    private const COLUMNS = 'l.id, l.asset_id, l.job_id, l.done_at, l.meter_value, l.title, l.notes, l.cost, l.performed_by, l.created_by, l.created_at, l.updated_at, l.deleted_at, a.name AS asset_name, a.meter_unit AS asset_meter_unit, a.deleted_at AS asset_deleted_at, j.title AS job_title, j.deleted_at AS job_deleted_at';
     private const FROM = ' FROM maintenance_log l INNER JOIN maintenance_asset a ON a.id = l.asset_id LEFT JOIN maintenance_job j ON j.id = l.job_id';
 
     public function __construct(private readonly Database $db)
@@ -23,10 +25,20 @@ final class LogRepository
     }
 
     /** @return array<string, mixed>|null */
-    public function find(int $id): ?array
+    public function find(int $id, bool $includeDeleted = false): ?array
     {
         $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.id = :id', ['id' => $id]);
-        return $row === null ? null : $this->hydrate($row);
+        if ($row === null || (!$includeDeleted && $row['deleted_at'] !== null)) {
+            return null;
+        }
+        return $this->hydrate($row);
+    }
+
+    /** Intervention en corbeille (quel que soit l'état de son équipement). @return array<string, mixed>|null */
+    public function findTrashed(int $id): ?array
+    {
+        $row = $this->find($id, true);
+        return $row === null || $row['deleted_at'] === null ? null : $row;
     }
 
     /**
@@ -54,34 +66,34 @@ final class LogRepository
         return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . " WHERE $where ORDER BY l.done_at DESC, l.id DESC LIMIT " . max(1, $limit), $params));
     }
 
-    /** @return list<array<string, mixed>> interventions d'un équipement, les plus récentes d'abord */
+    /** @return list<array<string, mixed>> interventions (hors corbeille) d'un équipement, les plus récentes d'abord */
     public function forAsset(int $assetId, int $limit = 200): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.asset_id = :a ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit), ['a' => $assetId]));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.asset_id = :a AND l.deleted_at IS NULL ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit), ['a' => $assetId]));
     }
 
-    /** @return list<array<string, mixed>> interventions issues d'une tâche */
+    /** @return list<array<string, mixed>> interventions (hors corbeille) issues d'une tâche */
     public function forJob(int $jobId, int $limit = 100): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.job_id = :j ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit), ['j' => $jobId]));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.job_id = :j AND l.deleted_at IS NULL ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit), ['j' => $jobId]));
     }
 
     /** @return list<array<string, mixed>> dernières interventions tous équipements confondus */
     public function recent(int $limit = 8): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE a.deleted_at IS NULL ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit)));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.deleted_at IS NULL AND a.deleted_at IS NULL ORDER BY l.done_at DESC, l.id DESC LIMIT ' . max(1, $limit)));
     }
 
     /** Coût total des interventions réalisées depuis une date (AAAA-MM-JJ), en centimes. */
     public function costSince(string $day): int
     {
-        return (int) ($this->db->scalar('SELECT COALESCE(SUM(l.cost), 0)' . self::FROM . ' WHERE a.deleted_at IS NULL AND l.done_at >= :d', ['d' => $day]) ?? 0);
+        return (int) ($this->db->scalar('SELECT COALESCE(SUM(l.cost), 0)' . self::FROM . ' WHERE l.deleted_at IS NULL AND a.deleted_at IS NULL AND l.done_at >= :d', ['d' => $day]) ?? 0);
     }
 
     /** @return list<int> années présentes dans l'historique, décroissantes */
     public function years(): array
     {
-        $rows = $this->db->select('SELECT DISTINCT SUBSTR(done_at, 1, 4) AS y FROM ' . self::TABLE . ' ORDER BY y DESC');
+        $rows = $this->db->select('SELECT DISTINCT SUBSTR(done_at, 1, 4) AS y FROM ' . self::TABLE . ' WHERE deleted_at IS NULL ORDER BY y DESC');
         return array_values(array_filter(array_map(static fn (array $r): int => (int) $r['y'], $rows), static fn (int $y): bool => $y > 0));
     }
 
@@ -94,7 +106,7 @@ final class LogRepository
     public function create(array $data, ?int $userId): int
     {
         $now = Clock::utc();
-        return $this->db->insert(self::TABLE, $this->columns($data) + ['created_by' => $userId, 'created_at' => $now, 'updated_at' => $now]);
+        return $this->db->insert(self::TABLE, $this->columns($data) + ['created_by' => $userId, 'created_at' => $now, 'updated_at' => $now, 'deleted_at' => null]);
     }
 
     /** @param array<string, mixed> $data */
@@ -103,23 +115,51 @@ final class LogRepository
         $this->db->update(self::TABLE, $this->columns($data) + ['updated_at' => Clock::utc()], 'id = :id', ['id' => $id]);
     }
 
-    public function delete(int $id): bool
+    // ----- Corbeille -----
+
+    public function softDelete(int $id): bool
     {
-        return $this->db->delete(self::TABLE, 'id = :id', ['id' => $id]) > 0;
+        return $this->db->update(self::TABLE, ['deleted_at' => Clock::utc()], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
     }
 
-    /** Détache les interventions d'une tâche supprimée (l'historique est conservé). */
+    public function restore(int $id): bool
+    {
+        return $this->db->update(self::TABLE, ['deleted_at' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'une intervention en corbeille. */
+    public function purge(int $id): bool
+    {
+        return $this->db->delete(self::TABLE, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return list<array<string, mixed>> interventions en corbeille depuis moins de $retentionDays jours (équipement inclus, même en corbeille) */
+    public function trashed(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE l.deleted_at IS NOT NULL AND l.deleted_at >= :l ORDER BY l.deleted_at DESC, l.id DESC', ['l' => $limit]));
+    }
+
+    /** @return list<int> interventions en corbeille depuis plus de $retentionDays jours */
+    public function expiredTrashIds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
+    }
+
+    /** Détache les interventions d'une tâche purgée (l'historique est conservé). */
     public function detachJob(int $jobId): int
     {
         return $this->db->update(self::TABLE, ['job_id' => null], 'job_id = :j', ['j' => $jobId]);
     }
 
-    /** @return list<int> */
+    /** @return list<int> identifiants de toutes les interventions d'un équipement (corbeille comprise, pour la purge en cascade) */
     public function idsForAsset(int $assetId): array
     {
         return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE asset_id = :a', ['a' => $assetId]));
     }
 
+    /** Suppression physique de toutes les interventions d'un équipement (purge en cascade). */
     public function deleteForAsset(int $assetId): int
     {
         return $this->db->delete(self::TABLE, 'asset_id = :a', ['a' => $assetId]);
@@ -148,7 +188,7 @@ final class LogRepository
     /** @return array{0: string, 1: array<string, mixed>} */
     private function where(array $criteria): array
     {
-        $where = ['a.deleted_at IS NULL'];
+        $where = ['l.deleted_at IS NULL', 'a.deleted_at IS NULL'];
         $params = [];
         if (($criteria['asset'] ?? 0) > 0) {
             $where[] = 'l.asset_id = :asset';

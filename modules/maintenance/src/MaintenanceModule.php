@@ -15,6 +15,7 @@ use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
 use Atelier\Support\Str;
@@ -33,9 +34,12 @@ use DateTimeZone;
  *    imprimable ;
  *  - historique des interventions (date, compteur, coût, intervenant) ;
  *  - pièces jointes (factures, notices, photos) sur les équipements, les tâches et les interventions,
- *    via le mécanisme commun et le module Fichiers joints ; tags partagés.
+ *    via le mécanisme commun et le module Fichiers joints ; tags partagés ;
+ *  - corbeille : équipements, tâches et interventions sont supprimés logiquement (deleted_at), restaurables
+ *    depuis la corbeille du module ou la corbeille globale (TrashProviderInterface), purgés après
+ *    trash.retention_days.
  */
-final class MaintenanceModule extends AbstractModule
+final class MaintenanceModule extends AbstractModule implements TrashProviderInterface
 {
     public const DATASET_ASSET = 'maintenance.asset';
     public const DATASET_JOB = 'maintenance.job';
@@ -43,6 +47,8 @@ final class MaintenanceModule extends AbstractModule
     public const DATASETS = [self::DATASET_ASSET, self::DATASET_JOB, self::DATASET_LOG];
 
     private const EXPORT_RESOURCE = 'action/export';
+    /** Préfixes des identifiants de corbeille (« asset:12 », « job:5 », « log:9 »). */
+    private const TRASH_TYPES = ['asset' => self::DATASET_ASSET, 'job' => self::DATASET_JOB, 'log' => self::DATASET_LOG];
     private const PER_PAGE_CHOICES = [25, 50, 100];
     private const NAME_MAX = 150;
     private const SHORT_MAX = 100;
@@ -94,6 +100,8 @@ final class MaintenanceModule extends AbstractModule
         $r->action('asset-delete', [$this, 'assetDelete'], permission: 'delete');
         $r->action('asset-restore', [$this, 'assetRestore'], permission: 'delete');
         $r->action('asset-purge', [$this, 'assetPurge'], permission: 'delete');
+        $r->action('trash-restore', [$this, 'trashRestore'], permission: 'update');
+        $r->action('trash-purge', [$this, 'trashPurge'], permission: 'delete');
         $r->action('job-save', [$this, 'jobSave'], permission: 'open');
         $r->action('job-close', [$this, 'jobClose'], permission: 'update');
         $r->action('job-reopen', [$this, 'jobReopen'], permission: 'update');
@@ -160,16 +168,27 @@ final class MaintenanceModule extends AbstractModule
         return '2 équipements, ' . count($jobs) . ' tâches et 3 interventions d’exemple créés';
     }
 
-    /** Rétention de la corbeille des équipements (trash.retention_days). */
+    /** Rétention de la corbeille (trash.retention_days) : équipements, tâches et interventions expirés. */
     public function purge(): string
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
-        $count = 0;
+        $days = $this->retentionDays();
+        $counts = ['log' => 0, 'job' => 0, 'asset' => 0];
+        foreach ($this->logRepo()->expiredTrashIds($days) as $id) {
+            $this->purgeLog($id);
+            $this->log('maintenance.log_purge', 'success', 'maintenance_log:' . $id, 'Intervention purgée par la rétention (' . $days . ' jours)');
+            $counts['log']++;
+        }
+        foreach ($this->jobRepo()->expiredTrashIds($days) as $id) {
+            $this->purgeJob($id);
+            $this->log('maintenance.job_purge', 'success', 'maintenance_job:' . $id, 'Tâche purgée par la rétention (' . $days . ' jours)');
+            $counts['job']++;
+        }
         foreach ($this->assetRepo()->expiredTrashIds($days) as $id) {
             $this->destroyAsset($id);
-            $count++;
+            $this->log('maintenance.asset_purge', 'success', 'maintenance_asset:' . $id, 'Équipement purgé par la rétention (' . $days . ' jours)');
+            $counts['asset']++;
         }
-        return $count . ' équipement(s) purgé(s) de la corbeille (> ' . $days . ' jours)';
+        return sprintf('%d équipement(s), %d tâche(s) et %d intervention(s) purgé(s) de la corbeille (> %d jours)', $counts['asset'], $counts['job'], $counts['log'], $days);
     }
 
     // =====================================================================
@@ -367,7 +386,7 @@ final class MaintenanceModule extends AbstractModule
         }
         $actions .= '<a class="btn" href="' . $this->e($this->url('job/' . $id . '/print')) . '" target="_blank" rel="noopener" title="Fiche d’intervention imprimable">' . $this->icon('print') . '<span>Imprimer</span></a>';
         if ($rights['delete']) {
-            $actions .= '<button type="button" class="btn btn--outline-danger" data-action="job-delete" data-params=\'{"id":' . $id . '}\' data-confirm="Supprimer définitivement cette tâche ? Les interventions déjà réalisées restent dans l’historique." data-danger>' . $this->icon('trash') . '<span>Supprimer</span></button>';
+            $actions .= '<button type="button" class="btn btn--outline-danger" data-action="job-delete" data-params=\'{"id":' . $id . '}\' data-confirm="Mettre cette tâche à la corbeille ? Les interventions déjà réalisées restent dans l’historique ; la tâche pourra être restaurée." data-danger>' . $this->icon('trash') . '<span>Supprimer</span></button>';
         }
         $subtitle = $job['asset_name'] . ' · ' . $this->stateLabel($job['state']) ;
         $banner = $this->renderCore('banner', ['icon' => $job['kind'] === 'corrective' ? 'warning' : 'clock', 'title' => (string) $job['title'], 'subtitle' => $subtitle, 'actions' => $actions]);
@@ -387,7 +406,8 @@ final class MaintenanceModule extends AbstractModule
             'query' => $query,
             'assets' => $this->assetRepo()->all(),
             'years' => $this->logRepo()->years(),
-            'attachmentCounts' => $this->attachmentCounts(self::DATASET_LOG, array_map(static fn (array $l): int => $l['id'], $result['rows'])),
+            'documents' => $this->attachmentsByItem(self::DATASET_LOG, array_map(static fn (array $l): int => $l['id'], $result['rows'])),
+            'attachmentsModule' => $this->ctx->modules()->has('attachments'),
             'rights' => $rights,
             'canExport' => $canExport,
             'exportUrl' => $this->url('export.csv') . ($this->historyRoute($query) !== 'history' ? '?' . explode('?', $this->historyRoute($query), 2)[1] : ''),
@@ -446,13 +466,31 @@ final class MaintenanceModule extends AbstractModule
         return ModuleView::make('Intervention · ' . $log['title'])->banner($banner)->content($content)->status('Intervention du ' . $this->day($log['done_at']));
     }
 
+    /** Corbeille du module : équipements, tâches et interventions supprimés logiquement. */
     public function trash(Request $request, array $params): ModuleView
     {
-        $days = $this->ctx->config->int('trash.retention_days', 30);
-        $rows = $this->assetRepo()->trashed($days);
-        $content = $this->render('trash', ['rows' => $rows, 'retentionDays' => $days, 'categories' => AssetRepository::CATEGORIES]);
-        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille des équipements', 'subtitle' => count($rows) . ' équipement(s) · purge automatique après ' . $days . ' jours', 'actions' => $this->backLink('assets', 'Équipements')]);
-        return ModuleView::make('Corbeille · équipements')->banner($banner)->content($content)->status(count($rows) . ' équipement(s) en corbeille');
+        $days = $this->retentionDays();
+        $assets = $this->assetRepo()->trashed($days);
+        $jobs = $this->jobRepo()->trashed($days);
+        $logs = $this->logRepo()->trashed($days);
+        $total = count($assets) + count($jobs) + count($logs);
+        $content = $this->render('trash', [
+            'assets' => $assets,
+            'jobs' => $jobs,
+            'logs' => $logs,
+            'retentionDays' => $days,
+            'categories' => AssetRepository::CATEGORIES,
+            'canRestore' => $this->can('update'),
+            'canPurge' => $this->can('delete'),
+            'trashModule' => $this->ctx->modules()->has('trash'),
+        ]);
+        $subtitle = sprintf('%d équipement(s), %d tâche(s), %d intervention(s) · purge automatique après %d jours', count($assets), count($jobs), count($logs), $days);
+        $actions = $this->navLinks('trash');
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn" href="#" data-open-module="trash" data-open-route="list?module=maintenance">' . $this->icon('trash') . '<span>Corbeille globale</span></a>';
+        }
+        $banner = $this->renderCore('banner', ['icon' => 'trash', 'title' => 'Corbeille de l’entretien', 'subtitle' => $subtitle, 'actions' => $actions]);
+        return ModuleView::make('Corbeille · entretien')->banner($banner)->content($content)->status($total . ' élément(s) en corbeille')->state(['counts' => ['asset' => count($assets), 'job' => count($jobs), 'log' => count($logs)]]);
     }
 
     // =====================================================================
@@ -533,26 +571,25 @@ final class MaintenanceModule extends AbstractModule
 
     public function assetRestore(Request $request, array $params): ActionResult
     {
-        $id = $this->requireId($request);
-        $asset = $this->assetRepo()->find($id, true);
-        if ($asset === null || $asset['deleted_at'] === null || !$this->assetRepo()->restore($id)) {
-            throw new NotFoundException('Cet équipement n’est pas dans la corbeille.');
-        }
-        $this->log('maintenance.asset_restore', 'success', 'maintenance_asset:' . $id, 'Équipement restauré : ' . $asset['name']);
-        return ActionResult::ok(['id' => $id], 'Équipement « ' . $asset['name'] . ' » restauré.')->refresh();
+        return $this->trashAction('asset:' . $this->requireId($request), 'restore');
     }
 
     /** Suppression définitive d'un équipement en corbeille, avec ses tâches et son historique. */
     public function assetPurge(Request $request, array $params): ActionResult
     {
-        $id = $this->requireId($request);
-        $asset = $this->assetRepo()->find($id, true);
-        if ($asset === null || $asset['deleted_at'] === null) {
-            throw new NotFoundException('Cet équipement n’est pas dans la corbeille.');
-        }
-        $this->destroyAsset($id);
-        $this->log('maintenance.asset_purge', 'success', 'maintenance_asset:' . $id, 'Équipement supprimé définitivement : ' . $asset['name']);
-        return ActionResult::ok(null, 'Équipement « ' . $asset['name'] . ' » supprimé définitivement.')->refresh();
+        return $this->trashAction('asset:' . $this->requireId($request), 'purge');
+    }
+
+    /** Restauration depuis la corbeille du module : id = « asset:12 », « job:5 » ou « log:9 ». */
+    public function trashRestore(Request $request, array $params): ActionResult
+    {
+        return $this->trashAction($request->string('id'), 'restore');
+    }
+
+    /** Suppression définitive depuis la corbeille du module : id = « asset:12 », « job:5 » ou « log:9 ». */
+    public function trashPurge(Request $request, array $params): ActionResult
+    {
+        return $this->trashAction($request->string('id'), 'purge');
     }
 
     public function jobSave(Request $request, array $params): ActionResult
@@ -593,16 +630,13 @@ final class MaintenanceModule extends AbstractModule
         return ActionResult::ok(['id' => $job['id']], 'Tâche « ' . $job['title'] . ' » rouverte.')->refresh();
     }
 
+    /** Suppression logique d'une tâche : elle rejoint la corbeille, ses interventions restent dans l'historique. */
     public function jobDelete(Request $request, array $params): ActionResult
     {
         $job = $this->requireJob($this->requireId($request));
-        $this->ctx->db->transaction(function () use ($job): void {
-            $this->logRepo()->detachJob($job['id']);
-            $this->ctx->shared->registry->unregister(self::DATASET_JOB, (string) $job['id']);
-            $this->jobRepo()->delete($job['id']);
-        });
-        $this->log('maintenance.job_delete', 'success', 'maintenance_job:' . $job['id'], 'Tâche supprimée : ' . $job['title']);
-        return ActionResult::ok(null, 'Tâche « ' . $job['title'] . ' » supprimée.')->navigate($job['kind'] === 'corrective' ? 'defects' : 'jobs');
+        $this->jobRepo()->softDelete($job['id']);
+        $this->log('maintenance.job_delete', 'success', 'maintenance_job:' . $job['id'], 'Tâche placée dans la corbeille : ' . $job['title']);
+        return ActionResult::ok(['id' => $job['id']], ($job['kind'] === 'corrective' ? 'Panne « ' : 'Tâche « ') . $job['title'] . ' » placée dans la corbeille.')->navigate($job['kind'] === 'corrective' ? 'defects' : 'jobs');
     }
 
     /**
@@ -638,9 +672,22 @@ final class MaintenanceModule extends AbstractModule
             }
             return $id;
         });
-        $this->registerLog($id, $data['title'], $data['done_at'], (string) $asset['name']);
+        $infoId = $this->registerLog($id, $data['title'], $data['done_at'], (string) $asset['name']);
         $this->log('maintenance.log_' . ($isNew ? 'create' : 'update'), 'success', 'maintenance_log:' . $id, 'Intervention ' . ($isNew ? 'enregistrée' : 'modifiée') . ' : ' . $data['title'], ['asset_id' => $asset['id'], 'job_id' => $data['job_id'], 'cost' => $data['cost']]);
         $budgetTransactionId = $this->reportCostToBudget($id, $data, (string) $asset['name']);
+
+        // Documents déposés avec le formulaire (facture, photos…) : joints à l'intervention tout juste créée.
+        $stored = [];
+        $rejected = [];
+        foreach ($request->fileList('files') as $file) {
+            try {
+                $record = $this->ctx->shared->attachments->store($file, $infoId, $this->ctx->userId(), $request->string('files_description') ?: null);
+                $stored[] = ['id' => $record['id'], 'name' => $record['original_name'], 'size' => $record['size']];
+                $this->log('maintenance.attach', 'success', 'attachment:' . $record['id'], 'Fichier joint à « ' . $data['title'] . ' »', ['dataset' => self::DATASET_LOG, 'size' => $record['size']]);
+            } catch (ValidationException $e) {
+                $rejected[] = (string) ($file['name'] ?? 'fichier') . ' (' . implode(' ', $e->fieldErrors()) . ')';
+            }
+        }
 
         $message = 'Intervention « ' . $data['title'] . ' » enregistrée' . ($budgetTransactionId !== null ? ' et reportée dans le budget' : '') . '.';
         if ($rescheduled !== null) {
@@ -648,18 +695,25 @@ final class MaintenanceModule extends AbstractModule
                 ? ' La tâche est clôturée.'
                 : ' Prochaine échéance : ' . $this->dueLabel($rescheduled['next_due_at'], $rescheduled['next_due_meter'], $asset['meter_unit']) . '.';
         }
+        if ($stored !== []) {
+            $message .= ' ' . count($stored) . ' document' . (count($stored) > 1 ? 's joints' : ' joint') . '.';
+        }
         $target = $job !== null ? 'job/' . $job['id'] : 'asset/' . $asset['id'];
-        return ActionResult::ok(['id' => $id, 'rescheduled' => $rescheduled, 'budget_transaction_id' => $budgetTransactionId], $message)->dirty(false)->navigate($target);
+        $payload = ['id' => $id, 'rescheduled' => $rescheduled, 'budget_transaction_id' => $budgetTransactionId, 'files' => $stored];
+        if ($rejected !== []) {
+            return ActionResult::warning($payload, $message . ' Document(s) refusé(s) : ' . implode(' ; ', $rejected) . ' — vous pouvez les joindre depuis la fiche de l’intervention.')->dirty(false)->navigate('log/' . $id . '/edit');
+        }
+        return ActionResult::ok($payload, $message)->dirty(false)->navigate($target);
     }
 
+    /** Suppression logique d'une intervention : elle rejoint la corbeille ; son opération budgétaire éventuelle est retirée. */
     public function logDelete(Request $request, array $params): ActionResult
     {
         $log = $this->requireLog($this->requireId($request));
-        $this->ctx->shared->registry->unregister(self::DATASET_LOG, (string) $log['id']);
-        $this->logRepo()->delete($log['id']);
+        $this->logRepo()->softDelete($log['id']);
         $this->removeCostFromBudget($log['id']);
-        $this->log('maintenance.log_delete', 'success', 'maintenance_log:' . $log['id'], 'Intervention supprimée : ' . $log['title']);
-        return ActionResult::ok(null, 'Intervention supprimée.')->refresh();
+        $this->log('maintenance.log_delete', 'success', 'maintenance_log:' . $log['id'], 'Intervention placée dans la corbeille : ' . $log['title']);
+        return ActionResult::ok(['id' => $log['id']], 'Intervention « ' . $log['title'] . ' » placée dans la corbeille.')->refresh();
     }
 
     /** Téléversement direct d'un fichier sur un équipement, une tâche ou une intervention. */
@@ -795,6 +849,59 @@ final class MaintenanceModule extends AbstractModule
         return Response::raw($ics, 'text/calendar; charset=UTF-8')
             ->withHeader('Content-Disposition', 'attachment; filename="entretien-rappels.ics"')
             ->withHeader('Cache-Control', 'private, no-store');
+    }
+
+    // =====================================================================
+    // Corbeille globale (TrashProviderInterface) : équipements, tâches et interventions
+    // =====================================================================
+
+    /** Identifiants préfixés (« asset:12 », « job:5 », « log:9 ») ; visibles dès que l'utilisateur peut restaurer ou purger. */
+    public function trashItems(): array
+    {
+        $canRestore = $this->can('update');
+        $canPurge = $this->can('delete');
+        if (!$canRestore && !$canPurge) {
+            return [];
+        }
+        $retention = $this->retentionDays();
+        $items = [];
+        $push = function (string $type, int $id, string $label, string $deletedAt) use (&$items, $retention, $canRestore, $canPurge): void {
+            $purgeAt = Clock::parseUtc($deletedAt)?->modify('+' . $retention . ' days');
+            $items[] = [
+                'id' => $type . ':' . $id,
+                'label' => $label,
+                'dataset' => self::TRASH_TYPES[$type],
+                'deleted_at' => $deletedAt,
+                'deleted_by' => null,
+                'purge_at' => $purgeAt === null ? null : Clock::utc($purgeAt),
+                'can_restore' => $canRestore,
+                'can_purge' => $canPurge,
+            ];
+        };
+        foreach ($this->assetRepo()->trashed($retention) as $asset) {
+            $push('asset', $asset['id'], (string) $asset['name'], (string) $asset['deleted_at']);
+        }
+        foreach ($this->jobRepo()->trashed($retention) as $job) {
+            $push('job', $job['id'], $this->trashLabel('job', $job), (string) $job['deleted_at']);
+        }
+        foreach ($this->logRepo()->trashed($retention) as $log) {
+            $push('log', $log['id'], $this->trashLabel('log', $log), (string) $log['deleted_at']);
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->require('update', null, 'Vous n’avez pas le droit de restaurer des éléments de l’entretien.');
+        [$type, $localId] = $this->parseTrashId($id);
+        $this->restoreTrashed($type, $localId);
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->require('delete', null, 'Vous n’avez pas le droit de supprimer définitivement des éléments de l’entretien.');
+        [$type, $localId] = $this->parseTrashId($id);
+        $this->purgeTrashed($type, $localId);
     }
 
     // =====================================================================
@@ -1408,11 +1515,12 @@ final class MaintenanceModule extends AbstractModule
 
     private function removeCostFromBudget(int $logId): void
     {
-        if (!$this->ctx->modules()->has('budget')) {
-            return;
+        $userId = $this->ctx->auth->userId();
+        if ($userId === null || !$this->ctx->modules()->has('budget')) {
+            return; // purge par la console : l'opération budgétaire éventuelle a déjà été retirée à la mise en corbeille
         }
         try {
-            $this->ctx->moduleService('budget')->removeExternal($this->ctx->userId(), 'maintenance_log:' . $logId);
+            $this->ctx->moduleService('budget')->removeExternal($userId, 'maintenance_log:' . $logId);
         } catch (ModuleUnavailableException | ForbiddenException) {
             // le module Budget est absent ou l'utilisateur n'y a pas de droit : l'opération éventuelle y reste
         }
@@ -1466,6 +1574,153 @@ final class MaintenanceModule extends AbstractModule
             $counts[$id] = $info === null ? 0 : $this->ctx->shared->attachments->countFor((string) $info['id']);
         }
         return $counts;
+    }
+
+    /**
+     * Pièces jointes (liste complète) et identifiant de registre par identifiant local d'un jeu.
+     *
+     * @param list<int> $ids
+     * @return array<int, array{info_id: ?string, files: list<array<string, mixed>>}>
+     */
+    private function attachmentsByItem(string $dataset, array $ids): array
+    {
+        $result = [];
+        foreach ($ids as $id) {
+            $info = $this->ctx->shared->registry->find($dataset, (string) $id);
+            $infoId = $info === null ? null : (string) $info['id'];
+            $result[$id] = ['info_id' => $infoId, 'files' => $infoId === null ? [] : $this->ctx->shared->attachments->listFor($infoId)];
+        }
+        return $result;
+    }
+
+    // ----- Corbeille (commun à la vue du module et à la corbeille globale) -----
+
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
+
+    /** « job:5 » → ['job', 5] ; ValidationException si le préfixe ou le numéro est invalide. @return array{0: string, 1: int} */
+    private function parseTrashId(string $id): array
+    {
+        $parts = explode(':', trim($id), 2);
+        if (count($parts) !== 2 || !isset(self::TRASH_TYPES[$parts[0]]) || !ctype_digit($parts[1]) || (int) $parts[1] <= 0) {
+            throw ValidationException::single('id', 'Identifiant d’élément de corbeille invalide.');
+        }
+        return [$parts[0], (int) $parts[1]];
+    }
+
+    /** Libellé d'un élément de corbeille. @param array<string, mixed> $row */
+    private function trashLabel(string $type, array $row): string
+    {
+        return match ($type) {
+            'asset' => (string) $row['name'],
+            'job' => ($row['kind'] === 'corrective' ? 'Panne : ' : 'Tâche : ') . $row['title'] . ' — ' . $row['asset_name'],
+            default => 'Intervention : ' . $row['title'] . ' (' . $this->day($row['done_at']) . ') — ' . $row['asset_name'],
+        };
+    }
+
+    /** Action de la corbeille du module (restauration ou purge), avec message. */
+    private function trashAction(string $id, string $operation): ActionResult
+    {
+        [$type, $localId] = $this->parseTrashId($id);
+        if ($operation === 'restore') {
+            $this->require('update', null, 'Vous n’avez pas le droit de restaurer des éléments de l’entretien.');
+            $label = $this->restoreTrashed($type, $localId);
+            return ActionResult::ok(['id' => $id], '« ' . $label . ' » restauré' . ($type === 'job' ? 'e' : ($type === 'log' ? 'e' : '')) . '.')->refresh();
+        }
+        $this->require('delete', null, 'Vous n’avez pas le droit de supprimer définitivement des éléments de l’entretien.');
+        $label = $this->purgeTrashed($type, $localId);
+        return ActionResult::ok(['id' => $id], '« ' . $label . ' » supprimé' . ($type === 'asset' ? '' : 'e') . ' définitivement.')->refresh();
+    }
+
+    /**
+     * Restaure un élément en corbeille et retourne son libellé. Une tâche ou une intervention dont
+     * l'équipement est lui-même en corbeille restaure aussi l'équipement, dans la même transaction.
+     */
+    private function restoreTrashed(string $type, int $id): string
+    {
+        if ($type === 'asset') {
+            $asset = $this->assetRepo()->find($id, true);
+            if ($asset === null || $asset['deleted_at'] === null || !$this->assetRepo()->restore($id)) {
+                throw new NotFoundException('Cet équipement n’est pas dans la corbeille.');
+            }
+            $this->log('maintenance.asset_restore', 'success', 'maintenance_asset:' . $id, 'Équipement restauré : ' . $asset['name']);
+            return (string) $asset['name'];
+        }
+        $row = $type === 'job' ? $this->jobRepo()->findTrashed($id) : $this->logRepo()->findTrashed($id);
+        if ($row === null) {
+            throw new NotFoundException($type === 'job' ? 'Cette tâche n’est pas dans la corbeille.' : 'Cette intervention n’est pas dans la corbeille.');
+        }
+        $label = $this->trashLabel($type, $row);
+        $assetRestored = false;
+        $this->ctx->db->transaction(function () use ($type, $id, $row, &$assetRestored): void {
+            if ($row['asset_deleted_at'] !== null) {
+                $assetRestored = $this->assetRepo()->restore($row['asset_id']);
+            }
+            if ($type === 'job') {
+                $this->jobRepo()->restore($id);
+            } else {
+                $this->logRepo()->restore($id);
+            }
+        });
+        if ($assetRestored) {
+            $this->log('maintenance.asset_restore', 'success', 'maintenance_asset:' . $row['asset_id'], 'Équipement restauré avec « ' . $row['title'] . ' » : ' . $row['asset_name']);
+        }
+        if ($type === 'job') {
+            $this->log('maintenance.job_restore', 'success', 'maintenance_job:' . $id, 'Tâche restaurée : ' . $row['title'] . ($assetRestored ? ' (équipement restauré également)' : ''));
+        } else {
+            $this->log('maintenance.log_restore', 'success', 'maintenance_log:' . $id, 'Intervention restaurée : ' . $row['title'] . ($assetRestored ? ' (équipement restauré également)' : ''));
+            $this->reportCostToBudget($id, ['title' => (string) $row['title'], 'cost' => $row['cost'], 'done_at' => (string) $row['done_at'], 'performed_by' => (string) ($row['performed_by'] ?? '')], (string) $row['asset_name']);
+        }
+        return $label;
+    }
+
+    /** Supprime définitivement un élément en corbeille et retourne son libellé. */
+    private function purgeTrashed(string $type, int $id): string
+    {
+        if ($type === 'asset') {
+            $asset = $this->assetRepo()->find($id, true);
+            if ($asset === null || $asset['deleted_at'] === null) {
+                throw new NotFoundException('Cet équipement n’est pas dans la corbeille.');
+            }
+            $this->destroyAsset($id);
+            $this->log('maintenance.asset_purge', 'success', 'maintenance_asset:' . $id, 'Équipement supprimé définitivement : ' . $asset['name']);
+            return (string) $asset['name'];
+        }
+        $row = $type === 'job' ? $this->jobRepo()->findTrashed($id) : $this->logRepo()->findTrashed($id);
+        if ($row === null) {
+            throw new NotFoundException($type === 'job' ? 'Cette tâche n’est pas dans la corbeille.' : 'Cette intervention n’est pas dans la corbeille.');
+        }
+        $label = $this->trashLabel($type, $row);
+        if ($type === 'job') {
+            $this->purgeJob($id);
+            $this->log('maintenance.job_purge', 'success', 'maintenance_job:' . $id, 'Tâche supprimée définitivement : ' . $row['title']);
+        } else {
+            $this->purgeLog($id);
+            $this->log('maintenance.log_purge', 'success', 'maintenance_log:' . $id, 'Intervention supprimée définitivement : ' . $row['title']);
+        }
+        return $label;
+    }
+
+    /** Suppression physique d'une tâche en corbeille : ses interventions sont détachées (l'historique est conservé). */
+    private function purgeJob(int $id): void
+    {
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->logRepo()->detachJob($id);
+            $this->ctx->shared->registry->unregister(self::DATASET_JOB, (string) $id);
+            $this->jobRepo()->purge($id);
+        });
+    }
+
+    /** Suppression physique d'une intervention en corbeille et de son inscription au registre. */
+    private function purgeLog(int $id): void
+    {
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->ctx->shared->registry->unregister(self::DATASET_LOG, (string) $id);
+            $this->logRepo()->purge($id);
+        });
+        $this->removeCostFromBudget($id);
     }
 
     /** @param list<array<string, mixed>> $jobs @return list<array<string, mixed>> */
@@ -1653,6 +1908,9 @@ final class MaintenanceModule extends AbstractModule
             'defects' => ['Pannes', 'warning'],
             'history' => ['Historique', 'activity'],
         ];
+        if ($current === 'trash') {
+            $links['trash'] = ['Corbeille', 'trash'];
+        }
         $html = '<div class="btn-group" role="group" aria-label="Écrans du module Entretien">';
         foreach ($links as $route => [$label, $icon]) {
             $active = $route === $current;

@@ -11,6 +11,8 @@ use Atelier\Support\Clock;
  * Accès à la table maintenance_job : tâches d'entretien planifiées (preventive) et pannes
  * à corriger (corrective). Chaque ligne porte sa fiche d'intervention et ses règles d'échéance.
  * Les lignes sont retournées avec les colonnes utiles de l'équipement (préfixe asset_).
+ * Suppression logique (deleted_at = corbeille) : les lectures excluent les lignes en corbeille
+ * sauf demande explicite ; la purge physique est réalisée par le module (rétention ou corbeille).
  */
 final class JobRepository
 {
@@ -20,7 +22,7 @@ final class JobRepository
     public const PRIORITIES = ['low' => 'Basse', 'normal' => 'Normale', 'high' => 'Haute', 'urgent' => 'Urgente'];
     public const STATUSES = ['open' => 'Ouverte', 'closed' => 'Clôturée'];
 
-    private const COLUMNS = 'j.id, j.asset_id, j.title, j.kind, j.priority, j.status, j.description, j.parts, j.contacts, j.tools, j.estimated_minutes, j.estimated_cost, j.interval_days, j.interval_meter, j.next_due_at, j.next_due_meter, j.lead_days, j.lead_meter, j.last_done_at, j.last_done_meter, j.closed_at, j.created_by, j.created_at, j.updated_at, a.name AS asset_name, a.category AS asset_category, a.meter_unit AS asset_meter_unit, a.meter_value AS asset_meter_value, a.deleted_at AS asset_deleted_at';
+    private const COLUMNS = 'j.id, j.asset_id, j.title, j.kind, j.priority, j.status, j.description, j.parts, j.contacts, j.tools, j.estimated_minutes, j.estimated_cost, j.interval_days, j.interval_meter, j.next_due_at, j.next_due_meter, j.lead_days, j.lead_meter, j.last_done_at, j.last_done_meter, j.closed_at, j.created_by, j.created_at, j.updated_at, j.deleted_at, a.name AS asset_name, a.category AS asset_category, a.meter_unit AS asset_meter_unit, a.meter_value AS asset_meter_value, a.deleted_at AS asset_deleted_at';
     private const FROM = ' FROM maintenance_job j INNER JOIN maintenance_asset a ON a.id = j.asset_id';
 
     public function __construct(private readonly Database $db)
@@ -28,10 +30,20 @@ final class JobRepository
     }
 
     /** @return array<string, mixed>|null */
-    public function find(int $id): ?array
+    public function find(int $id, bool $includeDeleted = false): ?array
     {
         $row = $this->db->selectOne('SELECT ' . self::COLUMNS . self::FROM . ' WHERE j.id = :id', ['id' => $id]);
-        return $row === null ? null : $this->hydrate($row);
+        if ($row === null || (!$includeDeleted && $row['deleted_at'] !== null)) {
+            return null;
+        }
+        return $this->hydrate($row);
+    }
+
+    /** Tâche en corbeille (quel que soit l'état de son équipement). @return array<string, mixed>|null */
+    public function findTrashed(int $id): ?array
+    {
+        $row = $this->find($id, true);
+        return $row === null || $row['deleted_at'] === null ? null : $row;
     }
 
     /**
@@ -42,7 +54,7 @@ final class JobRepository
      */
     public function search(array $criteria, int $limit = 1000): array
     {
-        $where = ['a.deleted_at IS NULL'];
+        $where = ['j.deleted_at IS NULL', 'a.deleted_at IS NULL'];
         $params = [];
         if (($criteria['asset'] ?? 0) > 0) {
             $where[] = 'j.asset_id = :asset';
@@ -65,23 +77,23 @@ final class JobRepository
         return array_map([$this, 'hydrate'], $rows);
     }
 
-    /** @return list<array<string, mixed>> tâches ouvertes d'un équipement */
+    /** @return list<array<string, mixed>> tâches (hors corbeille) d'un équipement */
     public function forAsset(int $assetId, bool $includeClosed = true): array
     {
-        $sql = 'SELECT ' . self::COLUMNS . self::FROM . ' WHERE j.asset_id = :asset' . ($includeClosed ? '' : " AND j.status = 'open'") . ' ORDER BY j.status ASC, j.next_due_at ASC, j.id ASC';
+        $sql = 'SELECT ' . self::COLUMNS . self::FROM . ' WHERE j.asset_id = :asset AND j.deleted_at IS NULL' . ($includeClosed ? '' : " AND j.status = 'open'") . ' ORDER BY j.status ASC, j.next_due_at ASC, j.id ASC';
         return array_map([$this, 'hydrate'], $this->db->select($sql, ['asset' => $assetId]));
     }
 
-    /** @return list<array<string, mixed>> toutes les tâches ouvertes d'équipements actifs */
+    /** @return list<array<string, mixed>> toutes les tâches ouvertes (hors corbeille) d'équipements actifs */
     public function open(): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . " WHERE j.status = 'open' AND a.deleted_at IS NULL ORDER BY j.next_due_at ASC, j.id ASC"));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . " WHERE j.status = 'open' AND j.deleted_at IS NULL AND a.deleted_at IS NULL ORDER BY j.next_due_at ASC, j.id ASC"));
     }
 
     public function countOpen(?string $kind = null): int
     {
         $params = [];
-        $sql = 'SELECT COUNT(*)' . self::FROM . " WHERE j.status = 'open' AND a.deleted_at IS NULL";
+        $sql = 'SELECT COUNT(*)' . self::FROM . " WHERE j.status = 'open' AND j.deleted_at IS NULL AND a.deleted_at IS NULL";
         if ($kind !== null) {
             $sql .= ' AND j.kind = :kind';
             $params['kind'] = $kind;
@@ -106,6 +118,7 @@ final class JobRepository
             'created_by' => $userId,
             'created_at' => $now,
             'updated_at' => $now,
+            'deleted_at' => null,
         ]);
     }
 
@@ -140,17 +153,45 @@ final class JobRepository
         $this->db->update(self::TABLE, ['status' => $status, 'closed_at' => $status === 'closed' ? $now : null, 'updated_at' => $now], 'id = :id', ['id' => $id]);
     }
 
-    public function delete(int $id): bool
+    // ----- Corbeille -----
+
+    public function softDelete(int $id): bool
     {
-        return $this->db->delete(self::TABLE, 'id = :id', ['id' => $id]) > 0;
+        return $this->db->update(self::TABLE, ['deleted_at' => Clock::utc()], 'id = :id AND deleted_at IS NULL', ['id' => $id]) > 0;
     }
 
-    /** @return list<int> identifiants des tâches d'un équipement */
+    public function restore(int $id): bool
+    {
+        return $this->db->update(self::TABLE, ['deleted_at' => null, 'updated_at' => Clock::utc()], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** Suppression physique d'une tâche en corbeille. */
+    public function purge(int $id): bool
+    {
+        return $this->db->delete(self::TABLE, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return list<array<string, mixed>> tâches en corbeille depuis moins de $retentionDays jours (équipement inclus, même en corbeille) */
+    public function trashed(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT ' . self::COLUMNS . self::FROM . ' WHERE j.deleted_at IS NOT NULL AND j.deleted_at >= :l ORDER BY j.deleted_at DESC, j.id DESC', ['l' => $limit]));
+    }
+
+    /** @return list<int> tâches en corbeille depuis plus de $retentionDays jours */
+    public function expiredTrashIds(int $retentionDays): array
+    {
+        $limit = Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE deleted_at IS NOT NULL AND deleted_at < :l', ['l' => $limit]));
+    }
+
+    /** @return list<int> identifiants de toutes les tâches d'un équipement (corbeille comprise, pour la purge en cascade) */
     public function idsForAsset(int $assetId): array
     {
         return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE asset_id = :a', ['a' => $assetId]));
     }
 
+    /** Suppression physique de toutes les tâches d'un équipement (purge en cascade). */
     public function deleteForAsset(int $assetId): int
     {
         return $this->db->delete(self::TABLE, 'asset_id = :a', ['a' => $assetId]);

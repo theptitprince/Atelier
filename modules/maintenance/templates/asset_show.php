@@ -92,7 +92,7 @@ $closedJobs = array_values(array_filter($jobs, static fn (array $j): bool => $j[
                                         <td class="text-nowrap mono"><?= $e($module->day($log['done_at'])) ?></td>
                                         <td>
                                             <strong><?= $e($log['title']) ?></strong>
-                                            <?php if ($log['job_id'] !== null): ?><a class="text-small text-muted" href="#" data-route="job/<?= (int) $log['job_id'] ?>" title="Tâche d’origine"><?= $module->icon('clock', 'icon--sm') ?></a><?php endif; ?>
+                                            <?php if ($log['job_id'] !== null && $log['job_deleted_at'] === null): ?><a class="text-small text-muted" href="#" data-route="job/<?= (int) $log['job_id'] ?>" title="Tâche d’origine"><?= $module->icon('clock', 'icon--sm') ?></a><?php endif; ?>
                                             <?php if (($logAttachments[$log['id']] ?? 0) > 0): ?><span class="badge badge--muted" title="Pièces jointes"><?= $module->icon('paperclip', 'icon--sm') ?> <?= (int) $logAttachments[$log['id']] ?></span><?php endif; ?>
                                             <?php if ($log['notes'] !== null && $log['notes'] !== ''): ?><div class="text-small text-muted maintenance__excerpt"><?= $e(\Atelier\Support\Str::truncate(\Atelier\View\BbCode::toText($log['notes']), 160)) ?></div><?php endif; ?>
                                         </td>
@@ -102,7 +102,7 @@ $closedJobs = array_values(array_filter($jobs, static fn (array $j): bool => $j[
                                         <td class="col-actions">
                                             <span class="table-actions">
                                                 <?php if ($rights['update']): ?><a class="btn btn--sm btn--icon btn--ghost" href="#" data-route="log/<?= (int) $log['id'] ?>/edit" title="Modifier, joindre une facture"><?= $module->icon('edit') ?></a><?php endif; ?>
-                                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="log-delete" data-params='{"id":<?= (int) $log['id'] ?>}' data-confirm="Supprimer cette intervention de l’historique ?" data-danger title="Supprimer"><?= $module->icon('trash') ?></button><?php endif; ?>
+                                                <?php if ($rights['delete']): ?><button type="button" class="btn btn--sm btn--icon btn--ghost" data-action="log-delete" data-params='{"id":<?= (int) $log['id'] ?>}' data-confirm="Mettre cette intervention à la corbeille ?" data-danger title="Mettre à la corbeille"><?= $module->icon('trash') ?></button><?php endif; ?>
                                             </span>
                                         </td>
                                     </tr>
@@ -171,7 +171,7 @@ $closedJobs = array_values(array_filter($jobs, static fn (array $j): bool => $j[
                 </div>
                 <div class="card__body">
                     <?= $module->partial('_attachments', ['target' => 'asset', 'id' => $id, 'infoId' => $infoId, 'attachments' => $attachments, 'canUpdate' => $rights['update'], 'attachmentsModule' => $attachmentsModule]) ?>
-                    <p class="text-small text-muted mt-2 mb-0">Notices, carte grise, contrat d’entretien, photos… Les factures se joignent à chaque intervention de l’historique.</p>
+                    <p class="text-small text-muted mt-2 mb-0">Notices, carte grise, contrat d’entretien, photos… Les factures se joignent à chaque intervention : dépliant « documents » de l’historique ou icône <?= $module->icon('edit', 'icon--sm') ?> de la ligne.</p>
                 </div>
             </section>
         </div>
