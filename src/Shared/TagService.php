@@ -28,6 +28,9 @@ final class TagService
      */
     public function findOrCreate(string $name, string $scope = self::SHARED, ?int $userId = null): array
     {
+        if (!mb_check_encoding($name, 'UTF-8')) {
+            throw ValidationException::single('tag', 'Le tag doit être encodé en UTF-8.');
+        }
         $normalized = Str::normalizeTag($name);
         if ($normalized === '' || mb_strlen($normalized, 'UTF-8') > 60) {
             throw ValidationException::single('tag', 'Le tag doit comporter entre 1 et 60 caractères.');

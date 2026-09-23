@@ -26,7 +26,7 @@ final class TrashQueries
     public function deletedAttachments(): array
     {
         return $this->db->select(
-            'SELECT a.id, a.original_name, a.size, a.mime, a.deleted_at, a.uploaded_by, a.info_id,
+            'SELECT a.id, a.original_name, a.label, a.size, a.mime, a.deleted_at, a.uploaded_by, a.info_id,
                     u.username AS uploader, u.display_name AS uploader_name,
                     r.label AS info_label, r.dataset_code, r.module_id AS info_module
              FROM attachments a

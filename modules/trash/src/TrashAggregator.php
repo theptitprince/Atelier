@@ -349,7 +349,7 @@ final class TrashAggregator
             self::CORE_MODULE,
             self::CORE_MODULE_NAME,
             (string) $row['id'],
-            (string) $row['original_name'],
+            \Atelier\Shared\AttachmentService::displayName($row) . (($row['label'] ?? '') !== '' && $row['label'] !== null ? ' (' . $row['original_name'] . ')' : ''),
             (string) ($row['dataset_code'] ?? ''),
             'Pièce jointe',
             $deletedAt,
