@@ -35,6 +35,7 @@
   "datasets": [
     {
       "code": "maintenance.asset",
+      "openRoute": "asset/{key}",
       "name": "Équipements",
       "description": "Biens entretenus (véhicule, chauffage, électroménager, habitation…) avec compteur éventuel (km, heures)",
       "visibility": "shared",

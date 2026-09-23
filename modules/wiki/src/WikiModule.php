@@ -49,6 +49,7 @@ final class WikiModule extends AbstractModule implements TrashProviderInterface
         $r->action('set-home', [$this, 'setHome'], permission: 'admin');
         $r->view('new', [$this, 'new'], permission: 'create');
         $r->view('show/{slug}', [$this, 'show'], permission: 'open');
+        $r->view('page/{id}', [$this, 'showById'], permission: 'open'); // ouverture par identifiant (openRoute des modules transversaux)
         $r->view('edit/{id}', [$this, 'edit'], permission: 'update');
         $r->view('history/{id}', [$this, 'history'], permission: 'open');
         $r->view('revision/{id}/{rev}', [$this, 'revision'], permission: 'open');
@@ -257,6 +258,13 @@ final class WikiModule extends AbstractModule implements TrashProviderInterface
         }
         $banner = $this->renderCore('banner', ['icon' => 'book', 'title' => (string) $page['title'], 'subtitle' => 'Modifiée le ' . Clock::formatDateTime($page['updated_at']) . ($page['updated_by_name'] !== null ? ' par ' . $page['updated_by_name'] : ''), 'actions' => $actions]);
         return ModuleView::make('Page · ' . $page['title'])->banner($banner)->content($content)->status('Page « ' . $page['title'] . ' » · version ' . (int) $page['revision']);
+    }
+
+    /** Lecture par identifiant numérique : redirige vers la route canonique show/{slug}. */
+    public function showById(Request $request, array $params): ModuleView
+    {
+        $page = $this->requirePage((int) ($params['id'] ?? 0));
+        return $this->show($request, ['slug' => (string) $page['slug']])->route('show/' . $page['slug']);
     }
 
     public function edit(Request $request, array $params): ModuleView
