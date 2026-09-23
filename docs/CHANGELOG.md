@@ -2,6 +2,33 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.8.2 — 23/09/2026
+
+Arbitrages laissés ouverts par la revue 0.8.1, tranchés dans le sens le plus cohérent avec le reste de l’application.
+
+### Budget 1.1.3
+- **Prévisionnel.** Le solde de départ ne comptait que les comptes actifs, mais la projection appliquait aussi les récurrences des comptes archivés : les deux périmètres ne parlaient pas de la même chose. C’est la projection qui s’aligne. Une récurrence d’un compte archivé reste listée, signalée « compte archivé », mais n’est plus projetée.
+- **Récurrences échues d’un compte archivé.** Elles restaient proposées à poster, bulle du module comprise, et les poster créait une opération sur un compte dont le solde n’est compté nulle part. Elles ne sont plus proposées ; réactiver le compte les fait revenir.
+- **Rapport d’épargne.** Le budget mensuel entier du mois en cours était comparé à des dépenses forcément partielles, ce qui surévaluait l’économie jusqu’au 31. Seuls les mois révolus sont retenus, ce que l’interface annonçait déjà.
+- **Import CSV.** Deux lignes rigoureusement identiques d’un même relevé étaient fusionnées en une seule opération, donc une ligne était perdue. L’empreinte tient compte du rang de la ligne dans le fichier : les vrais doublons sont conservés, et réimporter le même relevé ne crée toujours rien en double.
+
+### Entretien 1.2.2
+- La liste déroulante des années d’intervention proposait des années dont toutes les interventions appartiennent à un équipement en corbeille, donc sans résultat. Elle suit désormais le même critère que la liste elle-même.
+
+### Actualités 1.2.3
+- Le compteur d’un centre d’intérêt et le recalcul des correspondances comptaient les faits mis en corbeille. Ils ne comptent plus que les entrées vivantes ; la correspondance reste enregistrée pour les faits en corbeille, afin qu’une restauration ne les laisse pas sans centre d’intérêt.
+
+### Accessibilité
+- **Onglets.** Le bouton de fermeture était un faux bouton placé à l’intérieur du bouton de l’onglet, ce qui est du HTML invalide : un lecteur d’écran n’annonçait qu’un seul contrôle et la fermeture n’était pas exposée. L’onglet devient un conteneur et la croix un vrai bouton nommé « Fermer <onglet> ». Le glisser-déposer, la navigation au clavier et la présentation sont inchangés, vérifiés au pixel près.
+- **Colonne de gauche.** Le rôle d’élément d’arborescence et l’état déplié étaient portés par un élément non focalisable, donc jamais annoncés. Ils passent sur la ligne elle-même, avec un seul élément atteignable au clavier à la fois.
+- **Arbre des droits (Comptes 1.0.1) et vitrine du module Démonstration 1.0.1.** Même correction, pour que l’écran d’administration soit annoncé correctement et que la vitrine reste une référence juste pour les modules.
+
+### BBCode
+- Une adresse contenant une esperluette n’était jamais convertie en lien : l’expression s’arrêtait à l’entité produite par l’échappement. Même limite pour un nom d’auteur de citation contenant « & ». Les deux sont corrigées sans affaiblir le filtrage des adresses. L’aperçu du client est aligné sur le rendu du serveur et la parité est vérifiée sur vingt cas.
+
+### Client
+- Aperçu BBCode : l’échappement de l’apostrophe, le décodage des entités et les sauts de ligne différaient légèrement du serveur.
+
 ## 0.8.1 — 23/09/2026
 
 Version de correction issue d’une revue systématique : sécurité, noyau, modules métier et client.

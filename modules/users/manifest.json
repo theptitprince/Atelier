@@ -1,7 +1,7 @@
 {
   "id": "users",
   "name": "Utilisateurs et droits",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Comptes utilisateurs, groupes et droits d’accès (ACL)",
   "author": "Atelier",
   "icon": "users",

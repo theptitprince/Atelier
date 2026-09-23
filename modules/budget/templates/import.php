@@ -28,7 +28,7 @@
                     <div class="field field--full">
                         <label class="field__label" for="bi-file">Fichier CSV <span class="required" aria-hidden="true">*</span></label>
                         <input class="input" type="file" id="bi-file" name="file" accept=".csv,text/csv,text/plain" required>
-                        <span class="field__help">Colonnes reconnues : date ; libellé ; montant (signé) ou débit / crédit ; tiers ; catégorie. <?= (int) $maxRows ?> lignes au plus. Les lignes déjà importées (même compte, date, montant, libellé) sont ignorées.</span>
+                        <span class="field__help">Colonnes reconnues : date ; libellé ; montant (signé) ou débit / crédit ; tiers ; catégorie. <?= (int) $maxRows ?> lignes au plus. Les lignes déjà importées (même compte, date, montant, libellé) sont ignorées ; deux lignes identiques d’un même fichier restent bien deux opérations.</span>
                         <span class="field__error"></span>
                     </div>
                     <div class="field"><label class="checkbox"><input type="checkbox" name="invert" value="1"> Inverser le signe des montants (relevés où les débits sont positifs)</label></div>

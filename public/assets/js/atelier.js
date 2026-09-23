@@ -537,15 +537,23 @@
       workspace.appendChild(tab.panel);
       tab.bannerEl = util.el('div', { class: 'banner__module', 'data-module': id, hidden: true });
       bannerEl.appendChild(tab.bannerEl);
-      tab.tabEl = util.el('button', { type: 'button', class: 'tab', id: 'tab-' + id, role: 'tab', 'aria-selected': 'false', 'aria-controls': 'panel-' + id, 'data-module': id, title: tab.info.name });
+      // Non-régression : l'onglet est un <div role="tab"> et non un <button>. Un <button> contenant le
+      // bouton de fermeture est du contenu interactif imbriqué (HTML invalide) : les lecteurs d'écran
+      // annonçaient un seul contrôle et n'exposaient plus la fermeture.
+      tab.tabEl = util.el('div', { class: 'tab', id: 'tab-' + id, role: 'tab', tabindex: '-1', 'aria-selected': 'false', 'aria-controls': 'panel-' + id, 'data-module': id, title: tab.info.name });
       tab.tabEl.appendChild(util.icon(tab.info.icon || 'module', 'icon--sm tab__icon'));
       tab.tabEl.appendChild(util.el('span', { class: 'tab__label', text: tab.info.name }));
       tab.tabEl.appendChild(util.el('span', { class: 'tab__dirty', title: 'Modifications non enregistrées' }));
-      const closeBtn = util.el('span', { class: 'tab__close', role: 'button', tabindex: '0', title: 'Fermer l’onglet', 'aria-label': 'Fermer ' + tab.info.name });
+      const closeBtn = util.el('button', { type: 'button', class: 'tab__close', title: 'Fermer l’onglet', 'aria-label': 'Fermer ' + tab.info.name });
       closeBtn.appendChild(util.icon('close', 'icon--sm'));
       closeBtn.addEventListener('click', (e) => { e.stopPropagation(); close(id); });
-      closeBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); close(id); } });
       tab.tabEl.appendChild(closeBtn);
+      // Le <div> n'a plus l'activation native d'un <button> : Entrée et Espace sont rejoués ici.
+      // Les touches parties du bouton de fermeture sont laissées à son comportement natif.
+      tab.tabEl.addEventListener('keydown', (e) => {
+        if (e.target !== tab.tabEl) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tab.tabEl.click(); }
+      });
       tab.tabEl.addEventListener('click', () => {
         // Un onglet déjà actif ramène à la page de base du module ; un onglet inactif s'active tel quel.
         const base = tab.info && tab.info.defaultRoute ? tab.info.defaultRoute : null;
@@ -690,6 +698,8 @@
       tab.info = info;
       tab.tabEl.title = info.name;
       tab.tabEl.querySelector('.tab__label').textContent = info.name;
+      const closeBtn = tab.tabEl.querySelector('.tab__close');
+      if (closeBtn) closeBtn.setAttribute('aria-label', 'Fermer ' + info.name);
       const use = tab.tabEl.querySelector('.tab__icon use');
       if (use) use.setAttribute('href', '#i-' + (info.icon || 'module'));
     }
@@ -990,18 +1000,19 @@
     }
 
     function renderEntry(module, entry, depth) {
-      const li = util.el('li', { class: 'nav__item nav__item--child', role: 'treeitem', 'data-module': module.id, 'data-route': entry.route, 'data-nav': entry.id });
+      // Non-régression : le rôle treeitem et aria-expanded vont sur l'élément focusable (la ligne),
+      // pas sur le <li>. Portés par le <li>, l'état déplié/replié n'était jamais annoncé.
+      const li = util.el('li', { class: 'nav__item nav__item--child', role: 'none', 'data-module': module.id, 'data-route': entry.route, 'data-nav': entry.id });
       const hasChildren = entry.children && entry.children.length;
       const key = module.id + ':' + entry.id;
-      if (hasChildren) { li.setAttribute('aria-expanded', openBranches.has(key) ? 'true' : 'false'); if (openBranches.has(key)) li.classList.add('is-open'); }
-      const row = util.el('a', { class: 'nav__row', href: router.urlFor(module.id, entry.route), title: entry.description || entry.label, tabindex: '-1' });
-      if (hasChildren) {
-        const chevron = util.el('button', { type: 'button', class: 'nav__chevron', 'aria-expanded': openBranches.has(key) ? 'true' : 'false', 'aria-label': 'Développer ' + entry.label, tabindex: '-1' }, [util.icon('chevron-right', 'icon--sm')]);
-        chevron.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleBranch(li, key); });
-        row.appendChild(chevron);
-      } else {
-        row.appendChild(util.el('span', { class: 'nav__chevron nav__chevron--spacer' }));
-      }
+      if (hasChildren && openBranches.has(key)) li.classList.add('is-open');
+      const row = util.el('a', { class: 'nav__row', role: 'treeitem', href: router.urlFor(module.id, entry.route), title: entry.description || entry.label, tabindex: '-1' });
+      if (hasChildren) row.setAttribute('aria-expanded', openBranches.has(key) ? 'true' : 'false');
+      // Le chevron reste cliquable à la souris mais n'est plus un contrôle : un <button> dans un <a>
+      // est du contenu interactif imbriqué, et son aria-expanded doublonnait celui de la ligne.
+      const chevron = util.el('span', { class: 'nav__chevron' + (hasChildren ? '' : ' nav__chevron--spacer'), 'aria-hidden': 'true' }, hasChildren ? [util.icon('chevron-right', 'icon--sm')] : []);
+      if (hasChildren) chevron.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleBranch(li, key); });
+      row.appendChild(chevron);
       row.appendChild(util.icon(entry.icon || 'chevron-right', 'nav__icon icon--sm'));
       row.appendChild(util.el('span', { class: 'nav__label', text: entry.label }));
       row.addEventListener('click', (e) => { e.preventDefault(); tabs.open(module.id, entry.route, { push: true }); });
@@ -1017,9 +1028,9 @@
     function toggleBranch(li, key, force) {
       const open = force != null ? force : !li.classList.contains('is-open');
       li.classList.toggle('is-open', open);
-      li.setAttribute('aria-expanded', open ? 'true' : 'false');
-      const chevron = li.querySelector(':scope > .nav__row .nav__chevron');
-      if (chevron) chevron.setAttribute('aria-expanded', open ? 'true' : 'false');
+      const row = li.querySelector(':scope > .nav__row');
+      // L'état est annoncé par la ligne (treeitem focusable) ; le chevron ne fait que suivre en CSS.
+      if (row && row.hasAttribute('aria-expanded')) row.setAttribute('aria-expanded', open ? 'true' : 'false');
       if (open) openBranches.add(key); else openBranches.delete(key);
       persist();
     }
@@ -1028,24 +1039,22 @@
       if (!container) return;
       container.innerHTML = '';
       if (!tree.length) { container.appendChild(util.el('p', { class: 'nav__empty', text: 'Aucun module installé.' })); return; }
-      const root = util.el('ul', { class: 'nav__groups', role: 'tree' });
+      const root = util.el('ul', { class: 'nav__groups', role: 'tree', 'aria-label': 'Modules' });
       tree.forEach((group) => {
-        const li = util.el('li', { class: 'nav__group' });
+        // role="none" : seuls treeitem et group sont des enfants valides d'un role="tree".
+        const li = util.el('li', { class: 'nav__group', role: 'none' });
         li.appendChild(util.el('span', { class: 'nav__group-label', text: group.label, id: 'nav-group-' + group.id }));
         const ul = util.el('ul', { role: 'group', 'aria-labelledby': 'nav-group-' + group.id });
         group.modules.forEach((module) => {
           const hasChildren = module.children && module.children.length;
           const key = module.id;
-          const item = util.el('li', { class: 'nav__item nav__item--module', role: 'treeitem', 'data-module': module.id, 'data-state': module.state });
-          if (hasChildren) { item.setAttribute('aria-expanded', openBranches.has(key) ? 'true' : 'false'); if (openBranches.has(key)) item.classList.add('is-open'); }
-          const row = util.el('a', { class: 'nav__row', href: router.urlFor(module.id, null), title: module.state === 'active' ? (module.description || module.name) : module.name + ' — ' + stateTitle(module.state), tabindex: '-1', 'aria-disabled': module.state !== 'active' ? 'true' : null });
-          if (hasChildren) {
-            const chevron = util.el('button', { type: 'button', class: 'nav__chevron', 'aria-expanded': openBranches.has(key) ? 'true' : 'false', 'aria-label': 'Développer ' + module.name, tabindex: '-1' }, [util.icon('chevron-right', 'icon--sm')]);
-            chevron.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleBranch(item, key); });
-            row.appendChild(chevron);
-          } else {
-            row.appendChild(util.el('span', { class: 'nav__chevron nav__chevron--spacer' }));
-          }
+          const item = util.el('li', { class: 'nav__item nav__item--module', role: 'none', 'data-module': module.id, 'data-state': module.state });
+          if (hasChildren && openBranches.has(key)) item.classList.add('is-open');
+          const row = util.el('a', { class: 'nav__row', role: 'treeitem', href: router.urlFor(module.id, null), title: module.state === 'active' ? (module.description || module.name) : module.name + ' — ' + stateTitle(module.state), tabindex: '-1', 'aria-disabled': module.state !== 'active' ? 'true' : null });
+          if (hasChildren) row.setAttribute('aria-expanded', openBranches.has(key) ? 'true' : 'false');
+          const chevron = util.el('span', { class: 'nav__chevron' + (hasChildren ? '' : ' nav__chevron--spacer'), 'aria-hidden': 'true' }, hasChildren ? [util.icon('chevron-right', 'icon--sm')] : []);
+          if (hasChildren) chevron.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); toggleBranch(item, key); });
+          row.appendChild(chevron);
           row.appendChild(util.icon(module.icon || 'module', 'nav__icon'));
           row.appendChild(util.el('span', { class: 'nav__label', text: module.name }));
           const badge = util.el('span', { class: 'nav__badge', hidden: true, 'data-badge': module.id });
@@ -1076,17 +1085,29 @@
       if (active) highlight(active.id, active.route);
     }
 
+    /** Tabulation unique dans l'arborescence (« roving tabindex ») : une seule ligne atteignable au Tab. */
+    function setTabbable(row) {
+      if (!container || !row) return;
+      container.querySelectorAll('.nav__row').forEach((r) => { r.tabIndex = -1; });
+      row.tabIndex = 0;
+    }
+
     function highlight(moduleId, route) {
       if (!container) return;
       container.querySelectorAll('[aria-current]').forEach((n) => n.removeAttribute('aria-current'));
       if (!moduleId) return;
       const item = container.querySelector('.nav__item--module[data-module="' + moduleId + '"]');
-      if (item) item.setAttribute('aria-current', 'true');
+      let current = item ? item.querySelector(':scope > .nav__row') : null;
       if (route) {
         const path = util.splitRoute(route).path;
         const child = Array.from(container.querySelectorAll('.nav__item--child[data-module="' + moduleId + '"]')).find((n) => n.dataset.route === path);
-        if (child) { if (item) item.removeAttribute('aria-current'); child.setAttribute('aria-current', 'true'); }
+        if (child) current = child.querySelector(':scope > .nav__row');
       }
+      if (!current) return;
+      // aria-current va sur la ligne : le <li> porte role="none" et n'est plus exposé.
+      current.setAttribute('aria-current', 'true');
+      // La ligne courante devient la seule atteignable au Tab, sauf si elle est dans une branche repliée.
+      if (current.offsetParent !== null) setTabbable(current);
     }
 
     function applyBadges() {
@@ -1128,7 +1149,7 @@
         const rows = Array.from(container.querySelectorAll('.nav__row')).filter((r) => r.offsetParent !== null);
         const current = document.activeElement.closest('.nav__row');
         const index = rows.indexOf(current);
-        const focusRow = (row) => { if (!row) return; rows.forEach((r) => (r.tabIndex = -1)); row.tabIndex = 0; row.focus(); };
+        const focusRow = (row) => { if (!row) return; setTabbable(row); row.focus(); };
         switch (e.key) {
           case 'ArrowDown': e.preventDefault(); focusRow(rows[Math.min(rows.length - 1, index + 1)]); break;
           case 'ArrowUp': e.preventDefault(); focusRow(rows[Math.max(0, index - 1)]); break;
@@ -1460,6 +1481,17 @@
   const bbcode = (function () {
     const SIMPLE = { b: 'strong', i: 'em', u: 'u', s: 's', h1: 'h2', h2: 'h3', h3: 'h4', center: 'div class="bb-center"', right: 'div class="bb-right"' };
     const COLORS = ['red', 'green', 'blue', 'orange', 'gray', 'grey', 'purple', 'teal', 'black'];
+    const ENTITIES = { amp: '&', quot: '"', apos: '\'', lt: '<', gt: '>' };
+    /** Échappement identique à htmlspecialchars(ENT_QUOTES | ENT_HTML5) : l'apostrophe donne &apos;. */
+    function escape(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+    }
+    /** Déséchappement en une seule passe, comme html_entity_decode : « &amp;quot; » redonne « &quot; » et non un guillemet. */
+    function decode(value) {
+      return String(value).replace(/&(?:(amp|quot|apos|lt|gt)|#0*(34|38|39|60|62));/gi, (m, name, code) => (name ? ENTITIES[name.toLowerCase()] : String.fromCharCode(Number(code))));
+    }
     function safeUrl(url) {
       url = String(url || '').trim();
       if (!url || /[\s"'<>]/.test(url)) return null;
@@ -1470,7 +1502,7 @@
     /** Même algorithme que Atelier\View\BbCode::toHtml : échappement complet puis liste blanche. */
     function toHtml(source) {
       if (!source || !String(source).trim()) return '';
-      let text = util.escape(String(source).replace(/\r\n?/g, '\n'));
+      let text = escape(String(source).replace(/\r\n?/g, '\n'));
       const codes = [];
       text = text.replace(/\[code\]([\s\S]*?)\[\/code\]/gi, (m, c) => { codes.push('<pre class="bb-code"><code>' + c.replace(/^\n+|\n+$/g, '') + '</code></pre>'); return '\u0000CODE' + (codes.length - 1) + '\u0000'; });
       Object.keys(SIMPLE).forEach((tag) => {
@@ -1478,17 +1510,20 @@
         const close = html.split(' ')[0];
         text = text.replace(new RegExp('\\[' + tag + '\\]([\\s\\S]*?)\\[\\/' + tag + '\\]', 'gi'), '<' + html + '>$1</' + close + '>');
       });
-      text = text.replace(/\[quote=(?:&quot;)?([^\]&]{1,80}?)(?:&quot;)?\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote"><cite>$1</cite>$2</blockquote>');
+      // Parité avec BbCode::toHtml : la classe excluait « & », donc un auteur contenant une
+      // esperluette faisait retomber la citation en texte brut, côté aperçu comme côté serveur.
+      text = text.replace(/\[quote=(?:&quot;)?([^\]]{1,80}?)(?:&quot;)?\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote"><cite>$1</cite>$2</blockquote>');
       text = text.replace(/\[quote\]([\s\S]*?)\[\/quote\]/gi, '<blockquote class="bb-quote">$1</blockquote>');
-      const decode = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
-      text = text.replace(/\[url=(?:&quot;)?([^\]\s&]+?)(?:&quot;)?\]([\s\S]*?)\[\/url\]/gi, (m, u, label) => { const href = safeUrl(decode(u)); return href ? '<a href="' + util.escape(href) + '" rel="noopener" target="_blank">' + label + '</a>' : label; });
-      text = text.replace(/\[url\]([^\[]+?)\[\/url\]/gi, (m, u) => { const href = safeUrl(decode(u)); return href ? '<a href="' + util.escape(href) + '" rel="noopener" target="_blank">' + u + '</a>' : u; });
+      // Même correction qu'au serveur : la capture ne s'arrête plus au « & » (une URL à plusieurs
+      // paramètres restait affichée brute). safeUrl continue de refuser espaces, guillemets et schémas exotiques.
+      text = text.replace(/\[url=(?:&quot;)?([^\]]+?)(?:&quot;)?\]([\s\S]*?)\[\/url\]/gi, (m, u, label) => { const href = safeUrl(decode(u)); return href ? '<a href="' + escape(href) + '" rel="noopener" target="_blank">' + label + '</a>' : label; });
+      text = text.replace(/\[url\]([^\[]+?)\[\/url\]/gi, (m, u) => { const href = safeUrl(decode(u)); return href ? '<a href="' + escape(href) + '" rel="noopener" target="_blank">' + u + '</a>' : u; });
       text = text.replace(/\[color=(?:&quot;)?(#[0-9a-f]{3,6}|[a-z]+)(?:&quot;)?\]([\s\S]*?)\[\/color\]/gi, (m, c, inner) => { c = c.toLowerCase(); return (c.startsWith('#') || COLORS.includes(c)) ? '<span style="color:' + c + '">' + inner + '</span>' : inner; });
       text = text.replace(/\[size=small\]([\s\S]*?)\[\/size\]/gi, '<span class="bb-small">$1</span>').replace(/\[size=large\]([\s\S]*?)\[\/size\]/gi, '<span class="bb-large">$1</span>');
       text = text.replace(/\[list(=1)?\]([\s\S]*?)\[\/list\]/gi, (m, ordered, body) => { const items = body.split(/\[\*\]/).map((s) => s.trim()).filter(Boolean); const tag = ordered ? 'ol' : 'ul'; return '<' + tag + ' class="bb-list"><li>' + items.join('</li><li>') + '</li></' + tag + '>'; });
       text = text.replace(/\[hr\]/gi, '<hr>');
       text = text.replace(/\n{3,}/g, '\n\n').replace(/(<\/(?:h2|h3|h4|blockquote|ul|ol|div|pre)>|<hr>)\n+/g, '$1').replace(/\n+(<(?:h2|h3|h4|blockquote|ul|ol|div|pre|hr)\b)/g, '$1');
-      text = text.replace(/\n/g, '<br>');
+      text = text.replace(/\n/g, '<br>\n'); // nl2br($text, false) côté serveur conserve le saut de ligne d'origine
       text = text.replace(/\u0000CODE(\d+)\u0000/g, (m, i) => codes[Number(i)] || '');
       return '<div class="bb">' + text + '</div>';
     }

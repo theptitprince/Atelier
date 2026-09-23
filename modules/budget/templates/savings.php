@@ -12,7 +12,7 @@
 ?>
 <div class="module module-budget">
     <div class="budget__stats budget__stats--3">
-        <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $report['total'] >= 0 ? ' text-success' : ' text-danger' ?>"><?= $e($module->money($report['total'], '0,00 €', true)) ?></span><span class="kpi__label">économies <?= (int) $year ?> (<?= (int) $report['months'] ?> mois)</span></div></div>
+        <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $report['total'] >= 0 ? ' text-success' : ' text-danger' ?>"><?= $e($module->money($report['total'], '0,00 €', true)) ?></span><span class="kpi__label">économies <?= (int) $year ?> (<?= (int) $report['months'] ?> mois révolus)</span></div></div>
         <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value<?= $report['automatic_total'] >= 0 ? '' : ' text-danger' ?>"><?= $e($module->money($report['automatic_total'], '0,00 €', true)) ?></span><span class="kpi__label">budget non dépensé</span></div></div>
         <div class="card card--compact"><div class="card__body kpi"><span class="kpi__value"><?= $e($module->money($report['manual_total'], '0,00 €', true)) ?></span><span class="kpi__label">gains enregistrés</span></div></div>
     </div>
@@ -28,7 +28,9 @@
             <section class="card">
                 <div class="card__header"><h2 class="card__title"><?= $module->icon('grid') ?> Budget non dépensé par catégorie</h2><span class="text-small text-muted">janvier → <?= $report['months'] > 0 ? $e(\Atelier\Modules\Budget\Period::monthLabel(sprintf('%04d-%02d', $year, $report['months']))) : 'aucun mois' ?></span></div>
                 <div class="card__body<?= $report['automatic'] === [] ? '' : ' card__body--flush' ?>">
-                    <?php if ($report['automatic'] === []): ?>
+                    <?php if ($report['months'] === 0): ?>
+                        <p class="text-muted mb-0">Aucun mois révolu sur cette année : le calcul attend la fin du mois en cours pour comparer un budget entier à des dépenses complètes. Consultez l’année précédente avec le sélecteur ci-dessus.</p>
+                    <?php elseif ($report['automatic'] === []): ?>
                         <p class="text-muted mb-0">Aucune catégorie de dépense n’a de budget sur cette période. Fixez des budgets depuis <a href="#" data-route="envelopes">Budget du mois</a> : l’écart entre budget et réalisé est alors calculé ici automatiquement.</p>
                     <?php else: ?>
                         <table class="table table--compact budget__table">
@@ -48,7 +50,7 @@
                         </table>
                     <?php endif; ?>
                 </div>
-                <div class="card__footer text-small text-muted">Une économie négative signale un dépassement du budget. Le calcul porte sur les mois écoulés de l’année.</div>
+                <div class="card__footer text-small text-muted">Une économie négative signale un dépassement du budget. Le calcul porte sur les mois révolus de l’année : le mois en cours, dont les dépenses sont encore partielles, n’est pris en compte qu’une fois terminé.</div>
             </section>
 
             <section class="card">
