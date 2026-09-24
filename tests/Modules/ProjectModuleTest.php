@@ -264,4 +264,88 @@ final class ProjectModuleTest extends TestCase
             Clock::freeze(null);
         }
     }
+
+    /** @return list<string> identifiants locaux des informations d'un jeu portant le tag */
+    private function taggedKeys(string $tag, string $dataset): array
+    {
+        $tagId = (int) $this->app->shared->tags->findOrCreate($tag)['id'];
+        $rows = array_filter($this->app->shared->tags->infosWithTag($tagId), static fn (array $r): bool => $r['dataset_code'] === $dataset);
+        return array_values(array_map(static fn (array $r): string => (string) $r['local_key'], $rows));
+    }
+
+    /** Non-régression : un projet en corbeille restait listé sous ses tags (Explorateur, module Tags) avec un lien en 404. */
+    public function testTrashedProjectLeavesTagListingsAndComesBackOnRestore(): void
+    {
+        $id = (int) $this->post('project', 'save', ['title' => 'Cabane', 'tags' => 'bois, jardin'])->decodedJson()['data']['id'];
+        $this->assertSame([(string) $id], $this->taggedKeys('jardin', 'project.project'));
+
+        $this->assertSame(200, $this->post('project', 'delete', ['id' => $id])->status());
+        $this->assertSame([], $this->taggedKeys('jardin', 'project.project'), 'projet en corbeille écarté des tags');
+        $this->assertTrue($this->app->shared->registry->isTrashed('project.project', (string) $id));
+
+        $this->assertSame(200, $this->post('project', 'restore', ['id' => $id])->status());
+        $this->assertSame([(string) $id], $this->taggedKeys('jardin', 'project.project'), 'restauré par l’action du module');
+
+        // Corbeille globale, restauration groupée (clés « source:module:id »)
+        $this->post('project', 'delete', ['id' => $id]);
+        $this->assertSame([], $this->taggedKeys('jardin', 'project.project'));
+        $response = $this->post('trash', 'restore-many', ['ids' => ['module:project:' . $id]]);
+        $this->assertSame(200, $response->status(), $response->body());
+        $this->assertSame([(string) $id], $this->taggedKeys('jardin', 'project.project'), 'restauré par la corbeille globale');
+        $this->assertFalse($this->app->shared->registry->isTrashed('project.project', (string) $id));
+    }
+
+    /**
+     * Non-régression (constat d'origine) : une page du module Pages mise à la corbeille restait
+     * affichée dans la fiche du projet auquel elle était liée, avec un lien menant à une 404.
+     */
+    public function testTrashedLinkedPageDisappearsFromProjectAndComesBack(): void
+    {
+        $projectId = (int) $this->post('project', 'save', ['title' => 'Rénovation cuisine'])->decodedJson()['data']['id'];
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Devis du plombier', 'content' => 'Trois devis comparés.'])->decodedJson()['data']['id'];
+        $pageInfo = (string) $this->app->shared->registry->find('wiki.page', (string) $pageId)['id'];
+        $this->assertSame(200, $this->post('project', 'link', ['id' => $projectId, 'to' => $pageInfo])->status());
+        $this->assertStringContains('Devis du plombier', $this->view('show/' . $projectId)['content']);
+        $this->assertStringContains('1 élément lié', $this->view('show/' . $projectId)['banner']);
+
+        $this->assertSame(200, $this->post('wiki', 'delete', ['id' => $pageId])->status());
+        $show = $this->view('show/' . $projectId);
+        $this->assertFalse(str_contains($show['content'], 'Devis du plombier'), 'page en corbeille absente de la fiche du projet');
+        $this->assertFalse(str_contains($show['banner'], '1 élément lié'), 'ni comptée parmi les éléments liés');
+        $this->assertFalse(str_contains($this->view('list')['content'], 'Devis du plombier'));
+        $this->assertSame([], array_values(array_filter(
+            (array) ($this->app->handle(Request::create('GET', '/m/project/lookup', ['q' => 'devis'], [], $this->headers()))->decodedJson()['data']['results'] ?? []),
+            static fn (array $r): bool => $r['dataset'] === 'wiki.page'
+        )), 'ni proposée à la liaison');
+
+        $this->assertSame(200, $this->post('wiki', 'restore', ['id' => $pageId])->status());
+        $this->assertStringContains('Devis du plombier', $this->view('show/' . $projectId)['content'], 'la page revient avec sa relation');
+    }
+
+    /** Une information en corbeille ne peut pas être liée par son identifiant global. */
+    public function testLinkRefusesTrashedInformation(): void
+    {
+        $projectId = (int) $this->post('project', 'save', ['title' => 'Atelier photo'])->decodedJson()['data']['id'];
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Page jetée', 'content' => 'x'])->decodedJson()['data']['id'];
+        $pageInfo = (string) $this->app->shared->registry->find('wiki.page', (string) $pageId)['id'];
+        $this->post('wiki', 'delete', ['id' => $pageId]);
+        $response = $this->post('project', 'link', ['id' => $projectId, 'to' => $pageInfo]);
+        $this->assertSame(422, $response->status(), $response->body());
+    }
+
+    /** La migration de rattrapage marque au registre les projets déjà en corbeille, et se rejoue sans effet. */
+    public function testCatchUpMigrationMarksExistingTrash(): void
+    {
+        $trashed = (int) $this->post('project', 'save', ['title' => 'Ancien projet'])->decodedJson()['data']['id'];
+        $alive = (int) $this->post('project', 'save', ['title' => 'Projet vivant'])->decodedJson()['data']['id'];
+        $this->app->db->update('project_project', ['deleted_at' => '2026-09-01 10:00:00'], 'id = :id', ['id' => $trashed]);
+        $this->assertFalse($this->app->shared->registry->isTrashed('project.project', (string) $trashed));
+
+        $migration = require dirname(__DIR__, 2) . '/modules/project/migrations/002_registry_trash.php';
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('project.project', (string) $trashed)['trashed_at']);
+        $this->assertNull($this->app->shared->registry->find('project.project', (string) $alive)['trashed_at']);
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('project.project', (string) $trashed)['trashed_at'], 'rejouable sans effet');
+    }
 }

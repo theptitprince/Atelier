@@ -456,6 +456,11 @@ final class ExplorerModule extends AbstractModule
         if ($info === null || !$this->isVisibleCode((string) $info['dataset_code'])) {
             throw new NotFoundException('Information introuvable ou non accessible.');
         }
+        if ($info['trashed_at'] !== null) {
+            // L'élément est en corbeille dans son module : on ne le présente plus comme vivant,
+            // on dit où le retrouver.
+            throw new NotFoundException('Cette information est en corbeille. Restaurez-la depuis la Corbeille pour la consulter.');
+        }
         return $info;
     }
 

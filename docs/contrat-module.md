@@ -171,13 +171,25 @@ Le manifeste peut déclarer `"keepAlive": true` si un module a réellement besoi
 - Tables préfixées par l’identifiant du module : `notes_note`. Créées par les migrations du module.
 - Chaque jeu de données est déclaré dans `datasets` avec `visibility: shared|private`. Un jeu privé n’est ni catalogué ni accessible par l’API intermodule.
 - Un module consommateur lit un jeu partagé via le **service** du module propriétaire (`$this->ctx->moduleService('users')->...`) et jamais directement ses tables. Le service vérifie les permissions de l’utilisateur avec `$this->ctx->shared->catalog->canAccess($userId, 'users.account', 'read')`.
-- Identifiants globaux, tags, relations, pièces jointes : `$this->ctx->shared->registry->register('notes.note', (string) $id, $title, $userId)` puis `tags->attach($infoId, 'urgent')`, etc.
+- Identifiants globaux, tags, relations, pièces jointes : `$this->ctx->shared->registry->register('notes.note', (string) $id, $title, $userId)` puis `tags->attach($infoId, 'urgent')`, etc. Le tag est le **lieur universel** d’Atelier : tout élément métier qu’un utilisateur crée est inscrit au registre et propose un champ de tags dans son formulaire (`data-tags-input`), puis `tags->replace($infoId, $noms, TagService::SHARED, $userId)` à l’enregistrement.
+- Chaque jeu de données déclare son `openRoute` (par exemple `edit/{key}`) : c’est ainsi que le module Tags, l’Explorateur et les éléments liés d’un projet ouvrent l’élément dans son module. Sans lui, l’élément est listé mais pas cliquable.
+- Un jeu **privé** n’est pas exposé aux autres modules. Le module Tags montre toutefois à chaque utilisateur **ses propres** informations privées portant un tag (`info_registry.created_by`), pour qu’une note taguée se retrouve par son tag.
 
 ## 9 bis. Suppression et corbeille (règle du projet)
 
 Toute suppression d’une donnée métier par un utilisateur est **logique** (colonne `deleted_at`), restaurable pendant `trash.retention_days` (30 jours), puis purgée par le hook `purge()` appelé par `console maintenance:purge`. Les lignes supprimées sont exclues de toutes les listes, comptages, badges, exports et services intermodules.
 
-Le module implémente `\Atelier\Modules\TrashProviderInterface` (`trashItems()`, `restoreTrashItem()`, `purgeTrashItem()`) pour que ses éléments apparaissent dans le module **Corbeille**, qui regroupe toutes les corbeilles au même endroit (recherche, restauration et purge groupées). Un module qui gère plusieurs types d’éléments préfixe l’identifiant (`asset:12`, `log:9`). Une vue `trash` propre au module reste possible ; elle renvoie vers la corbeille globale (`data-open-module="trash"`). La purge physique retire aussi l’entrée du registre commun (`registry->unregister`). Le générateur `console module:create` produit ce squelette.
+Le module implémente `\Atelier\Modules\TrashProviderInterface` (`trashItems()`, `restoreTrashItem()`, `purgeTrashItem()`) pour que ses éléments apparaissent dans le module **Corbeille**, qui regroupe toutes les corbeilles au même endroit (recherche, restauration et purge groupées). Un module qui gère plusieurs types d’éléments préfixe l’identifiant (`asset:12`, `log:9`). Une vue `trash` propre au module reste possible ; elle renvoie vers la corbeille globale (`data-open-module="trash"`). Le générateur `console module:create` produit ce squelette.
+
+**Le registre commun doit connaître la corbeille.** Les tags, les éléments liés, l’Explorateur et les sélecteurs passent par le registre, pas par les tables du module : sans signal, un élément supprimé y resterait listé, avec un lien menant à une erreur 404. Le module appelle donc :
+
+| Moment | Appel |
+|---|---|
+| Mise en corbeille (unitaire ou groupée) | `$this->ctx->shared->registry->trash('notes.note', $ids)` |
+| Restauration (route du module **et** `restoreTrashItem`) | `$this->ctx->shared->registry->restore('notes.note', $ids)` |
+| Purge définitive (bouton, `purgeTrashItem`, rétention) | `$this->ctx->shared->registry->unregister('notes.note', (string) $id)` |
+
+Les deux premiers acceptent une clé ou une liste de clés. **Cascades** : quand un élément masque ses dépendants sans poser leur propre `deleted_at` (un compte et ses opérations, un équipement et ses interventions), le module marque aussi ces dépendants, puis les démarque à la restauration, sauf ceux qui étaient déjà en corbeille pour leur propre compte. `relationsOf($infoId, true)` inclut les informations en corbeille quand un traitement en a besoin. La purge retire l’entrée du registre avec ses tags, ses relations et ses pièces jointes.
 
 ## 10. Cycle de vie et installation
 

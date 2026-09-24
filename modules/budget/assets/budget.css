@@ -8,6 +8,7 @@
 .module-budget .budget__block { display: block; }
 .module-budget .budget__note { padding: var(--sp-2) var(--sp-3); margin: 0; border-top: 1px solid var(--c-border); }
 .module-budget .budget__row--uncleared td { font-style: italic; }
+.module-budget .budget__tags { margin-top: 2px; }
 .module-budget .budget__row--parent td { background: var(--c-accent-soft, rgba(0, 0, 0, .03)); }
 .module-budget .budget__row--detail td { background: var(--c-bg-muted, rgba(0, 0, 0, .02)); }
 .module-budget .budget__indent { padding-left: 1.4em; }

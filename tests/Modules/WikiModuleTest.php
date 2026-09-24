@@ -262,4 +262,81 @@ final class WikiModuleTest extends TestCase
         $this->assertStringContains('absent', $vuBob);
         $this->assertStringContains('indisponible', $vuBob);
     }
+
+    /** @return list<string> identifiants locaux des informations d'un jeu portant le tag */
+    private function taggedKeys(string $tag, string $dataset): array
+    {
+        $tagId = (int) $this->app->shared->tags->findOrCreate($tag)['id'];
+        $rows = array_filter($this->app->shared->tags->infosWithTag($tagId), static fn (array $r): bool => $r['dataset_code'] === $dataset);
+        return array_values(array_map(static fn (array $r): string => (string) $r['local_key'], $rows));
+    }
+
+    /**
+     * Non-régression : une page mise à la corbeille restait listée sous ses tags et dans les
+     * éléments liés des autres modules (fiche d'un projet), avec un lien menant à une erreur 404.
+     */
+    public function testTrashedPageLeavesTagListingsAndComesBackOnRestore(): void
+    {
+        $id = (int) $this->post('wiki', 'save', ['title' => 'Pain au levain', 'content' => 'Recette.', 'tags' => 'recette, cuisine'])->decodedJson()['data']['id'];
+        $this->assertSame([(string) $id], $this->taggedKeys('recette', 'wiki.page'));
+
+        $this->assertSame(200, $this->post('wiki', 'delete', ['id' => $id])->status());
+        $this->assertSame([], $this->taggedKeys('recette', 'wiki.page'), 'page en corbeille écartée des tags');
+        $this->assertTrue($this->app->shared->registry->isTrashed('wiki.page', (string) $id));
+
+        $this->assertSame(200, $this->post('wiki', 'restore', ['id' => $id])->status());
+        $this->assertSame([(string) $id], $this->taggedKeys('recette', 'wiki.page'), 'restaurée par l’action du module');
+
+        $this->post('wiki', 'delete', ['id' => $id]);
+        $module = $this->app->modules->instance('wiki');
+        $module->boot($this->app->context(Request::create('GET', '/')));
+        $module->restoreTrashItem((string) $id);
+        $this->assertSame([(string) $id], $this->taggedKeys('recette', 'wiki.page'), 'restaurée par la corbeille globale');
+        $this->assertFalse($this->app->shared->registry->isTrashed('wiki.page', (string) $id));
+    }
+
+    /** La fiche d'une page n'affiche ni un projet relié ni un lieu mis à la corbeille ; ils reviennent à la restauration. */
+    public function testShowHidesTrashedRelatedProjectAndPoint(): void
+    {
+        $this->app->acl->setRule('user', $this->userId, AclService::module('project'), 'admin', 'allow');
+        $this->app->acl->clearCache();
+        $pointId = (int) $this->post('geo', 'save', ['name' => 'Moulin de la Galette', 'coordinates' => '48.8874, 2.3371'])->decodedJson()['data']['id'];
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Balade à Montmartre', 'content' => 'Itinéraire.', 'points' => [$pointId]])->decodedJson()['data']['id'];
+        $projectId = (int) $this->post('project', 'save', ['title' => 'Week-end à Paris'])->decodedJson()['data']['id'];
+        $pageInfo = (string) $this->app->shared->registry->find('wiki.page', (string) $pageId)['id'];
+        $this->assertSame(200, $this->post('project', 'link', ['id' => $projectId, 'to' => $pageInfo, 'type' => 'related'])->status());
+
+        $show = fn (): string => (string) $this->view('page/' . $pageId)['content'];
+        $this->assertStringContains('Week-end à Paris', $show());
+        $this->assertStringContains('Moulin de la Galette', $show());
+
+        $this->post('project', 'delete', ['id' => $projectId]);
+        $this->post('geo', 'delete', ['id' => $pointId]);
+        $this->assertFalse(str_contains($show(), 'Week-end à Paris'), 'projet en corbeille absent de la fiche');
+        $this->assertFalse(str_contains($show(), 'Moulin de la Galette'), 'lieu en corbeille absent de la fiche');
+
+        // Enregistrer la page pendant que le lieu est en corbeille ne doit pas rompre le rattachement.
+        $this->assertSame(200, $this->post('wiki', 'save', ['id' => $pageId, 'title' => 'Balade à Montmartre', 'content' => 'Itinéraire revu.'])->status());
+
+        $this->post('project', 'restore', ['id' => $projectId]);
+        $this->post('geo', 'restore', ['id' => $pointId]);
+        $this->assertStringContains('Week-end à Paris', $show());
+        $this->assertStringContains('Moulin de la Galette', $show(), 'le lieu revient avec son rattachement');
+    }
+
+    /** La migration de rattrapage marque au registre les pages déjà en corbeille, et se rejoue sans effet. */
+    public function testCatchUpMigrationMarksExistingTrash(): void
+    {
+        $trashed = (int) $this->post('wiki', 'save', ['title' => 'Ancienne', 'content' => 'x'])->decodedJson()['data']['id'];
+        $alive = (int) $this->post('wiki', 'save', ['title' => 'Vivante', 'content' => 'x'])->decodedJson()['data']['id'];
+        $this->app->db->update('wiki_page', ['deleted_at' => '2026-09-01 10:00:00'], 'id = :id', ['id' => $trashed]);
+        $this->assertFalse($this->app->shared->registry->isTrashed('wiki.page', (string) $trashed));
+
+        $migration = require dirname(__DIR__, 2) . '/modules/wiki/migrations/002_registry_trash.php';
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('wiki.page', (string) $trashed)['trashed_at']);
+        $this->assertNull($this->app->shared->registry->find('wiki.page', (string) $alive)['trashed_at']);
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('wiki.page', (string) $trashed)['trashed_at'], 'rejouable sans effet');
+    }
 }

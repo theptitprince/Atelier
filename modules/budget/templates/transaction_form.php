@@ -8,6 +8,7 @@
  * @var list<array<string, mixed>> $categories arbre
  * @var array<string, string> $sources
  * @var string $today
+ * @var list<string> $tags tags partagés (modification)
  * @var string|null $infoId (modification)
  * @var list<array<string, mixed>> $attachments (modification)
  * @var bool $attachmentsModule (modification)
@@ -16,6 +17,7 @@
  * @var \Atelier\Modules\Budget\BudgetModule $module
  */
 $infoId ??= null;
+$tags ??= [];
 $attachments ??= [];
 $attachmentsModule ??= false;
 $rights ??= ['update' => true, 'delete' => false];
@@ -76,6 +78,12 @@ $ro = $readonly ? ' readonly' : '';
                     </div>
                     <div class="field field--full">
                         <label class="checkbox"><input type="checkbox" name="cleared" value="1"<?= !empty($transaction['cleared']) ? ' checked' : '' ?><?= $readonly ? ' disabled' : '' ?>> Pointée (apparaît sur le relevé bancaire)</label>
+                    </div>
+                    <div class="field field--full">
+                        <label class="field__label" for="bt-tags"><?= $module->icon('tag', 'icon--sm') ?> Tags partagés</label>
+                        <input class="input" type="text" id="bt-tags" name="tags" value="<?= $e(implode(', ', $tags)) ?>" placeholder="Ajouter un tag…" autocomplete="off" data-tags-input data-tags-max="20"<?= $ro ?>>
+                        <span class="field__help">Les tags existants sont proposés pendant la saisie ; Entrée ou virgule ajoute le tag. Ils sont communs à toute l’application.</span>
+                        <span class="field__error"></span>
                     </div>
                     <div class="field field--full">
                         <label class="field__label" for="bt-notes">Notes</label>

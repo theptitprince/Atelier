@@ -58,6 +58,8 @@ final class ModuleScaffolder
             'fields' => ['id' => 'Identifiant', 'title' => 'Titre', 'created_at' => 'Date de création'],
             'operations' => ['read', 'create', 'update', 'delete'],
             'version' => 1,
+            // Les vues transversales (Tags, Explorateur, éléments liés) ouvrent l'élément ici.
+            'openRoute' => 'edit/{key}',
         ]] : [];
 
         $manifest = [
@@ -102,7 +104,7 @@ final class ModuleScaffolder
 
     private function entryClass(string $id, string $namespace, string $entry, string $name, string $icon, bool $withTable, string $table): string
     {
-        $repoUse = $withTable ? "\n    private ?ItemRepository \$repository = null;\n\n    private function repo(): ItemRepository\n    {\n        return \$this->repository ??= new ItemRepository(\$this->ctx->db);\n    }\n" : '';
+        $repoUse = $withTable ? "\n    /** Jeu de données déclaré dans le manifeste : clé des informations au registre commun. */\n    private const DATASET = '{$id}.item';\n\n    private ?ItemRepository \$repository = null;\n\n    private function repo(): ItemRepository\n    {\n        return \$this->repository ??= new ItemRepository(\$this->ctx->db);\n    }\n" : '';
         $routes = $withTable
             ? "        \$r->view('index', [\$this, 'index'], permission: 'open');\n        \$r->view('edit/{id}', [\$this, 'edit'], permission: 'update');\n        \$r->view('new', [\$this, 'create'], permission: 'create');\n        \$r->action('save', [\$this, 'save'], permission: 'update');\n        \$r->action('delete', [\$this, 'delete'], permission: 'delete');"
             : "        \$r->view('index', [\$this, 'index'], permission: 'open');";
@@ -113,7 +115,7 @@ final class ModuleScaffolder
 
     public function create(Request \$request, array \$params): ModuleView
     {
-        return \$this->editor(['id' => null, 'title' => '', 'content' => '']);
+        return \$this->editor(['id' => null, 'title' => '', 'content' => '', 'tags' => []]);
     }
 
     public function edit(Request \$request, array \$params): ModuleView
@@ -122,6 +124,8 @@ final class ModuleScaffolder
         if (\$item === null) {
             throw new NotFoundException('Élément introuvable.');
         }
+        \$info = \$this->ctx->shared->registry->find(self::DATASET, (string) \$item['id']);
+        \$item['tags'] = \$info === null ? [] : array_map(static fn (array \$t): string => (string) \$t['name'], \$this->ctx->shared->tags->tagsOf((string) \$info['id']));
         return \$this->editor(\$item);
     }
 
@@ -147,6 +151,11 @@ final class ModuleScaffolder
             \$this->repo()->update(\$id, \$title, \$content);
             \$this->log('{$id}.update', 'success', 'item:' . \$id, 'Élément modifié');
         }
+        // Inscription au registre commun : c'est elle qui rend l'élément taguable, reliable à
+        // ceux des autres modules et visible dans les vues transversales.
+        \$info = \$this->ctx->shared->registry->register(self::DATASET, (string) \$id, \$title, \$this->ctx->userId());
+        \$tags = array_values(array_filter(array_map('trim', explode(',', \$request->string('tags')))));
+        \$this->ctx->shared->tags->replace(\$info, \$tags, TagService::SHARED, \$this->ctx->userId());
         return ActionResult::ok(['id' => \$id], 'Élément enregistré.')->navigate('edit/' . \$id)->dirty(false);
     }
 
@@ -158,6 +167,9 @@ final class ModuleScaffolder
             throw new NotFoundException('Élément introuvable.');
         }
         \$this->repo()->softDelete(\$id);
+        // Sans ce signal, l'élément resterait listé sous ses tags et dans les éléments liés,
+        // avec un lien menant à une erreur 404.
+        \$this->ctx->shared->registry->trash(self::DATASET, (string) \$id);
         \$this->log('{$id}.delete', 'success', 'item:' . \$id, 'Élément placé dans la corbeille');
         return ActionResult::ok(null, 'Élément placé dans la corbeille.')->navigate('index');
     }
@@ -191,6 +203,7 @@ final class ModuleScaffolder
         if (!\$this->repo()->restore((int) \$id)) {
             throw new NotFoundException('Cet élément n’est pas dans la corbeille.');
         }
+        \$this->ctx->shared->registry->restore(self::DATASET, \$id);
         \$this->log('{$id}.restore', 'success', 'item:' . \$id, 'Élément restauré');
     }
 
@@ -200,6 +213,8 @@ final class ModuleScaffolder
         if (!\$this->repo()->purge((int) \$id)) {
             throw new NotFoundException('Cet élément n’est pas dans la corbeille.');
         }
+        // Purge définitive : l'entrée du registre part aussi, avec ses tags, liens et pièces jointes.
+        \$this->ctx->shared->registry->unregister(self::DATASET, \$id);
         \$this->log('{$id}.purge', 'success', 'item:' . \$id, 'Élément supprimé définitivement');
     }
 
@@ -210,6 +225,7 @@ final class ModuleScaffolder
         \$count = 0;
         foreach (\$this->repo()->expiredTrashIds(\$days) as \$expired) {
             \$this->repo()->purge(\$expired);
+            \$this->ctx->shared->registry->unregister(self::DATASET, (string) \$expired);
             \$count++;
         }
         return \$count . ' élément(s) purgé(s) de la corbeille (> ' . \$days . ' jours)';
@@ -223,7 +239,7 @@ final class ModuleScaffolder
         return \$this->view(\$isNew ? 'Nouvel élément' : 'Élément n° ' . \$item['id'], \$this->banner(\$isNew ? 'Nouvel élément' : \$item['title'], 'Ctrl+S pour enregistrer'), \$content);
     }
 PHP : '';
-        $uses = $withTable ? "use Atelier\\Error\\NotFoundException;\nuse Atelier\\Error\\ValidationException;\n" : '';
+        $uses = $withTable ? "use Atelier\\Error\\NotFoundException;\nuse Atelier\\Error\\ValidationException;\nuse Atelier\\Shared\\TagService;\n" : '';
         $implements = $withTable ? ' implements \\Atelier\\Modules\\TrashProviderInterface' : '';
 
         return <<<PHP
@@ -455,6 +471,11 @@ PHP;
             <div class="field">
                 <label class="field__label" for="{$id}-content">Contenu</label>
                 <textarea class="textarea" id="{$id}-content" name="content" rows="12" data-editor="bbcode"><?= \$e(\$item['content'] ?? '') ?></textarea>
+            </div>
+            <div class="field">
+                <label class="field__label" for="{$id}-tags">Tags</label>
+                <input class="input" type="text" id="{$id}-tags" name="tags" value="<?= \$e(implode(', ', \$item['tags'] ?? [])) ?>" placeholder="Ajouter un tag…" autocomplete="off" data-tags-input data-tags-max="20">
+                <span class="field__hint">Les tags sont partagés entre tous les modules : ils relient cet élément aux autres.</span>
             </div>
         </div>
         <div class="card__footer form-actions">

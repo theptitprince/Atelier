@@ -13,6 +13,10 @@ use Atelier\Modules\ModuleContext;
  * Un module consommateur l'obtient par $this->ctx->moduleService('demo') et ne lit jamais la
  * table demo_item directement. Chaque méthode vérifie via le catalogue que le demandeur a le
  * droit de lecture sur le jeu : un jeu privé (demo.secret) n'est jamais exposé ici.
+ *
+ * Les articles en corbeille sont invisibles pour les autres modules : le service ne lit que
+ * par les méthodes « vivantes » du dépôt (all(), find()). Un consommateur n'a donc rien à
+ * savoir de la corbeille du module producteur.
  */
 final class DemoService
 {
@@ -40,7 +44,7 @@ final class DemoService
         ], $this->items->all());
     }
 
-    /** Libellé d'un article, ou « Article #id » s'il a disparu. */
+    /** Libellé d'un article, ou « Article #id » s'il a disparu ou s'il est en corbeille. */
     public function label(int $viewerUserId, int $id): string
     {
         $this->assertReadable($viewerUserId);

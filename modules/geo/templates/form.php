@@ -1,7 +1,7 @@
 <?php
 /**
  * Création / modification d'un point GPS.
- * @var array<string, mixed> $point (id, code, name, coordinates, altitude, address, description)
+ * @var array<string, mixed> $point (id, code, name, coordinates, altitude, address, description, tags)
  * @var bool $isNew
  * @var array<string, bool> $rights
  * @var \Atelier\Modules\Geo\GeoModule $module
@@ -49,6 +49,12 @@
                     <div class="field field--full">
                         <label class="field__label" for="geo-description">Description</label>
                         <textarea class="textarea" id="geo-description" name="description" rows="4" maxlength="5000"><?= $e($point['description'] ?? '') ?></textarea>
+                        <span class="field__error"></span>
+                    </div>
+                    <div class="field field--full">
+                        <label class="field__label" for="geo-tags"><svg class="icon icon--sm" aria-hidden="true"><use href="#i-tag"></use></svg> Tags partagés</label>
+                        <input class="input" type="text" id="geo-tags" name="tags" value="<?= $e(implode(', ', $point['tags'] ?? [])) ?>" placeholder="Ajouter un tag…" autocomplete="off" data-tags-input data-tags-max="20">
+                        <span class="field__help">Les tags existants sont proposés pendant la saisie (Entrée ou virgule pour ajouter). Ils restent modifiables depuis la fiche du point.</span>
                         <span class="field__error"></span>
                     </div>
                 </div>

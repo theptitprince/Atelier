@@ -173,7 +173,9 @@ final class GeoService
         if ($target === null) {
             return;
         }
-        foreach ($this->ctx->shared->relations->relationsOf($infoId) as $relation) {
+        // Relations en corbeille incluses : un détachement explicite doit aboutir même si le point
+        // est à la corbeille (sinon la relation réapparaîtrait à sa restauration).
+        foreach ($this->ctx->shared->relations->relationsOf($infoId, true) as $relation) {
             if ($relation['type'] === self::RELATION && $relation['direction'] === 'out' && $relation['other_id'] === $target['id']) {
                 $this->ctx->shared->relations->remove((int) $relation['id']);
             }

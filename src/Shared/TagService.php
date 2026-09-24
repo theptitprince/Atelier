@@ -17,6 +17,14 @@ final class TagService
 {
     public const SHARED = 'shared';
 
+    /**
+     * Deux compteurs par tag : usage_count compte toutes les informations, corbeille comprise,
+     * et sert à décider qu'un tag est inutilisé (le supprimer ferait perdre ses tags à un élément
+     * restauré) ; live_count ne compte que les informations vivantes, pour l'affichage.
+     */
+    private const COUNTS = '(SELECT COUNT(*) FROM info_tags it WHERE it.tag_id = t.id) AS usage_count, '
+        . '(SELECT COUNT(*) FROM info_tags it INNER JOIN info_registry r ON r.id = it.info_id WHERE it.tag_id = t.id AND r.trashed_at IS NULL) AS live_count';
+
     public function __construct(private readonly Database $db)
     {
     }
@@ -89,11 +97,16 @@ final class TagService
         return $this->db->select($sql . ' ORDER BY t.normalized', $params);
     }
 
-    /** @return list<array<string, mixed>> informations portant le tag */
+    /**
+     * Informations portant le tag, hors corbeille : un élément en corbeille restait listé sous
+     * son tag avec un lien menant à une erreur 404. Le tag lui-même est conservé.
+     *
+     * @return list<array<string, mixed>>
+     */
     public function infosWithTag(int $tagId, int $limit = 200): array
     {
         return $this->db->select(
-            'SELECT r.* FROM info_registry r INNER JOIN info_tags it ON it.info_id = r.id WHERE it.tag_id = :t ORDER BY r.label LIMIT ' . $limit,
+            'SELECT r.* FROM info_registry r INNER JOIN info_tags it ON it.info_id = r.id WHERE it.tag_id = :t AND r.trashed_at IS NULL ORDER BY r.label LIMIT ' . $limit,
             ['t' => $tagId]
         );
     }
@@ -102,7 +115,7 @@ final class TagService
     public function search(string $term, string $scope = self::SHARED, int $limit = 20): array
     {
         return $this->db->select(
-            'SELECT t.*, (SELECT COUNT(*) FROM info_tags it WHERE it.tag_id = t.id) AS usage_count FROM tags t WHERE t.scope = :s AND t.normalized LIKE :term ORDER BY t.normalized LIMIT ' . $limit,
+            'SELECT t.*, ' . self::COUNTS . ' FROM tags t WHERE t.scope = :s AND t.normalized LIKE :term ORDER BY t.normalized LIMIT ' . $limit,
             ['s' => $scope, 'term' => Str::normalizeTag($term) . '%']
         );
     }
@@ -111,7 +124,7 @@ final class TagService
     public function all(string $scope = self::SHARED): array
     {
         return $this->db->select(
-            'SELECT t.*, (SELECT COUNT(*) FROM info_tags it WHERE it.tag_id = t.id) AS usage_count FROM tags t WHERE t.scope = :s ORDER BY t.normalized',
+            'SELECT t.*, ' . self::COUNTS . ' FROM tags t WHERE t.scope = :s ORDER BY t.normalized',
             ['s' => $scope]
         );
     }

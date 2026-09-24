@@ -165,6 +165,12 @@ final class LogRepository
         return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE asset_id = :a', ['a' => $assetId]));
     }
 
+    /** @return list<int> interventions d'un équipement qui ne sont pas en corbeille pour leur propre compte (restauration de l'équipement) */
+    public function liveIdsForAsset(int $assetId): array
+    {
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE asset_id = :a AND deleted_at IS NULL', ['a' => $assetId]));
+    }
+
     /** Suppression physique de toutes les interventions d'un équipement (purge en cascade). */
     public function deleteForAsset(int $assetId): int
     {

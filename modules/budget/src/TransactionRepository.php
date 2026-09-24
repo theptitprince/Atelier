@@ -46,6 +46,20 @@ final class TransactionRepository
         return $row === null ? null : $this->hydrate($row);
     }
 
+    /**
+     * Dernière opération en corbeille pour une référence d'origine, sur un compte vivant.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findTrashedBySourceRef(string $sourceRef): ?array
+    {
+        $row = $this->db->selectOne(
+            'SELECT ' . self::COLUMNS . self::FROM . ' WHERE t.source_ref = :r AND t.deleted_at IS NOT NULL AND a.deleted_at IS NULL ORDER BY t.deleted_at DESC, t.id DESC',
+            ['r' => $sourceRef]
+        );
+        return $row === null ? null : $this->hydrate($row);
+    }
+
     /** Une empreinte d'import reste connue tant que la ligne existe, corbeille comprise (pas de doublon à la restauration). */
     public function hashExists(string $hash): bool
     {
@@ -222,6 +236,12 @@ final class TransactionRepository
     public function idsForAccount(int $accountId): array
     {
         return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE account_id = :a', ['a' => $accountId]));
+    }
+
+    /** @return list<int> opérations d'un compte qui ne sont pas en corbeille pour leur propre compte (restauration du compte) */
+    public function liveIdsForAccount(int $accountId): array
+    {
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE account_id = :a AND deleted_at IS NULL', ['a' => $accountId]));
     }
 
     /** Suppression physique de toutes les opérations d'un compte (purge du compte). */

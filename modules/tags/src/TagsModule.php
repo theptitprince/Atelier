@@ -17,7 +17,8 @@ use Atelier\Support\Str;
 
 /**
  * Tags partagés : nuage et tableau des tags de portée « shared », détail d'un tag avec les
- * informations qui le portent (jeux de données partagés et lisibles uniquement), et gestion
+ * informations vivantes qui le portent (jeux partagés lisibles, plus les informations privées de
+ * l'utilisateur lui-même), et gestion
  * (renommage, fusion, suppression, doublons probables, tags inutilisés) réservée à la
  * permission propre « manage » (permission tags.manage du cahier des charges).
  *
@@ -106,25 +107,38 @@ final class TagsModule extends AbstractModule
         $userId = $this->ctx->userId();
         $canManage = $this->can('manage');
 
-        $usage = $this->queries()->usageCount($tagId);
+        // Le chiffre affiché ne compte que les informations vivantes ; le total, corbeille comprise,
+        // sert aux confirmations de suppression et de fusion, qui touchent aussi la corbeille.
+        $usage = $this->queries()->liveUsageCount($tagId);
+        $totalUsage = $this->queries()->usageCount($tagId);
         $author = $this->displayName($tag['created_by'] ?? null);
 
-        // Informations portant le tag : uniquement les jeux partagés ET lisibles par l'utilisateur.
+        // Informations portant le tag, hors corbeille : jeux partagés lisibles par l'utilisateur,
+        // plus ses propres informations des jeux privés (une note taguée doit se retrouver par
+        // son tag, au moins pour son auteur).
         $infos = [];
         $hidden = 0;
         $catalog = $this->ctx->shared->catalog;
+        $ownPrivate = array_flip($catalog->ownPrivateCodes($userId));
         $datasetCache = [];
         foreach ($this->ctx->shared->tags->infosWithTag($tagId, self::INFOS_LIMIT) as $info) {
             $code = (string) $info['dataset_code'];
             if (!array_key_exists($code, $datasetCache)) {
-                $dataset = $catalog->findShared($code);
-                $datasetCache[$code] = $dataset !== null && $catalog->canAccess($userId, $code, 'read') ? $dataset : null;
+                $shared = $catalog->findShared($code);
+                if ($shared !== null && $catalog->canAccess($userId, $code, 'read')) {
+                    $datasetCache[$code] = ['dataset' => $shared, 'ownOnly' => false];
+                } elseif (isset($ownPrivate[$code])) {
+                    $datasetCache[$code] = ['dataset' => $catalog->find($code) ?? ['name' => $code], 'ownOnly' => true];
+                } else {
+                    $datasetCache[$code] = null;
+                }
             }
-            $dataset = $datasetCache[$code];
-            if ($dataset === null) {
+            $entry = $datasetCache[$code];
+            if ($entry === null || ($entry['ownOnly'] && (int) ($info['created_by'] ?? 0) !== $userId)) {
                 $hidden++;
                 continue;
             }
+            $dataset = $entry['dataset'];
             $moduleId = (string) $info['module_id'];
             $descriptor = $this->ctx->modules()->get($moduleId);
             $openRoute = $this->openRouteFor($moduleId, $code, (string) $info['local_key']);
@@ -147,6 +161,7 @@ final class TagsModule extends AbstractModule
         $content = $this->render('detail', [
             'tag' => $tag,
             'usage' => $usage,
+            'totalUsage' => $totalUsage,
             'author' => $author,
             'infos' => $infos,
             'hidden' => $hidden,
@@ -488,7 +503,7 @@ final class TagsModule extends AbstractModule
         $factor = $dir === 'desc' ? -1 : 1;
         usort($tags, static function (array $a, array $b) use ($sort, $factor): int {
             if ($sort === 'usage') {
-                $cmp = (int) $a['usage_count'] <=> (int) $b['usage_count'];
+                $cmp = (int) $a['live_count'] <=> (int) $b['live_count'];
                 return $cmp !== 0 ? $factor * $cmp : strcmp((string) $a['normalized'], (string) $b['normalized']);
             }
             return $factor * strcmp((string) $a['normalized'], (string) $b['normalized']);
@@ -506,11 +521,14 @@ final class TagsModule extends AbstractModule
     {
         $max = 0;
         foreach ($tags as $tag) {
-            $max = max($max, (int) $tag['usage_count']);
+            $max = max($max, (int) $tag['live_count']);
         }
         foreach ($tags as &$tag) {
-            $usage = (int) $tag['usage_count'];
-            $tag['usage_count'] = $usage;
+            // live_count : informations vivantes, affichées et servant au nuage ; usage_count :
+            // total corbeille comprise, seul juge d'un tag « inutilisé ».
+            $usage = (int) $tag['live_count'];
+            $tag['usage_count'] = (int) $tag['usage_count'];
+            $tag['live_count'] = $usage;
             $tag['level'] = $usage === 0 || $max === 0 ? 1 : min(self::CLOUD_LEVELS, 1 + (int) ceil(($usage / $max) * (self::CLOUD_LEVELS - 1)));
             $tag['author'] = $this->displayName($tag['created_by'] ?? null);
         }

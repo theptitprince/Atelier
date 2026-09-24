@@ -154,6 +154,23 @@ final class AttachmentServiceTest extends TestCase
     }
 
     /**
+     * Non-régression : un fichier tagué puis mis à la corbeille restait listé sous ses tags, son
+     * entrée propre du registre (« attachments.file ») ignorant la corbeille.
+     */
+    public function testTrashingAFileIsKnownToTheRegistry(): void
+    {
+        $registry = new \Atelier\Shared\InfoRegistry($this->db, $this->service);
+        $file = $this->service->storeContent('contenu', 'notice.txt', null, 1);
+        $registry->register('attachments.file', $file['id'], 'Notice', 1);
+
+        $this->service->softDelete($file['id']);
+        $this->assertTrue($registry->isTrashed('attachments.file', $file['id']));
+
+        $this->service->restore($file['id']);
+        $this->assertFalse($registry->isTrashed('attachments.file', $file['id']));
+    }
+
+    /**
      * Non-régression : la clé étrangère des pièces jointes étant ON DELETE SET NULL, la purge
      * définitive d'une information laissait ses fichiers en base et sur le disque, sans
      * propriétaire et invisibles dans l'interface.

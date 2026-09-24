@@ -103,4 +103,49 @@ final class NotesModuleTest extends TestCase
         }
         $this->assertStringContains('Une note', $this->get('list')->decodedJson()['data']['content']);
     }
+
+    /** @return list<string> identifiants locaux des notes portant le tag */
+    private function taggedNotes(string $tag): array
+    {
+        $tagId = (int) $this->app->shared->tags->findOrCreate($tag)['id'];
+        $rows = array_filter($this->app->shared->tags->infosWithTag($tagId), static fn (array $r): bool => $r['dataset_code'] === NotesModule::DATASET);
+        return array_values(array_map(static fn (array $r): string => (string) $r['local_key'], $rows));
+    }
+
+    /** Non-régression : une note mise à la corbeille restait listée sous ses tags (module Tags) avec un lien en 404. */
+    public function testTrashedNoteLeavesTagListingsAndComesBackOnRestore(): void
+    {
+        $id = (int) $this->post('save', ['title' => 'Liste de courses', 'content' => 'Pain', 'tags' => 'maison, courses'])->decodedJson()['data']['id'];
+        $this->assertSame([(string) $id], $this->taggedNotes('courses'));
+
+        $this->assertSame(200, $this->post('delete', ['id' => $id])->status());
+        $this->assertSame([], $this->taggedNotes('courses'), 'note en corbeille écartée des tags');
+        $this->assertTrue($this->app->shared->registry->isTrashed(NotesModule::DATASET, (string) $id));
+
+        $this->assertSame(200, $this->post('restore', ['id' => $id])->status());
+        $this->assertSame([(string) $id], $this->taggedNotes('courses'), 'restaurée par l’action du module');
+
+        $this->post('delete', ['id' => $id]);
+        $module = $this->app->modules->instance('notes');
+        $module->boot($this->app->context(Request::create('GET', '/')));
+        $module->restoreTrashItem((string) $id);
+        $this->assertSame([(string) $id], $this->taggedNotes('courses'), 'restaurée par la corbeille globale');
+        $this->assertFalse($this->app->shared->registry->isTrashed(NotesModule::DATASET, (string) $id));
+    }
+
+    /** La migration de rattrapage marque au registre les notes déjà en corbeille, et se rejoue sans effet. */
+    public function testCatchUpMigrationMarksExistingTrash(): void
+    {
+        $trashed = (int) $this->post('save', ['title' => 'Ancienne', 'content' => 'x'])->decodedJson()['data']['id'];
+        $alive = (int) $this->post('save', ['title' => 'Vivante', 'content' => 'x'])->decodedJson()['data']['id'];
+        $this->app->db->update('notes_note', ['deleted_at' => '2026-09-01 10:00:00'], 'id = :id', ['id' => $trashed]);
+        $this->assertFalse($this->app->shared->registry->isTrashed(NotesModule::DATASET, (string) $trashed));
+
+        $migration = require dirname(__DIR__, 2) . '/modules/notes/migrations/002_registry_trash.php';
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find(NotesModule::DATASET, (string) $trashed)['trashed_at']);
+        $this->assertNull($this->app->shared->registry->find(NotesModule::DATASET, (string) $alive)['trashed_at']);
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find(NotesModule::DATASET, (string) $trashed)['trashed_at'], 'rejouable sans effet');
+    }
 }

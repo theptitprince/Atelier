@@ -1,7 +1,7 @@
 {
   "id": "demo",
   "name": "Démonstration",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Module fictif : référence des composants et des comportements du noyau",
   "author": "Atelier",
   "icon": "flask",
@@ -23,7 +23,8 @@
     { "id": "lifecycle", "label": "Cycle de vie et onglets", "route": "lifecycle", "order": 3, "permission": "open", "icon": "clock", "description": "Hooks, minuteries, onglet modifié, navigation, bandeau dynamique" },
     { "id": "shared", "label": "Tags, relations, pièces jointes", "route": "shared", "order": 4, "permission": "open", "icon": "tag", "description": "Registre, tags partagés, relations typées, pièces jointes, catalogue" },
     { "id": "errors", "label": "Cas d’erreur", "route": "errors", "order": 5, "permission": "open", "icon": "error", "description": "Toutes les exceptions du noyau déclenchées volontairement" },
-    { "id": "errors-server", "label": "Erreur serveur simulée", "route": "errors/server", "order": 1, "permission": "admin", "icon": "warning", "description": "Exception PHP brute : réponse 500 avec référence d’incident", "parent": "errors" }
+    { "id": "errors-server", "label": "Erreur serveur simulée", "route": "errors/server", "order": 1, "permission": "admin", "icon": "warning", "description": "Exception PHP brute : réponse 500 avec référence d’incident", "parent": "errors" },
+    { "id": "trash", "label": "Corbeille", "route": "trash", "order": 6, "permission": "delete", "icon": "trash", "description": "Articles supprimés : restauration et suppression définitive" }
   ],
   "resources": [
     { "path": "action/secret", "label": "Action réservée", "kind": "action", "permissions": ["execute"], "description": "Action de démonstration réservée aux détenteurs de la permission execute" }
@@ -40,12 +41,13 @@
     {
       "code": "demo.item",
       "name": "Articles de démonstration",
-      "description": "Articles fictifs (outillage, papeterie, mobilier, informatique) servant à exercer tableaux, filtres et données partagées",
+      "openRoute": "item/{key}",
+      "description": "Articles fictifs (outillage, papeterie, mobilier, informatique) servant à exercer tableaux, filtres et données partagées ; suppression logique (corbeille)",
       "visibility": "shared",
       "tables": ["demo_item"],
-      "fields": { "id": "Identifiant", "name": "Nom", "category": "Catégorie", "quantity": "Quantité", "price": "Prix (centimes)", "active": "Actif", "created_at": "Créé le" },
+      "fields": { "id": "Identifiant", "name": "Nom", "category": "Catégorie", "quantity": "Quantité", "price": "Prix (centimes)", "active": "Actif", "created_at": "Créé le", "deleted_at": "Mis à la corbeille le", "deleted_by": "Mis à la corbeille par" },
       "operations": ["read", "create", "update", "delete"],
-      "version": 1
+      "version": 2
     },
     {
       "code": "demo.secret",

@@ -29,12 +29,13 @@ chmod +x start.sh console.sh && ./start.sh
 
 Le lanceur vérifie PHP, crée la base et les données de démonstration au premier démarrage, puis ouvre http://127.0.0.1:8000.
 
-Comptes de démonstration (voir `console db:seed`) :
+Atelier est conçu pour un seul utilisateur, son propriétaire. `console db:seed` crée ce compte unique :
 
 | Compte | Mot de passe | Rôle |
 |---|---|---|
 | `admin` | `123456789azerty` | Administrateur (changement demandé à la première connexion) |
-| `alice`, `bruno`, `claire` | `Atelier-demo-2026` | Utilisateurs d’exemple (`claire` est aussi administratrice) |
+
+Ce mot de passe initial est public puisqu’il figure dans le dépôt : changez-le dès la première connexion, en particulier sur un serveur.
 
 ## Console d’administration
 

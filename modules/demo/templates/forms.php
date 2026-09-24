@@ -136,8 +136,8 @@ $canUpdate = (bool) ($rights['update'] ?? false);
             <div class="card">
                 <div class="card__header"><h3 class="card__title"><?= $icon('refresh') ?> Formulaire avec confirmation</h3><span class="badge badge--warning">data-confirm</span></div>
                 <div class="card__body">
-                    <p class="text-small text-muted">Avant l’envoi, le noyau ouvre la boîte de confirmation ; <code>data-danger</code> colore le bouton principal en rouge. L’action régénère les 120 articles déterministes (permission <code>update</code>).</p>
-                    <form data-action="reset-items" data-confirm="Régénérer les 120 articles de démonstration ? Les modifications faites dans l’écran Tableaux seront perdues." data-danger>
+                    <p class="text-small text-muted">Avant l’envoi, le noyau ouvre la boîte de confirmation ; <code>data-danger</code> colore le bouton principal en rouge. L’action régénère les 120 articles déterministes et les sort de la corbeille (permission <code>update</code>). C’est le seul effacement physique du module : un outil de démonstration, pas un modèle de suppression.</p>
+                    <form data-action="reset-items" data-confirm="Régénérer les 120 articles de démonstration ? Les modifications faites dans l’écran Tableaux seront perdues et les articles en corbeille restaurés." data-danger>
                         <div class="form-actions mt-0 pt-0" style="border-top: 0; padding-top: 0">
                             <button type="submit" class="btn btn--outline-danger" <?= $canUpdate ? '' : 'disabled title="Permission update requise"' ?>><?= $icon('refresh') ?> Réinitialiser les articles</button>
                             <?php if (!$canUpdate): ?><span class="text-small text-muted">Permission <code>update</code> requise (bouton désactivé, et route protégée côté serveur).</span><?php endif; ?>

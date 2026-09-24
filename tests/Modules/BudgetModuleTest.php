@@ -300,6 +300,17 @@ final class BudgetModuleTest extends TestCase
         $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE deleted_at IS NULL'), 'opération placée dans la corbeille');
         $this->assertSame(1, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE deleted_at IS NOT NULL'));
 
+        // Non-régression : restaurer l'intervention créait une seconde opération et laissait
+        // l'ancienne en corbeille ; la restaurer à la main doublait la dépense.
+        $this->allowAll('trash');
+        $restored = $this->post('restore', ['key' => 'module:maintenance:log:' . $logId], 'trash');
+        $this->assertSame(200, $restored['_status'], json_encode($restored));
+        $this->assertSame(1, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction'), 'aucune opération en double');
+        $this->assertSame(0, $this->app->db->count('SELECT COUNT(*) FROM budget_transaction WHERE deleted_at IS NOT NULL'), 'plus rien en corbeille');
+        $this->assertSame($transactionId, (int) $this->app->db->scalar('SELECT id FROM budget_transaction WHERE deleted_at IS NULL'), 'c’est l’opération d’origine qui revient');
+        $this->assertFalse($this->app->shared->registry->isTrashed('budget.transaction', (string) $transactionId));
+        $this->assertSame(200, $this->post('log-delete', ['id' => $logId], 'maintenance')['_status']);
+
         // Report désactivé dans les réglages : plus d'opération créée.
         $this->assertSame(200, $this->post('settings-save', ['account_id' => $account, 'category_id' => '', 'auto' => '0'])['_status']);
         $again = $this->post('log-save', ['asset_id' => $car, 'done_at' => '2026-09-21', 'title' => 'Pneus', 'cost' => '400'], 'maintenance');

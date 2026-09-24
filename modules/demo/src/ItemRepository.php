@@ -10,11 +10,21 @@ use Atelier\Support\Clock;
 /**
  * Accès à la table demo_item. Seule cette classe (et DemoService) touche à la base :
  * le module et ses gabarits passent toujours par le dépôt.
+ *
+ * Suppression logique : un article est « vivant » tant que deleted_at est NULL. Toutes les
+ * méthodes de lecture et d'écriture courantes ne voient QUE les articles vivants (listes,
+ * compteurs, recherche, export, service intermodule) ; un article en corbeille n'est
+ * accessible que par les méthodes de la section « Corbeille » (findTrashed, trashed,
+ * restore, purge, expiredTrashIds). Ainsi, oublier la corbeille dans une nouvelle requête
+ * est impossible tant qu'elle passe par whereClause() ou par la constante ALIVE.
  */
 final class ItemRepository
 {
     public const CATEGORIES = ['Outillage', 'Papeterie', 'Mobilier', 'Informatique'];
     public const SEED_COUNT = 120;
+
+    /** Condition SQL d'un article vivant (hors corbeille), à inclure dans toute requête courante. */
+    private const ALIVE = 'deleted_at IS NULL';
 
     private const ADJECTIVES = ['Compact', 'Robuste', 'Pliable', 'Ergonomique', 'Standard', 'Premium', 'Léger', 'Recyclé', 'Double', 'Magnétique'];
     private const NOUNS = [
@@ -28,29 +38,39 @@ final class ItemRepository
     {
     }
 
-    // ----- Lecture -----
+    // ----- Lecture (articles vivants uniquement) -----
 
-    /** @return array<string, mixed>|null */
+    /** Article vivant, ou null s'il n'existe pas ou s'il est en corbeille. @return array<string, mixed>|null */
     public function find(int $id): ?array
     {
-        $row = $this->db->selectOne('SELECT * FROM demo_item WHERE id = :id', ['id' => $id]);
+        $row = $this->db->selectOne('SELECT * FROM demo_item WHERE id = :id AND ' . self::ALIVE, ['id' => $id]);
         return $row === null ? null : $this->hydrate($row);
     }
 
+    /** Nombre d'articles vivants. */
     public function count(): int
+    {
+        return $this->db->count('SELECT COUNT(*) FROM demo_item WHERE ' . self::ALIVE);
+    }
+
+    /**
+     * Nombre total de lignes, corbeille comprise. Réservé au hook seed() : une table dont tous
+     * les articles sont en corbeille n'est pas « vide », il ne faut pas la régénérer.
+     */
+    public function countAll(): int
     {
         return $this->db->count('SELECT COUNT(*) FROM demo_item');
     }
 
     public function countActive(): int
     {
-        return $this->db->count('SELECT COUNT(*) FROM demo_item WHERE active = 1');
+        return $this->db->count('SELECT COUNT(*) FROM demo_item WHERE active = 1 AND ' . self::ALIVE);
     }
 
     /** @return list<array<string, mixed>> */
     public function all(int $limit = 500): array
     {
-        return array_map([$this, 'hydrate'], $this->db->select('SELECT * FROM demo_item ORDER BY name LIMIT ' . $limit));
+        return array_map([$this, 'hydrate'], $this->db->select('SELECT * FROM demo_item WHERE ' . self::ALIVE . ' ORDER BY name LIMIT ' . $limit));
     }
 
     /**
@@ -61,7 +81,7 @@ final class ItemRepository
     public function quantityByCategory(): array
     {
         $result = array_fill_keys(self::CATEGORIES, 0);
-        foreach ($this->db->select('SELECT category, SUM(quantity) AS total FROM demo_item GROUP BY category') as $row) {
+        foreach ($this->db->select('SELECT category, SUM(quantity) AS total FROM demo_item WHERE ' . self::ALIVE . ' GROUP BY category') as $row) {
             $result[(string) $row['category']] = (int) $row['total'];
         }
         return $result;
@@ -109,7 +129,7 @@ final class ItemRepository
         return $this->paginate($criteria, 1, $limit, 'name', 'asc');
     }
 
-    // ----- Écriture -----
+    // ----- Écriture (articles vivants uniquement) -----
 
     public function toggleActive(int $id): bool
     {
@@ -117,7 +137,7 @@ final class ItemRepository
         if ($item === null) {
             return false;
         }
-        $this->db->update('demo_item', ['active' => !$item['active']], 'id = :id', ['id' => $id]);
+        $this->db->update('demo_item', ['active' => !$item['active']], 'id = :id AND ' . self::ALIVE, ['id' => $id]);
         return !$item['active'];
     }
 
@@ -129,35 +149,114 @@ final class ItemRepository
         }
         [$in, $params] = $this->inClause($ids);
         $params['active'] = $active;
-        return $this->db->execute('UPDATE demo_item SET active = :active WHERE id IN (' . $in . ')', $params);
-    }
-
-    /** @param list<int> $ids */
-    public function deleteMany(array $ids): int
-    {
-        if ($ids === []) {
-            return 0;
-        }
-        [$in, $params] = $this->inClause($ids);
-        return $this->db->execute('DELETE FROM demo_item WHERE id IN (' . $in . ')', $params);
+        return $this->db->execute('UPDATE demo_item SET active = :active WHERE id IN (' . $in . ') AND ' . self::ALIVE, $params);
     }
 
     public function rename(int $id, string $name): void
     {
-        $this->db->update('demo_item', ['name' => $name], 'id = :id', ['id' => $id]);
+        $this->db->update('demo_item', ['name' => $name], 'id = :id AND ' . self::ALIVE, ['id' => $id]);
+    }
+
+    // ----- Corbeille -----
+
+    /**
+     * Met à la corbeille les articles vivants parmi $ids (suppression logique).
+     *
+     * Retourne les identifiants réellement déplacés : ceux déjà en corbeille ou inexistants sont
+     * ignorés, et c'est cette liste exacte que le module transmet ensuite à registry->trash().
+     *
+     * @param list<int> $ids
+     * @return list<int>
+     */
+    public function trash(array $ids, int $userId): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        [$in, $params] = $this->inClause($ids);
+        $alive = array_map('intval', array_column(
+            $this->db->select('SELECT id FROM demo_item WHERE id IN (' . $in . ') AND ' . self::ALIVE . ' ORDER BY id', $params),
+            'id'
+        ));
+        if ($alive === []) {
+            return [];
+        }
+        [$in, $params] = $this->inClause($alive);
+        $params['at'] = Clock::utc();
+        $params['by'] = $userId;
+        $this->db->execute('UPDATE demo_item SET deleted_at = :at, deleted_by = :by WHERE id IN (' . $in . ') AND ' . self::ALIVE, $params);
+        return $alive;
+    }
+
+    /** Article en corbeille, ou null. @return array<string, mixed>|null */
+    public function findTrashed(int $id): ?array
+    {
+        $row = $this->db->selectOne('SELECT * FROM demo_item WHERE id = :id AND deleted_at IS NOT NULL', ['id' => $id]);
+        return $row === null ? null : $this->hydrate($row);
     }
 
     /**
-     * Régénération déterministe des SEED_COUNT articles : les identifiants 1..N sont créés ou
-     * remis à leur valeur d'origine, les articles au-delà sont supprimés. Les références du
-     * registre commun (clé locale = id) restent donc valides.
+     * Articles en corbeille non encore expirés, les plus récemment supprimés d'abord. Les expirés
+     * sont écartés : ils attendent le hook purge() et ne doivent plus paraître restaurables.
+     *
+     * @return list<array<string, mixed>>
      */
-    public function regenerate(): int
+    public function trashed(int $retentionDays): array
     {
-        return $this->db->transaction(function (Database $db): int {
+        return array_map([$this, 'hydrate'], $this->db->select(
+            'SELECT * FROM demo_item WHERE deleted_at IS NOT NULL AND deleted_at >= :limit ORDER BY deleted_at DESC, id DESC',
+            ['limit' => $this->retentionLimit($retentionDays)]
+        ));
+    }
+
+    /** Sort un article de la corbeille ; false s'il n'y était pas. */
+    public function restore(int $id): bool
+    {
+        return $this->db->update('demo_item', ['deleted_at' => null, 'deleted_by' => null], 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /**
+     * Suppression physique d'un article EN CORBEILLE (purge manuelle ou rétention).
+     * La condition sur deleted_at empêche d'effacer un article vivant par erreur.
+     */
+    public function purge(int $id): bool
+    {
+        return $this->db->delete('demo_item', 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /**
+     * Identifiants des articles en corbeille depuis plus de $retentionDays jours (hook purge()).
+     *
+     * @return list<int>
+     */
+    public function expiredTrashIds(int $retentionDays): array
+    {
+        $rows = $this->db->select('SELECT id FROM demo_item WHERE deleted_at IS NOT NULL AND deleted_at < :limit ORDER BY id', ['limit' => $this->retentionLimit($retentionDays)]);
+        return array_map(static fn (array $r): int => (int) $r['id'], $rows);
+    }
+
+    // ----- Données de démonstration -----
+
+    /**
+     * Régénération déterministe des SEED_COUNT articles : les identifiants 1..N sont créés ou
+     * remis à leur valeur d'origine (et sortis de la corbeille), les articles au-delà sont effacés.
+     * Les références du registre commun (clé locale = id) restent donc valides.
+     *
+     * Exception assumée à la règle « toute suppression est logique » : c'est un outil de
+     * démonstration qui remet la table dans un état connu, pas une suppression décidée par un
+     * utilisateur sur une donnée métier. Le module retire lui-même du registre les articles
+     * effacés (clés retournées dans « removed ») et y signale la restauration des autres.
+     *
+     * @return array{count: int, removed: list<int>}
+     */
+    public function regenerate(): array
+    {
+        return $this->db->transaction(function (Database $db): array {
             $existing = array_map('intval', array_column($db->select('SELECT id FROM demo_item'), 'id'));
             $count = 0;
             foreach ($this->generate() as $item) {
+                $item['deleted_at'] = null;
+                $item['deleted_by'] = null;
                 if (in_array($item['id'], $existing, true)) {
                     $id = $item['id'];
                     unset($item['id']);
@@ -167,8 +266,9 @@ final class ItemRepository
                 }
                 $count++;
             }
+            $removed = array_values(array_filter($existing, static fn (int $id): bool => $id > self::SEED_COUNT));
             $db->execute('DELETE FROM demo_item WHERE id > :max', ['max' => self::SEED_COUNT]);
-            return $count;
+            return ['count' => $count, 'removed' => $removed];
         });
     }
 
@@ -211,12 +311,15 @@ final class ItemRepository
     // ----- Helpers -----
 
     /**
+     * Clause WHERE des listes, recherches et exports : toujours restreinte aux articles vivants,
+     * puis aux critères de filtre.
+     *
      * @param array{q: string, category: string, active: ?bool} $criteria
      * @return array{0: string, 1: array<string, mixed>}
      */
     private function whereClause(array $criteria): array
     {
-        $conditions = [];
+        $conditions = [self::ALIVE];
         $params = [];
         if ($criteria['q'] !== '') {
             $conditions[] = $this->db->lower('name') . ' LIKE :q';
@@ -230,7 +333,7 @@ final class ItemRepository
             $conditions[] = 'active = :active';
             $params['active'] = $criteria['active'];
         }
-        return [$conditions === [] ? '' : ' WHERE ' . implode(' AND ', $conditions), $params];
+        return [' WHERE ' . implode(' AND ', $conditions), $params];
     }
 
     private function orderClause(string $sort, string $direction): string
@@ -256,6 +359,12 @@ final class ItemRepository
         return [implode(', ', $placeholders), $params];
     }
 
+    /** Date UTC en deçà de laquelle un article en corbeille est expiré. */
+    private function retentionLimit(int $retentionDays): string
+    {
+        return Clock::utc(Clock::now()->modify('-' . $retentionDays . ' days'));
+    }
+
     /** @param array<string, mixed> $row @return array<string, mixed> */
     private function hydrate(array $row): array
     {
@@ -263,6 +372,7 @@ final class ItemRepository
         $row['quantity'] = (int) $row['quantity'];
         $row['price'] = (int) $row['price'];
         $row['active'] = (bool) $row['active'];
+        $row['deleted_by'] = isset($row['deleted_by']) ? (int) $row['deleted_by'] : null;
         return $row;
     }
 }

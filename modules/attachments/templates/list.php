@@ -283,6 +283,7 @@ $renderTree = static function (array $nodes) use (&$renderTree, $e, $folderRoute
                                         <?php if ($row['info_id'] !== null): ?>
                                             <span title="<?= $e($row['info_dataset']) ?>"><?= $e($row['info_label'] !== null && $row['info_label'] !== '' ? $row['info_label'] : $row['info_dataset'] . ' #' . $row['info_key']) ?></span>
                                             <span class="text-muted text-small">· <?= $e($row['info_module']) ?></span>
+                                            <?php if (($row['info_trashed_at'] ?? null) !== null): ?><span class="badge badge--muted" title="L’élément porteur est en corbeille ; le fichier, lui, reste disponible.">en corbeille</span><?php endif; ?>
                                         <?php else: ?>
                                             <span class="text-muted">—</span>
                                         <?php endif; ?>

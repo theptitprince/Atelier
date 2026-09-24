@@ -15,6 +15,7 @@
  * @var string $exportUrl
  * @var list<int> $perPageChoices
  * @var array<int, int> $attachmentCounts
+ * @var array<int, list<string>> $tagsById tags partagés de chaque opération
  * @var \Atelier\Modules\Budget\BudgetModule $module
  */
 $filtered = $query['q'] !== '' || $query['account'] > 0 || $query['category'] !== 0 || $query['month'] !== '' || $query['uncleared'] || $query['source'] !== '';
@@ -82,6 +83,7 @@ $dash = '<span class="text-muted">—</span>';
                                 <?php if ($t['payee'] !== null && $t['payee'] !== $t['label']): ?><span class="text-muted text-small">· <?= $e($t['payee']) ?></span><?php endif; ?>
                                 <?php if ($t['source'] !== 'manual'): ?><span class="badge badge--muted" title="Origine"><?= $e($module->sourceLabel($t['source'])) ?></span><?php endif; ?>
                                 <?php if (($attachmentCounts[$t['id']] ?? 0) > 0): ?><span class="badge badge--muted" title="Justificatifs"><?= $module->icon('paperclip', 'icon--sm') ?> <?= (int) $attachmentCounts[$t['id']] ?></span><?php endif; ?>
+                                <?php if (($tagsById[$t['id']] ?? []) !== []): ?><span class="chips budget__tags" title="Tags partagés"><?php foreach ($tagsById[$t['id']] as $tag): ?><span class="chip"><?= $e($tag) ?></span><?php endforeach; ?></span><?php endif; ?>
                             </td>
                             <td><?= $t['category_path'] !== null ? $e($t['category_path']) : '<span class="text-warning text-small">sans catégorie</span>' ?></td>
                             <td class="text-small"><?= $e($t['account_name']) ?></td>

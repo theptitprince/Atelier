@@ -6,6 +6,7 @@ Référentiel de points géographiques nommés (WGS 84), partagé entre les util
 
 - Liste, recherche (nom, code, adresse) et tri ; une recherche par coordonnées liste les points à moins de 25 km, du plus proche au plus éloigné.
 - Saisie souple des coordonnées : degrés décimaux (`48.8566, 2.3522`, virgule décimale acceptée), degrés-minutes-secondes (`48°51'24"N 2°21'03"E`), degrés-minutes décimales (`N 48°51.400' E 2°21.050'`). Aperçu immédiat (décimal, DMS, lien OpenStreetMap, points déjà référencés à moins de 5 km).
+- Tags partagés dans le formulaire de création et de modification (saisie commune `data-tags-input` avec suggestions, 20 tags de 60 caractères au plus), comme dans les autres modules ; l'ajout et le retrait restent possibles depuis la fiche. Un enregistrement sans champ `tags` (import, appel d'API) laisse les tags existants intacts.
 - Fiche du point : formats décimal / DMS / URI `geo:`, liens OpenStreetMap et Google Maps, tags partagés, informations rattachées (avec ouverture du module d'origine), pièces jointes, points à proximité.
 - Rattachement d'une information : recherche dans les jeux de données partagés que l'utilisateur peut lire, relation typée `located_at` (information → point).
 - Import CSV (en-têtes reconnus sans accent ni casse, coordonnées en deux colonnes ou une seule), export CSV, corbeille avec restauration et purge automatique (`trash.retention_days`).
@@ -16,6 +17,7 @@ Un point supprimé (`deleted_at`) reste `trash.retention_days` jours (30 par dé
 
 - **Vue du module** (`trash`, droit `delete`) : liste des points en corbeille avec « Restaurer » (action `restore`) et « Supprimer » (action `purge`) ; bouton « Voir toute la corbeille » vers le module Corbeille s'il est actif.
 - **Corbeille globale** : la classe d'entrée implémente `Atelier\Modules\TrashProviderInterface`. `trashItems()` expose les points non expirés (jeu `geo.point`, libellé « Nom [code] », `purge_at` = suppression + rétention, `deleted_by` inconnu → `null`) ; `restoreTrashItem()` et `purgeTrashItem()` réutilisent exactement la logique des actions du module (revérification du droit `delete`, `NotFoundException` si le point n'est pas en corbeille, retrait du registre commun à la purge). Les points étant communs à tous les utilisateurs autorisés, restaurer comme purger exigent `delete`, comme dans la vue du module.
+- **Registre commun** (1.2.0) : la mise à la corbeille signale le point au registre (`registry->trash`), la restauration l'en retire (`registry->restore`). Un point en corbeille n'apparaît donc plus sous ses tags, dans l'Explorateur, ni dans les éléments liés des autres modules ; ses tags et rattachements sont conservés et réapparaissent à la restauration. Symétriquement, la fiche d'un point n'affiche plus les informations rattachées qui sont en corbeille, et une information en corbeille ne peut pas être rattachée. La migration `002_registry_trash` a marqué les points déjà en corbeille.
 - Journal d'activité : `geo.delete`, `geo.restore`, `geo.purge` (le message précise « depuis la corbeille globale » le cas échéant).
 
 Le module ne dépend pas du module `trash` : sa propre corbeille fonctionne sans lui.

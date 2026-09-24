@@ -215,4 +215,135 @@ final class GeoModuleTest extends TestCase
         $this->app->acl->clearCache();
         $this->assertThrows(ForbiddenException::class, fn () => $service->find($pointId));
     }
+
+    /** @return list<string> identifiants locaux des informations d'un jeu portant le tag */
+    private function taggedKeys(string $tag, string $dataset): array
+    {
+        $tagId = (int) $this->app->shared->tags->findOrCreate($tag)['id'];
+        $rows = array_filter($this->app->shared->tags->infosWithTag($tagId), static fn (array $r): bool => $r['dataset_code'] === $dataset);
+        return array_values(array_map(static fn (array $r): string => (string) $r['local_key'], $rows));
+    }
+
+    private function post(string $module, string $route, array $data = []): \Atelier\Http\Response
+    {
+        return $this->app->handle(Request::create('POST', '/m/' . $module . '/' . $route, [], $data, $this->headers()));
+    }
+
+    /**
+     * Non-régression : un point mis à la corbeille restait listé sous ses tags (Explorateur,
+     * module Tags) avec un lien menant à une erreur 404. Il doit disparaître du registre visible
+     * à la mise en corbeille et revenir à la restauration, par l'action du module comme par la
+     * corbeille globale.
+     */
+    public function testTrashedPointLeavesTagListingsAndComesBackOnRestore(): void
+    {
+        $this->allowAll();
+        $id = (int) $this->post('geo', 'save', ['name' => 'Phare du Créac’h', 'coordinates' => '48.4594, -5.1253'])->decodedJson()['data']['id'];
+        $this->assertSame(200, $this->post('geo', 'tag-add', ['id' => $id, 'tag' => 'phare'])->status());
+        $this->assertSame([(string) $id], $this->taggedKeys('phare', 'geo.point'));
+
+        $this->assertSame(200, $this->post('geo', 'delete', ['id' => $id])->status());
+        $this->assertSame([], $this->taggedKeys('phare', 'geo.point'), 'point en corbeille écarté des tags');
+        $this->assertTrue($this->app->shared->registry->isTrashed('geo.point', (string) $id));
+
+        $this->assertSame(200, $this->post('geo', 'restore', ['id' => $id])->status());
+        $this->assertSame([(string) $id], $this->taggedKeys('phare', 'geo.point'), 'restauré par l’action du module');
+
+        // Corbeille globale : restauration par le contrat TrashProviderInterface
+        $this->post('geo', 'delete', ['id' => $id]);
+        $this->assertSame([], $this->taggedKeys('phare', 'geo.point'));
+        $module = $this->app->modules->instance('geo');
+        $module->boot($this->app->context(Request::create('GET', '/')));
+        $module->restoreTrashItem((string) $id);
+        $this->assertSame([(string) $id], $this->taggedKeys('phare', 'geo.point'), 'restauré par la corbeille globale');
+        $this->assertFalse($this->app->shared->registry->isTrashed('geo.point', (string) $id));
+    }
+
+    /**
+     * Non-régression : la fiche d'un point (« informations rattachées ») affichait encore une page
+     * mise à la corbeille, avec un lien vers une erreur 404.
+     */
+    public function testShowHidesTrashedLinkedInformation(): void
+    {
+        $this->allowAll();
+        $this->app->acl->setRule('user', $this->userId, AclService::module('wiki'), 'admin', 'allow');
+        $this->app->acl->clearCache();
+        $pointId = (int) $this->post('geo', 'save', ['name' => 'Refuge', 'coordinates' => '45.83, 6.86'])->decodedJson()['data']['id'];
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Nuit au refuge', 'content' => 'Récit.', 'points' => [$pointId]])->decodedJson()['data']['id'];
+        $show = fn (): string => (string) $this->app->handle(Request::create('GET', '/m/geo/show/' . $pointId, [], [], $this->headers()))->decodedJson()['data']['content'];
+        $this->assertStringContains('Nuit au refuge', $show());
+
+        $this->assertSame(200, $this->post('wiki', 'delete', ['id' => $pageId])->status());
+        $this->assertFalse(str_contains($show(), 'Nuit au refuge'), 'page en corbeille absente de la fiche du point');
+
+        $this->assertSame(200, $this->post('wiki', 'restore', ['id' => $pageId])->status());
+        $this->assertStringContains('Nuit au refuge', $show());
+    }
+
+    /** Un point en corbeille ne peut pas recevoir de rattachement par son identifiant global. */
+    public function testLinkRefusesTrashedInformation(): void
+    {
+        $this->allowAll();
+        $this->app->acl->setRule('user', $this->userId, AclService::module('wiki'), 'admin', 'allow');
+        $this->app->acl->clearCache();
+        $pointId = (int) $this->post('geo', 'save', ['name' => 'Col', 'coordinates' => '45.0, 6.0'])->decodedJson()['data']['id'];
+        $pageId = (int) $this->post('wiki', 'save', ['title' => 'Page supprimée', 'content' => 'x'])->decodedJson()['data']['id'];
+        $infoId = (string) $this->app->shared->registry->find('wiki.page', (string) $pageId)['id'];
+        $this->post('wiki', 'delete', ['id' => $pageId]);
+        $response = $this->post('geo', 'link', ['id' => $pointId, 'info_id' => $infoId]);
+        $this->assertSame(422, $response->status(), $response->body());
+    }
+
+    /** Le formulaire de création et d'édition pose et remplace les tags partagés ; la fiche garde l'ajout et le retrait. */
+    public function testFormSetsAndReplacesTags(): void
+    {
+        $this->allowAll();
+        $form = (string) $this->app->handle(Request::create('GET', '/m/geo/new', [], [], $this->headers()))->decodedJson()['data']['content'];
+        $this->assertStringContains('data-tags-input', $form, 'champ de tags commun dans le formulaire de création');
+
+        $response = $this->post('geo', 'save', ['name' => 'Pointe du Raz', 'coordinates' => '48.0375, -4.7381', 'tags' => 'Côte, phare, côte']);
+        $this->assertSame(200, $response->status(), $response->body());
+        $id = (int) $response->decodedJson()['data']['id'];
+        $infoId = (string) $this->app->shared->registry->find('geo.point', (string) $id)['id'];
+        $names = static fn (array $tags): array => array_map(static fn (array $t): string => (string) $t['name'], $tags);
+        $this->assertSame(['Côte', 'phare'], $names($this->app->shared->tags->tagsOf($infoId)));
+
+        $edit = (string) $this->app->handle(Request::create('GET', '/m/geo/edit/' . $id, [], [], $this->headers()))->decodedJson()['data']['content'];
+        $this->assertStringContains('data-tags-input', $edit);
+        $this->assertStringContains('value="Côte, phare"', $edit, 'tags existants préremplis');
+
+        $this->assertSame(200, $this->post('geo', 'save', ['id' => $id, 'name' => 'Pointe du Raz', 'coordinates' => '48.0375, -4.7381', 'tags' => 'phare, Finistère'])->status());
+        $this->assertSame(['Finistère', 'phare'], $names($this->app->shared->tags->tagsOf($infoId)));
+
+        // Ajout et retrait depuis la fiche, inchangés
+        $this->assertSame(200, $this->post('geo', 'tag-add', ['id' => $id, 'tag' => 'granit'])->status());
+        $this->assertSame(['Finistère', 'granit', 'phare'], $names($this->app->shared->tags->tagsOf($infoId)));
+        $tagId = (int) $this->app->shared->tags->findOrCreate('granit')['id'];
+        $this->assertSame(200, $this->post('geo', 'tag-remove', ['id' => $id, 'tag_id' => $tagId])->status());
+        $this->assertSame(['Finistère', 'phare'], $names($this->app->shared->tags->tagsOf($infoId)));
+
+        // Validation : un tag trop long est signalé sur le champ
+        $response = $this->post('geo', 'save', ['id' => $id, 'name' => 'Pointe du Raz', 'coordinates' => '48.0375, -4.7381', 'tags' => str_repeat('x', 61)]);
+        $this->assertSame(422, $response->status());
+        $this->assertTrue(isset($response->decodedJson()['error']['fields']['tags']));
+    }
+
+    /** La migration de rattrapage marque au registre les points déjà en corbeille, et se rejoue sans effet. */
+    public function testCatchUpMigrationMarksExistingTrash(): void
+    {
+        $this->allowAll();
+        $trashed = (int) $this->post('geo', 'save', ['name' => 'Ancien', 'coordinates' => '1, 1'])->decodedJson()['data']['id'];
+        $alive = (int) $this->post('geo', 'save', ['name' => 'Vivant', 'coordinates' => '2, 2'])->decodedJson()['data']['id'];
+        // État hérité : supprimé logiquement avant que le registre ne connaisse la corbeille.
+        $this->app->db->update('geo_point', ['deleted_at' => '2026-09-01 10:00:00'], 'id = :id', ['id' => $trashed]);
+        $this->assertFalse($this->app->shared->registry->isTrashed('geo.point', (string) $trashed));
+
+        $migration = require dirname(__DIR__, 2) . '/modules/geo/migrations/002_registry_trash.php';
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('geo.point', (string) $trashed)['trashed_at']);
+        $this->assertNull($this->app->shared->registry->find('geo.point', (string) $alive)['trashed_at']);
+
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $this->app->shared->registry->find('geo.point', (string) $trashed)['trashed_at'], 'rejouable sans effet');
+    }
 }

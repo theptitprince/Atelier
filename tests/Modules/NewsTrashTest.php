@@ -247,4 +247,89 @@ final class NewsTrashTest extends TestCase
         $this->assertStringContains('1 flux et 0 fait(s) archivé(s) purgés', $module->purge(), 'second passage : le flux n’a plus de fait archivé');
         $this->assertNull($this->app->db->selectOne('SELECT id FROM news_feed WHERE id = :id', ['id' => $feed]), 'le flux, sans archive désormais, est purgé au second passage');
     }
+
+    /** @return list<string> identifiants locaux des faits archivés portant le tag */
+    private function taggedArchives(string $tag): array
+    {
+        $tagId = (int) $this->app->shared->tags->findOrCreate($tag)['id'];
+        $rows = array_filter($this->app->shared->tags->infosWithTag($tagId), static fn (array $r): bool => $r['dataset_code'] === 'news.archive');
+        return array_values(array_map(static fn (array $r): string => (string) $r['local_key'], $rows));
+    }
+
+    /**
+     * Non-régression : un fait archivé mis à la corbeille restait listé sous ses tags (Explorateur,
+     * module Tags) avec un lien menant à une erreur 404. Un flux en corbeille, lui, laisse ses faits
+     * archivés consultables : ils restent donc visibles sous leurs tags (pas de cascade).
+     */
+    public function testTrashedArchiveLeavesTagListingsAndComesBackOnRestore(): void
+    {
+        $feed = (int) $this->post('feed-save', ['url' => 'https://exemple.test/rss'])['data']['id'];
+        $a1 = (int) $this->app->db->scalar("SELECT id FROM news_item WHERE guid = 'a1'");
+        $this->post('archive', ['id' => $a1]);
+        $this->assertSame(200, $this->post('archive-save', ['id' => $a1, 'note' => 'Lancement', 'tags' => 'espace, ariane'])['_status']);
+        $this->assertSame([(string) $a1], $this->taggedArchives('espace'));
+
+        $this->assertSame(200, $this->post('archive-delete', ['id' => $a1])['_status']);
+        $this->assertSame([], $this->taggedArchives('espace'), 'fait archivé en corbeille écarté des tags');
+        $this->assertTrue($this->app->shared->registry->isTrashed('news.archive', (string) $a1));
+
+        $this->assertSame(200, $this->post('trash-restore', ['id' => 'archive:' . $a1])['_status']);
+        $this->assertSame([(string) $a1], $this->taggedArchives('espace'), 'restauré par la corbeille du module');
+
+        // Corbeille globale
+        $this->post('archive-delete', ['id' => $a1]);
+        $restored = $this->post('restore', ['key' => 'module:news:archive:' . $a1], 'trash');
+        $this->assertSame(200, $restored['_status'], json_encode($restored));
+        $this->assertSame([(string) $a1], $this->taggedArchives('espace'), 'restauré par la corbeille globale');
+        $this->assertFalse($this->app->shared->registry->isTrashed('news.archive', (string) $a1));
+
+        // Flux en corbeille : ses faits archivés restent consultables, donc visibles sous leurs tags.
+        $this->assertSame(200, $this->post('feed-delete', ['id' => $feed])['_status']);
+        $this->assertSame([(string) $a1], $this->taggedArchives('espace'), 'le fait archivé d’un flux en corbeille reste visible');
+        $this->assertSame(200, $this->view('archive/' . $a1)['_status']);
+    }
+
+    /** La fiche d'un fait archivé n'affiche plus une page reliée mise à la corbeille ; elle revient à la restauration. */
+    public function testArchiveShowHidesTrashedRelatedPage(): void
+    {
+        $this->app->acl->setRule('user', $this->userId, AclService::module('wiki'), 'admin', 'allow');
+        $this->app->acl->clearCache();
+        $this->post('feed-save', ['url' => 'https://exemple.test/rss']);
+        $a1 = (int) $this->app->db->scalar("SELECT id FROM news_item WHERE guid = 'a1'");
+        $this->post('archive', ['id' => $a1]);
+        $pageId = (int) $this->post('save', ['title' => 'Dossier Ariane 6', 'content' => 'Synthèse.'], 'wiki')['data']['id'];
+        $archiveInfo = (string) $this->app->shared->registry->find('news.archive', (string) $a1)['id'];
+        $pageInfo = (string) $this->app->shared->registry->find('wiki.page', (string) $pageId)['id'];
+        $this->app->shared->relations->relate('references', $pageInfo, $archiveInfo, $this->userId);
+        $show = fn (): string => (string) $this->view('archive/' . $a1)['data']['content'];
+        $this->assertStringContains('Dossier Ariane 6', $show());
+
+        $this->post('delete', ['id' => $pageId], 'wiki');
+        $this->assertFalse(str_contains($show(), 'Dossier Ariane 6'), 'page en corbeille absente de la fiche');
+        $this->post('restore', ['id' => $pageId], 'wiki');
+        $this->assertStringContains('Dossier Ariane 6', $show());
+    }
+
+    /** La migration de rattrapage marque les faits archivés et les flux déjà en corbeille, et se rejoue sans effet. */
+    public function testCatchUpMigrationMarksExistingTrash(): void
+    {
+        $feed = (int) $this->post('feed-save', ['url' => 'https://exemple.test/rss'])['data']['id'];
+        $a1 = (int) $this->app->db->scalar("SELECT id FROM news_item WHERE guid = 'a1'");
+        $a2 = (int) $this->app->db->scalar("SELECT id FROM news_item WHERE guid = 'a2'");
+        $this->post('archive', ['id' => $a1]);
+        $this->post('archive', ['id' => $a2]);
+        // Un flux n'est pas inscrit par le module ; on simule une inscription pour vérifier son rattrapage.
+        $this->app->shared->registry->register('news.feed', (string) $feed, 'Flux test');
+        $this->app->db->update('news_item', ['deleted_at' => '2026-09-01 10:00:00'], 'id = :id', ['id' => $a1]);
+        $this->app->db->update('news_feed', ['deleted_at' => '2026-09-02 10:00:00'], 'id = :id', ['id' => $feed]);
+
+        $migration = require dirname(__DIR__, 2) . '/modules/news/migrations/004_registry_trash.php';
+        $migration($this->app->db);
+        $registry = $this->app->shared->registry;
+        $this->assertSame('2026-09-01 10:00:00', $registry->find('news.archive', (string) $a1)['trashed_at']);
+        $this->assertNull($registry->find('news.archive', (string) $a2)['trashed_at'], 'le fait archivé d’un flux en corbeille reste visible');
+        $this->assertSame('2026-09-02 10:00:00', $registry->find('news.feed', (string) $feed)['trashed_at']);
+        $migration($this->app->db);
+        $this->assertSame('2026-09-01 10:00:00', $registry->find('news.archive', (string) $a1)['trashed_at'], 'rejouable sans effet');
+    }
 }

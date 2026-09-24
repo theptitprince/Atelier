@@ -15,6 +15,7 @@ use Atelier\Modules\AbstractModule;
 use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
+use Atelier\Modules\TrashProviderInterface;
 use Atelier\Shared\RelationService;
 use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
@@ -26,8 +27,13 @@ use Atelier\Support\Str;
  * Chaque vue exerce une famille de composants ou de comportements (composants CSS, formulaires,
  * tableaux, notifications, cycle de vie, données partagées, cas d'erreur). Le code est volontairement
  * explicite et commenté : il sert de modèle pour écrire un nouveau module.
+ *
+ * Suppression : comme toute donnée métier, un article supprimé part en corbeille (suppression
+ * logique) ; il reste restaurable depuis l'écran « Corbeille » du module ou depuis le module
+ * Corbeille globale (TrashProviderInterface), puis la rétention le purge. Voir la section
+ * « Corbeille » plus bas : c'est le motif à reproduire dans un nouveau module.
  */
-final class DemoModule extends AbstractModule
+final class DemoModule extends AbstractModule implements TrashProviderInterface
 {
     public const DATASET = 'demo.item';
     public const NAME_MAX = 80;
@@ -50,6 +56,9 @@ final class DemoModule extends AbstractModule
         $r->view('shared', [$this, 'shared'], permission: 'open');
         $r->view('errors', [$this, 'errors'], permission: 'open');
         $r->view('errors/server', [$this, 'errorsServer'], permission: 'admin');
+        $r->view('trash', [$this, 'trashView'], permission: 'delete');
+        // Ouverture d'un article par identifiant : openRoute du jeu demo.item (tags, explorateur, corbeille).
+        $r->view('item/{id}', [$this, 'openItem'], permission: 'open');
 
         // Actions (POST, JSON ou multipart) — formulaires.
         $r->action('submit-form', [$this, 'submitForm'], permission: 'open');
@@ -62,6 +71,12 @@ final class DemoModule extends AbstractModule
         $r->action('toggle', [$this, 'toggle'], permission: 'update');
         $r->action('bulk', [$this, 'bulk'], permission: 'update');
         $r->raw('export.csv', [$this, 'exportCsv'], permission: 'export');
+
+        // Actions — suppression logique et corbeille. Le gestionnaire de suppression définitive
+        // s'appelle purgeItem() et non purge() : ce nom est réservé au hook de rétention.
+        $r->action('delete', [$this, 'deleteItem'], permission: 'delete');
+        $r->action('restore', [$this, 'restoreItem'], permission: 'delete');
+        $r->action('purge', [$this, 'purgeItem'], permission: 'delete');
 
         // Actions — notifications et cycle de vie.
         $r->action('notify', [$this, 'notify'], permission: 'open');
@@ -206,12 +221,59 @@ final class DemoModule extends AbstractModule
 
     public function shared(Request $request, array $params): ModuleView
     {
-        $userId = $this->ctx->userId();
-        $itemId = (int) $request->query('item', 0);
-        $item = $itemId > 0 ? $this->repo()->find($itemId) : null;
-        if ($itemId > 0 && $item === null) {
-            throw new NotFoundException('Article n° ' . $itemId . ' introuvable.');
+        return $this->sharedView((int) $request->query('item', 0));
+    }
+
+    /**
+     * Ouverture d'un article par son identifiant (route item/{id}, déclarée comme openRoute du
+     * jeu demo.item) : les modules transversaux ne savent construire qu'une route contenant la
+     * clé locale, sans chaîne de requête. La fiche affichée est celle de l'écran « shared ».
+     */
+    public function openItem(Request $request, array $params): ModuleView
+    {
+        $id = (int) ($params['id'] ?? 0);
+        if ($id <= 0) {
+            throw new NotFoundException('Article introuvable.');
         }
+        return $this->sharedView($id);
+    }
+
+    /** Écran « Corbeille » du module : articles supprimés, restauration et suppression définitive. */
+    public function trashView(Request $request, array $params): ModuleView
+    {
+        $retention = $this->retentionDays();
+        $rows = [];
+        $authors = [];
+        foreach ($this->repo()->trashed($retention) as $item) {
+            $by = $item['deleted_by'];
+            if ($by !== null && !array_key_exists($by, $authors)) {
+                $authors[$by] = $this->ctx->users->find($by)['display_name'] ?? null;
+            }
+            $item['deleted_by_name'] = $by === null ? null : $authors[$by];
+            $item['purge_at'] = $this->purgeAt((string) $item['deleted_at']);
+            $item['days_left'] = $this->daysLeft($item['purge_at']);
+            $rows[] = $item;
+        }
+        $count = count($rows);
+
+        $actions = $this->navLinks('trash');
+        if ($this->ctx->modules()->has('trash')) {
+            $actions .= '<a class="btn btn--ghost" href="#" data-open-module="trash" data-open-route="list?module=demo" title="Corbeille globale : tous les modules et les pièces jointes">'
+                . '<svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Toute la corbeille</a>';
+        }
+        $subtitle = $count . ' article' . ($count > 1 ? 's' : '') . ' · purge automatique après ' . $retention . ' jours';
+        return ModuleView::make('Corbeille')
+            ->banner($this->bannerHtml('Corbeille', $subtitle, 'trash', $actions))
+            ->content($this->render('trash', ['rows' => $rows, 'retention' => $retention]))
+            ->status($count === 0 ? 'Corbeille vide' : $count . ' article' . ($count > 1 ? 's' : '') . ' en corbeille')
+            ->state(['screen' => 'trash', 'count' => $count]);
+    }
+
+    /** Fiche d'un article (écran « shared » et ouverture par identifiant). */
+    private function sharedView(int $itemId): ModuleView
+    {
+        $userId = $this->ctx->userId();
+        $item = $itemId > 0 ? $this->requireItem($itemId) : null;
 
         $shared = $this->ctx->shared;
         $info = $item === null ? null : $shared->registry->find(self::DATASET, (string) $item['id']);
@@ -343,12 +405,29 @@ final class DemoModule extends AbstractModule
             ->status($result['total'] . ' résultat' . ($result['total'] > 1 ? 's' : '') . ($filters->q() !== '' ? ' pour « ' . $filters->q() . ' »' : ''));
     }
 
-    /** Formulaire avec confirmation : régénère les 120 articles déterministes. */
+    /**
+     * Formulaire avec confirmation : régénère les 120 articles déterministes (corbeille comprise).
+     *
+     * Seule suppression PHYSIQUE déclenchée depuis l'interface, et exception assumée à la règle
+     * de la corbeille : c'est un outil de démonstration qui remet la table dans un état connu,
+     * pas la suppression d'une donnée métier. Un module réel ne doit pas l'imiter. Le registre
+     * commun est tenu à jour dans la même transaction : les articles effacés en sont retirés,
+     * ceux qui sortent de la corbeille y sont signalés restaurés.
+     */
     public function resetItems(Request $request, array $params): ActionResult
     {
-        $count = $this->repo()->regenerate();
-        $this->log('demo.reset', 'success', null, 'Articles de démonstration régénérés', ['count' => $count]);
-        return ActionResult::ok(['count' => $count], $count . ' articles régénérés à l’identique.');
+        $result = $this->ctx->db->transaction(function (): array {
+            $result = $this->repo()->regenerate();
+            $registry = $this->ctx->shared->registry;
+            foreach ($result['removed'] as $id) {
+                $registry->unregister(self::DATASET, (string) $id);
+            }
+            $registry->restore(self::DATASET, array_map('strval', range(1, ItemRepository::SEED_COUNT)));
+            return $result;
+        });
+        $count = $result['count'];
+        $this->log('demo.reset', 'success', null, 'Articles de démonstration régénérés', ['count' => $count, 'removed' => count($result['removed'])]);
+        return ActionResult::ok(['count' => $count], $count . ' articles régénérés à l’identique ; ceux qui étaient en corbeille sont restaurés.');
     }
 
     /** Bouton data-action + data-prompt : renomme un article. */
@@ -356,9 +435,7 @@ final class DemoModule extends AbstractModule
     {
         $id = (int) ($request->int('id') ?? 0);
         $name = $request->string('name');
-        if ($this->repo()->find($id) === null) {
-            throw new NotFoundException('Article n° ' . $id . ' introuvable.');
-        }
+        $this->requireItem($id);
         if ($name === '') {
             throw ValidationException::single('name', 'Le nom ne peut pas être vide.');
         }
@@ -389,9 +466,7 @@ final class DemoModule extends AbstractModule
     public function toggle(Request $request, array $params): ActionResult
     {
         $id = (int) ($request->int('id') ?? 0);
-        if ($this->repo()->find($id) === null) {
-            throw new NotFoundException('Article n° ' . $id . ' introuvable.');
-        }
+        $this->requireItem($id);
         $active = $this->repo()->toggleActive($id);
         $this->log('demo.toggle', 'success', 'item:' . $id, $active ? 'Article activé' : 'Article désactivé');
         return ActionResult::ok(['id' => $id, 'active' => $active], 'Article n° ' . $id . ($active ? ' activé.' : ' désactivé.'))->refresh();
@@ -417,13 +492,11 @@ final class DemoModule extends AbstractModule
             case 'delete':
                 // Contrôle fin côté serveur : la route exige « update », la suppression exige « delete ».
                 $this->require('delete');
-                $count = $this->ctx->db->transaction(function () use ($ids): int {
-                    foreach ($ids as $id) {
-                        $this->ctx->shared->registry->unregister(self::DATASET, (string) $id);
-                    }
-                    return $this->repo()->deleteMany($ids);
-                });
-                $message = $count . ' article' . ($count > 1 ? 's supprimés.' : ' supprimé.') . ' Utilisez « Réinitialiser » (Formulaires) pour les recréer.';
+                $count = count($this->moveToTrash($ids));
+                if ($count === 0) {
+                    return ActionResult::warning(null, 'Aucun article à supprimer : la sélection est déjà dans la corbeille.')->refresh();
+                }
+                $message = $count . ' article' . ($count > 1 ? 's placés' : ' placé') . ' dans la corbeille (restaurable' . ($count > 1 ? 's' : '') . ' ' . $this->retentionDays() . ' jours).';
                 break;
             default:
                 throw ValidationException::single('op', 'Opération inconnue : ' . $op);
@@ -452,6 +525,82 @@ final class DemoModule extends AbstractModule
         $this->log('demo.export', 'success', null, 'Export CSV', ['rows' => count($rows)]);
         return Response::raw($csv, 'text/csv; charset=UTF-8')
             ->withHeader('Content-Disposition', 'attachment; filename="demo-items-' . Clock::now()->format('Ymd-His') . '.csv"');
+    }
+
+    // =====================================================================
+    // Actions — corbeille du module
+    //
+    // Motif à reproduire dans tout module qui supprime des données :
+    //  1. supprimer = mettre en corbeille (deleted_at), jamais DELETE ;
+    //  2. signaler chaque mise en corbeille ET chaque restauration au registre commun
+    //     (registry->trash / registry->restore) pour que tags, relations et Explorateur
+    //     masquent puis ré-affichent l'élément ;
+    //  3. seule la purge (manuelle ou par rétention) efface la ligne, et retire alors
+    //     l'élément du registre (registry->unregister) ;
+    //  4. l'écran du module, la corbeille globale et le hook de rétention passent par les
+    //     mêmes méthodes privées (moveToTrash, restoreFromTrash, purgeFromTrash) : un seul
+    //     endroit où la table et le registre sont tenus cohérents.
+    // =====================================================================
+
+    /** Suppression unitaire (bouton de ligne de l'écran Tableaux) : l'article part en corbeille. */
+    public function deleteItem(Request $request, array $params): ActionResult
+    {
+        $item = $this->requireItem($request->int('id'));
+        $this->moveToTrash([$item['id']]);
+        $this->log('demo.delete', 'success', 'item:' . $item['id'], 'Article placé dans la corbeille');
+        return ActionResult::ok(['id' => $item['id']], 'Article « ' . $item['name'] . ' » placé dans la corbeille (restaurable ' . $this->retentionDays() . ' jours).')->refresh();
+    }
+
+    public function restoreItem(Request $request, array $params): ActionResult
+    {
+        $item = $this->restoreFromTrash((int) ($request->int('id') ?? 0), 'Article restauré depuis la corbeille du module');
+        return ActionResult::ok(['id' => $item['id']], 'Article « ' . $item['name'] . ' » restauré.')->refresh();
+    }
+
+    public function purgeItem(Request $request, array $params): ActionResult
+    {
+        $item = $this->purgeFromTrash((int) ($request->int('id') ?? 0), 'Article supprimé définitivement depuis la corbeille du module');
+        return ActionResult::ok(['id' => $item['id']], 'Article « ' . $item['name'] . ' » supprimé définitivement.')->refresh();
+    }
+
+    // =====================================================================
+    // Corbeille globale (TrashProviderInterface)
+    //
+    // Les articles sont communs à tous les utilisateurs du module : la règle est celle de
+    // l'écran « Corbeille » (permission delete pour voir, restaurer et purger). Le module
+    // Corbeille ne fait confiance à personne : il relaie, le module revérifie ses droits.
+    // =====================================================================
+
+    public function trashItems(): array
+    {
+        // Même périmètre que l'écran « Corbeille » : sans « delete », rien à montrer.
+        if (!$this->can('delete')) {
+            return [];
+        }
+        $items = [];
+        foreach ($this->repo()->trashed($this->retentionDays()) as $item) {
+            $items[] = [
+                'id' => (string) $item['id'],
+                'label' => (string) $item['name'],
+                'dataset' => self::DATASET,
+                'deleted_at' => (string) $item['deleted_at'],
+                'deleted_by' => $item['deleted_by'],
+                'purge_at' => $this->purgeAt((string) $item['deleted_at']),
+                'can_restore' => true,
+                'can_purge' => true,
+            ];
+        }
+        return $items;
+    }
+
+    public function restoreTrashItem(string $id): void
+    {
+        $this->restoreFromTrash($this->trashKey($id), 'Article restauré depuis la corbeille globale');
+    }
+
+    public function purgeTrashItem(string $id): void
+    {
+        $this->purgeFromTrash($this->trashKey($id), 'Article supprimé définitivement depuis la corbeille globale');
     }
 
     // =====================================================================
@@ -671,11 +820,27 @@ final class DemoModule extends AbstractModule
     /** Données de démonstration : 120 articles déterministes si la table est vide (idempotent). */
     public function seed(): string
     {
-        if ($this->repo()->count() > 0) {
-            return 'articles de démonstration déjà présents (' . $this->repo()->count() . ')';
+        // countAll() et non count() : des articles tous en corbeille ne rendent pas la table vide.
+        if ($this->repo()->countAll() > 0) {
+            return 'articles de démonstration déjà présents (' . $this->repo()->countAll() . ')';
         }
-        $count = $this->repo()->regenerate();
+        $count = $this->repo()->regenerate()['count'];
         return $count . ' articles de démonstration créés';
+    }
+
+    /**
+     * Rétention (console maintenance:purge) : purge physique des articles en corbeille depuis
+     * plus de trash.retention_days jours, avec retrait du registre commun.
+     */
+    public function purge(): string
+    {
+        $days = $this->retentionDays();
+        $ids = $this->repo()->expiredTrashIds($days);
+        foreach ($ids as $id) {
+            $this->purgeRow($id);
+            $this->log('demo.purge', 'success', 'item:' . $id, 'Article purgé par la rétention (' . $days . ' jours)');
+        }
+        return count($ids) . ' article(s) purgé(s) de la corbeille (> ' . $days . ' jours)';
     }
 
     // =====================================================================
@@ -710,14 +875,120 @@ final class DemoModule extends AbstractModule
         return $this->items ??= new ItemRepository($this->ctx->db);
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Article vivant, ou NotFoundException. Un article en corbeille est « introuvable » pour
+     * toutes les actions courantes, mais le message oriente vers la restauration.
+     *
+     * @return array<string, mixed>
+     */
     private function requireItem(?int $id): array
     {
         $item = $id === null || $id <= 0 ? null : $this->repo()->find($id);
+        if ($item !== null) {
+            return $item;
+        }
+        if ($id !== null && $id > 0 && $this->repo()->findTrashed($id) !== null) {
+            throw new NotFoundException('L’article n° ' . $id . ' est dans la corbeille : restaurez-le pour l’utiliser.');
+        }
+        throw new NotFoundException($id !== null && $id > 0 ? 'Article n° ' . $id . ' introuvable.' : 'Article introuvable : choisissez un article dans la liste.');
+    }
+
+    // ----- Corbeille : les seuls chemins qui modifient deleted_at ou effacent une ligne -----
+
+    /**
+     * Met des articles à la corbeille. Table du module et registre commun changent dans la même
+     * transaction : un article ne peut pas être en corbeille ici et visible sous ses tags.
+     *
+     * @param list<int> $ids
+     * @return list<int> identifiants réellement mis en corbeille (vivants parmi $ids)
+     */
+    private function moveToTrash(array $ids): array
+    {
+        return $this->ctx->db->transaction(function () use ($ids): array {
+            $trashed = $this->repo()->trash($ids, $this->ctx->userId());
+            if ($trashed !== []) {
+                $this->ctx->shared->registry->trash(self::DATASET, array_map('strval', $trashed));
+            }
+            return $trashed;
+        });
+    }
+
+    /**
+     * Restaure un article en corbeille (écran du module et corbeille globale).
+     *
+     * @return array<string, mixed> l'article tel qu'il était en corbeille
+     */
+    private function restoreFromTrash(int $id, string $logMessage): array
+    {
+        $this->require('delete', null, 'Vous n’avez pas le droit de restaurer des articles.');
+        $item = $this->requireTrashed($id);
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->repo()->restore($id);
+            $this->ctx->shared->registry->restore(self::DATASET, (string) $id);
+        });
+        $this->log('demo.restore', 'success', 'item:' . $id, $logMessage);
+        return $item;
+    }
+
+    /**
+     * Supprime définitivement un article en corbeille (écran du module et corbeille globale).
+     *
+     * @return array<string, mixed> l'article supprimé
+     */
+    private function purgeFromTrash(int $id, string $logMessage): array
+    {
+        $this->require('delete', null, 'Vous n’avez pas le droit de supprimer définitivement des articles.');
+        $item = $this->requireTrashed($id);
+        $this->purgeRow($id);
+        $this->log('demo.purge', 'success', 'item:' . $id, $logMessage);
+        return $item;
+    }
+
+    /** Effacement physique d'un article en corbeille et retrait du registre commun (tags, relations, pièces jointes). */
+    private function purgeRow(int $id): void
+    {
+        $this->ctx->db->transaction(function () use ($id): void {
+            $this->repo()->purge($id);
+            $this->ctx->shared->registry->unregister(self::DATASET, (string) $id);
+        });
+    }
+
+    /** @return array<string, mixed> article en corbeille, NotFoundException sinon */
+    private function requireTrashed(int $id): array
+    {
+        $item = $id > 0 ? $this->repo()->findTrashed($id) : null;
         if ($item === null) {
-            throw new NotFoundException('Article introuvable : choisissez un article dans la liste.');
+            throw new NotFoundException('Cet article n’est pas dans la corbeille (déjà restauré ou supprimé ?).');
         }
         return $item;
+    }
+
+    /** Identifiant reçu de la corbeille globale (chaîne) : entier strictement positif, sinon introuvable. */
+    private function trashKey(string $id): int
+    {
+        if (preg_match('/^[1-9]\d{0,9}$/', $id) !== 1) {
+            throw new NotFoundException('Cet article n’est pas dans la corbeille.');
+        }
+        return (int) $id;
+    }
+
+    private function retentionDays(): int
+    {
+        return max(1, $this->ctx->config->int('trash.retention_days', 30));
+    }
+
+    /** Date UTC de purge automatique d'un article mis en corbeille à $deletedAt. */
+    private function purgeAt(string $deletedAt): ?string
+    {
+        $at = Clock::parseUtc($deletedAt)?->modify('+' . $this->retentionDays() . ' days');
+        return $at === null ? null : Clock::utc($at);
+    }
+
+    /** Jours restants avant la purge automatique (0 si dépassée). */
+    private function daysLeft(?string $purgeAt): ?int
+    {
+        $at = Clock::parseUtc($purgeAt);
+        return $at === null ? null : max(0, (int) ceil(($at->getTimestamp() - Clock::now()->getTimestamp()) / 86400));
     }
 
     private function serviceItemCount(int $userId): ?int
@@ -749,6 +1020,10 @@ final class DemoModule extends AbstractModule
             'shared' => ['Partagé', 'tag'],
             'errors' => ['Erreurs', 'error'],
         ];
+        // L'écran Corbeille exige « delete » : inutile de proposer un lien qui mènerait à un refus.
+        if ($this->can('delete')) {
+            $links['trash'] = ['Corbeille', 'trash'];
+        }
         $html = '<div class="btn-group" role="group" aria-label="Écrans de la démonstration">';
         foreach ($links as $route => [$label, $icon]) {
             $active = $route === $current ? ' is-active' : '';
@@ -768,7 +1043,7 @@ final class DemoModule extends AbstractModule
         $subset = array_intersect_key($raw, array_flip(['id', 'name', 'version', 'namespace', 'entry', 'defaultRoute']));
         $subset['navigation'] = array_slice($raw['navigation'] ?? [], 0, 2);
         $subset['assets'] = ['css' => $raw['assets']['css'] ?? [], 'js' => $raw['assets']['js'] ?? []];
-        $subset['datasets'] = array_map(static fn (array $d): array => array_intersect_key($d, array_flip(['code', 'name', 'visibility', 'tables'])), $raw['datasets'] ?? []);
+        $subset['datasets'] = array_map(static fn (array $d): array => array_intersect_key($d, array_flip(['code', 'name', 'visibility', 'openRoute', 'tables'])), $raw['datasets'] ?? []);
         return (string) json_encode($subset, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 

@@ -345,7 +345,12 @@ final class WikiModule extends AbstractModule implements TrashProviderInterface
     public function delete(Request $request, array $params): ActionResult
     {
         $page = $this->requirePage($this->requireId($request));
-        $this->repository()->softDelete((int) $page['id']);
+        $this->ctx->db->transaction(function () use ($page): void {
+            $this->repository()->softDelete((int) $page['id']);
+            // Non-régression : sans ce signalement, la page restait affichée sous ses tags et dans
+            // les éléments liés (fiche d'un projet, d'un point GPS) avec un lien menant à une 404.
+            $this->ctx->shared->registry->trash(WikiService::DATASET, (string) $page['id']);
+        });
         $this->log('wiki.delete', 'success', 'wiki_page:' . $page['id'], 'Page mise à la corbeille : ' . $page['title']);
         return ActionResult::ok(null, 'Page « ' . $page['title'] . ' » mise à la corbeille.')->navigate('list');
     }
@@ -445,9 +450,13 @@ final class WikiModule extends AbstractModule implements TrashProviderInterface
     private function restoreTrashed(int $id, string $message): array
     {
         $page = $this->requireTrashed($id);
-        if (!$this->repository()->restore($id)) {
-            throw new NotFoundException('Cette page n’est pas dans la corbeille.');
-        }
+        $this->ctx->db->transaction(function () use ($id): void {
+            if (!$this->repository()->restore($id)) {
+                throw new NotFoundException('Cette page n’est pas dans la corbeille.');
+            }
+            // La page réapparaît sous ses tags et dans les éléments liés, relations conservées.
+            $this->ctx->shared->registry->restore(WikiService::DATASET, (string) $id);
+        });
         $this->log('wiki.restore', 'success', 'wiki_page:' . $id, $message . ' : ' . $page['title']);
         return $page;
     }

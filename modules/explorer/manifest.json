@@ -1,7 +1,7 @@
 {
     "id": "explorer",
     "name": "Explorateur",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Vue transversale des informations partagées de tous les modules : recherche, tags, relations et pièces jointes",
     "author": "Atelier",
     "icon": "layers",

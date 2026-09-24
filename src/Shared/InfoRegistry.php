@@ -62,7 +62,58 @@ final class InfoRegistry
         $this->db->update('info_registry', ['label' => $label], 'id = :id', ['id' => $infoId]);
     }
 
-    /** Supprime l'entrée (et par cascade ses tags, relations ; les pièces jointes sont détachées). */
+    /**
+     * Signale la mise en corbeille d'informations d'un module.
+     *
+     * À appeler par le module à chaque suppression logique, y compris pour les éléments qu'il
+     * masque par cascade (opérations d'un compte, interventions d'un équipement…). Tags,
+     * éléments liés, Explorateur et sélecteurs les écartent alors, sans rien effacer : la
+     * restauration les fait réapparaître tels quels.
+     *
+     * @param string|list<string> $localKeys
+     */
+    public function trash(string $datasetCode, string|array $localKeys): void
+    {
+        $this->setTrashed($datasetCode, $localKeys, Clock::utc());
+    }
+
+    /**
+     * Signale la restauration d'informations mises en corbeille.
+     *
+     * @param string|list<string> $localKeys
+     */
+    public function restore(string $datasetCode, string|array $localKeys): void
+    {
+        $this->setTrashed($datasetCode, $localKeys, null);
+    }
+
+    public function isTrashed(string $datasetCode, string $localKey): bool
+    {
+        $row = $this->find($datasetCode, $localKey);
+        return $row !== null && $row['trashed_at'] !== null;
+    }
+
+    /** @param string|list<string> $localKeys */
+    private function setTrashed(string $datasetCode, string|array $localKeys, ?string $when): void
+    {
+        $keys = array_values(array_unique(array_map('strval', (array) $localKeys)));
+        // Par lots : une cascade (toutes les opérations d'un compte) peut compter des milliers de clés.
+        foreach (array_chunk($keys, 500) as $chunk) {
+            $params = ['d' => $datasetCode, 'w' => $when];
+            $placeholders = [];
+            foreach ($chunk as $i => $key) {
+                $placeholders[] = ':k' . $i;
+                $params['k' . $i] = $key;
+            }
+            // Une date de mise en corbeille déjà posée est conservée : elle date le premier retrait.
+            $guard = $when === null ? '' : ' AND trashed_at IS NULL';
+            $this->db->execute(
+                'UPDATE info_registry SET trashed_at = :w WHERE dataset_code = :d AND local_key IN (' . implode(', ', $placeholders) . ')' . $guard,
+                $params
+            );
+        }
+    }
+
     /**
      * Retire définitivement une information du registre, avec ses pièces jointes.
      *
@@ -102,7 +153,7 @@ final class InfoRegistry
             $params['d' . $i] = $code;
         }
         return $this->db->select(
-            'SELECT * FROM info_registry WHERE ' . $this->db->lower('label') . ' LIKE :term AND dataset_code IN (' . implode(', ', $placeholders) . ') ORDER BY label LIMIT ' . $limit,
+            'SELECT * FROM info_registry WHERE ' . $this->db->lower('label') . ' LIKE :term AND trashed_at IS NULL AND dataset_code IN (' . implode(', ', $placeholders) . ') ORDER BY label LIMIT ' . $limit,
             $params
         );
     }

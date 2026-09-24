@@ -63,6 +63,16 @@ final class BudgetService
         if (!$this->isExternalRecordingEnabled()) {
             return $existing['id'] ?? null;
         }
+        if ($existing === null) {
+            // L'élément d'origine revient de la corbeille (intervention restaurée) : on restaure son
+            // opération au lieu d'en créer une seconde. Sinon l'ancienne restait en corbeille, et la
+            // restaurer à la main faisait apparaître la même dépense deux fois.
+            $trashed = $this->transactions->findTrashedBySourceRef($sourceRef);
+            if ($trashed !== null && $this->transactions->restore($trashed['id'])) {
+                $this->ctx->shared->registry->restore(self::DATASET_TRANSACTION, (string) $trashed['id']);
+                $existing = $trashed;
+            }
+        }
         $account = $this->resolveAccount($existing);
         if ($account === null) {
             return null;
@@ -95,7 +105,13 @@ final class BudgetService
             return false;
         }
         $this->assertAccess($userId, self::DATASET_TRANSACTION, 'delete');
-        return $this->transactions->softDelete($existing['id'], $userId);
+        if (!$this->transactions->softDelete($existing['id'], $userId)) {
+            return false;
+        }
+        // Signalée au registre commun comme toute mise en corbeille : sinon l'opération restait listée
+        // sous ses tags et parmi les éléments liés, avec un lien menant à une erreur 404.
+        $this->ctx->shared->registry->trash(self::DATASET_TRANSACTION, (string) $existing['id']);
+        return true;
     }
 
     /** Opération liée à une référence d'origine (champs publics), ou null. @return array{id: int, amount: int, done_at: string, account_name: string, label: string}|null */

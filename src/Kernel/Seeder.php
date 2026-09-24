@@ -67,31 +67,10 @@ final class Seeder
         }
         $log[] = 'Règles ACL de départ appliquées.';
 
-        // Comptes d'exemple
-        $examples = [
-            ['alice', 'Alice Martin', [$usersId]],
-            ['bruno', 'Bruno Lefèvre', [$usersId]],
-            ['claire', 'Claire Dubois', [$usersId, $adminsId]],
-        ];
-        foreach ($examples as [$username, $display, $groups]) {
-            if ($users->findByUsername($username) === null) {
-                $id = $users->create([
-                    'username' => $username,
-                    'display_name' => $display,
-                    'email' => $username . '@exemple.local',
-                    'password_hash' => $this->app->passwords->hash('Atelier-demo-2026'),
-                    'must_change_password' => 0,
-                    'password_changed_at' => \Atelier\Support\Clock::utc(),
-                ]);
-                $users->setGroups($id, $groups);
-                $log[] = "Compte d'exemple \"$username\" créé (mot de passe : Atelier-demo-2026).";
-            }
-        }
-        // Bruno : accès refusé à la démonstration pour illustrer un refus explicite
-        $bruno = $users->findByUsername('bruno');
-        if ($bruno !== null && $this->app->modules->has('demo')) {
-            $acl->setRule('user', (int) $bruno['id'], AclService::module('demo'), 'open', 'deny', null, 'Exemple de refus explicite');
-        }
+        // Aucun compte d'exemple : Atelier n'a qu'un utilisateur, son propriétaire. Les trois
+        // comptes créés auparavant (dont une administratrice) portaient un mot de passe publié
+        // dans le dépôt et ne demandaient pas de le changer : un `db:seed` lancé sur un serveur
+        // ouvrait donc trois accès connus de tous. Les tests créent leurs propres comptes.
 
         // Données d'exemple des modules
         $context = $this->app->context(Request::create('GET', '/'));

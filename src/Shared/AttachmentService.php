@@ -360,12 +360,18 @@ final class AttachmentService
     /** Suppression logique (corbeille) ; la purge physique est réalisée par la maintenance. */
     public function softDelete(string $id): void
     {
-        $this->db->update('attachments', ['deleted_at' => Clock::utc()], 'id = :id', ['id' => $id]);
+        $now = Clock::utc();
+        $this->db->update('attachments', ['deleted_at' => $now], 'id = :id', ['id' => $id]);
+        // Le fichier peut porter ses propres tags (entrée « attachments.file » du registre) : sans
+        // ce signal, il resterait listé sous ses tags avec un lien menant à une erreur 404.
+        // Écriture directe : InfoRegistry dépend de ce service, l'inverse créerait un cycle.
+        $this->db->update('info_registry', ['trashed_at' => $now], 'dataset_code = :d AND local_key = :k AND trashed_at IS NULL', ['d' => 'attachments.file', 'k' => $id]);
     }
 
     public function restore(string $id): void
     {
         $this->db->update('attachments', ['deleted_at' => null], 'id = :id', ['id' => $id]);
+        $this->db->update('info_registry', ['trashed_at' => null], 'dataset_code = :d AND local_key = :k', ['d' => 'attachments.file', 'k' => $id]);
     }
 
     /** Suppression physique immédiate (fichier et métadonnées). */
@@ -480,7 +486,8 @@ final class AttachmentService
     private function selectSql(): string
     {
         return 'SELECT a.*, u.username AS uploader, u.display_name AS uploader_name,
-                       r.label AS info_label, r.dataset_code AS info_dataset, r.module_id AS info_module, r.local_key AS info_key
+                       r.label AS info_label, r.dataset_code AS info_dataset, r.module_id AS info_module, r.local_key AS info_key,
+                       r.trashed_at AS info_trashed_at
                 FROM attachments a
                 LEFT JOIN users u ON u.id = a.uploaded_by
                 LEFT JOIN info_registry r ON r.id = a.info_id';

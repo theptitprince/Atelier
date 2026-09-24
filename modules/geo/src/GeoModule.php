@@ -14,6 +14,7 @@ use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
 use Atelier\Modules\TrashProviderInterface;
+use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
 use Atelier\Support\Str;
 
@@ -40,6 +41,8 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
     private const CODE_MAX = 32;
     private const ADDRESS_MAX = 300;
     private const DESCRIPTION_MAX = 5000;
+    private const TAG_MAX = 60;
+    private const TAGS_MAX = 20;
     private const ALTITUDE_MIN = -500.0;
     private const ALTITUDE_MAX = 9000.0;
 
@@ -188,7 +191,7 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
 
     public function new(Request $request, array $params): ModuleView
     {
-        $point = ['id' => null, 'code' => '', 'name' => '', 'coordinates' => '', 'altitude' => '', 'address' => '', 'description' => ''];
+        $point = ['id' => null, 'code' => '', 'name' => '', 'coordinates' => '', 'altitude' => '', 'address' => '', 'description' => '', 'tags' => []];
         $prefill = trim((string) $request->query('coordinates', ''));
         if ($prefill !== '') {
             $point['coordinates'] = $prefill;
@@ -208,6 +211,7 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
         $point = $this->requirePoint((int) ($params['id'] ?? 0));
         $coordinates = new Coordinates((float) $point['latitude'], (float) $point['longitude']);
         $point['coordinates'] = $coordinates->decimal();
+        $point['tags'] = $this->tagNames((int) $point['id']);
         $content = $this->render('form', ['point' => $point, 'isNew' => false, 'rights' => $this->rights(['delete'])]);
         $banner = $this->renderCore('banner', [
             'icon' => 'map-pin',
@@ -304,20 +308,36 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
     public function save(Request $request, array $params): ActionResult
     {
         $id = $request->int('id');
+        $userId = $this->ctx->userId();
+        // Le formulaire envoie toujours le champ « tags » (prérempli en édition) : il fait foi.
+        // Un appelant qui ne l'envoie pas (ancien script, appel d'API) ne doit pas effacer les
+        // tags posés depuis la fiche : on ne les remplace alors pas.
+        $withTags = $request->input('tags') !== null;
         if ($id === null || $id <= 0) {
             $this->require('create', null, 'Vous n’avez pas le droit de créer des points.');
             $data = $this->validate($request->all(), null);
-            $id = $this->repository()->create($data, $this->ctx->userId());
-            $this->registerInfo($id, $data['name'], $data['code']);
-            $this->log('geo.create', 'success', 'geo_point:' . $id, 'Point créé : ' . $data['name'], ['latitude' => $data['latitude'], 'longitude' => $data['longitude']]);
+            $id = $this->ctx->db->transaction(function () use ($data, $userId, $withTags): int {
+                $id = $this->repository()->create($data, $userId);
+                $infoId = $this->registerInfo($id, $data['name'], $data['code']);
+                if ($withTags) {
+                    $this->ctx->shared->tags->replace($infoId, $data['tags'], TagService::SHARED, $userId);
+                }
+                return $id;
+            });
+            $this->log('geo.create', 'success', 'geo_point:' . $id, 'Point créé : ' . $data['name'], ['latitude' => $data['latitude'], 'longitude' => $data['longitude'], 'tags' => count($data['tags'])]);
             return ActionResult::ok(['id' => $id], 'Point « ' . $data['name'] . ' » créé.')->navigate('show/' . $id);
         }
 
         $this->require('update', null, 'Vous n’avez pas le droit de modifier des points.');
         $this->requirePoint($id);
         $data = $this->validate($request->all(), $id);
-        $this->repository()->update($id, $data);
-        $this->registerInfo($id, $data['name'], $data['code']);
+        $this->ctx->db->transaction(function () use ($id, $data, $userId, $withTags): void {
+            $this->repository()->update($id, $data);
+            $infoId = $this->registerInfo($id, $data['name'], $data['code']);
+            if ($withTags) {
+                $this->ctx->shared->tags->replace($infoId, $data['tags'], TagService::SHARED, $userId);
+            }
+        });
         $this->log('geo.update', 'success', 'geo_point:' . $id, 'Point modifié : ' . $data['name'], ['latitude' => $data['latitude'], 'longitude' => $data['longitude']]);
         return ActionResult::ok(['id' => $id], 'Point « ' . $data['name'] . ' » enregistré.')->navigate('show/' . $id);
     }
@@ -325,7 +345,12 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
     public function delete(Request $request, array $params): ActionResult
     {
         $point = $this->requirePoint($this->requireId($request));
-        $this->repository()->softDelete((int) $point['id']);
+        $this->ctx->db->transaction(function () use ($point): void {
+            $this->repository()->softDelete((int) $point['id']);
+            // Non-régression : sans ce signalement, le point restait listé sous ses tags, dans
+            // l'Explorateur et dans les éléments liés des autres modules, avec un lien en 404.
+            $this->ctx->shared->registry->trash(GeoService::DATASET, (string) $point['id']);
+        });
         $this->log('geo.delete', 'success', 'geo_point:' . $point['id'], 'Point mis à la corbeille : ' . $point['name']);
         return ActionResult::ok(['id' => (int) $point['id']], 'Point « ' . $point['name'] . ' » mis à la corbeille.')->navigate('list');
     }
@@ -353,7 +378,9 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
             throw ValidationException::single('info_id', 'Choisissez une information à rattacher.');
         }
         $info = $this->ctx->shared->registry->get($infoId);
-        if ($info === null || !in_array($info['dataset_code'], $this->ctx->shared->catalog->readableCodes($this->ctx->userId()), true)) {
+        // Une information en corbeille n'est plus proposée par la recherche : son identifiant
+        // global ne doit pas non plus permettre de la rattacher (lien invisible jusqu'à restauration).
+        if ($info === null || $info['trashed_at'] !== null || !in_array($info['dataset_code'], $this->ctx->shared->catalog->readableCodes($this->ctx->userId()), true)) {
             throw ValidationException::single('info_id', 'Cette information n’est pas accessible.');
         }
         $this->geoService()->attach($infoId, (int) $point['id'], $request->string('comment') ?: null);
@@ -400,7 +427,7 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
         $infoId = $this->geoService()->infoId((int) $point['id']);
         $added = [];
         foreach (array_slice($names, 0, 5) as $name) {
-            $added[] = $this->ctx->shared->tags->attach($infoId, $name, \Atelier\Shared\TagService::SHARED, $this->ctx->userId())['name'];
+            $added[] = $this->ctx->shared->tags->attach($infoId, $name, TagService::SHARED, $this->ctx->userId())['name'];
         }
         $this->log('geo.tag_add', 'success', 'geo_point:' . $point['id'], 'Tag(s) ajouté(s) : ' . implode(', ', $added));
         return ActionResult::ok(['tags' => $added], 'Tag(s) ajouté(s) : ' . implode(', ', $added) . '.')->refresh();
@@ -587,9 +614,13 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
     private function restoreTrashed(int $id, string $message): array
     {
         $point = $this->requireTrashed($id);
-        if (!$this->repository()->restore($id)) {
-            throw new NotFoundException('Ce point n’est pas dans la corbeille.');
-        }
+        $this->ctx->db->transaction(function () use ($id): void {
+            if (!$this->repository()->restore($id)) {
+                throw new NotFoundException('Ce point n’est pas dans la corbeille.');
+            }
+            // Le point réapparaît sous ses tags et dans les éléments liés, relations conservées.
+            $this->ctx->shared->registry->restore(GeoService::DATASET, (string) $id);
+        });
         $this->log('geo.restore', 'success', 'geo_point:' . $id, $message . ' : ' . $point['name']);
         return $point;
     }
@@ -681,6 +712,13 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
             $errors['description'] = sprintf('La description ne peut dépasser %d caractères.', self::DESCRIPTION_MAX);
         }
 
+        $tags = $this->parseTags($input['tags'] ?? '');
+        if (count($tags) > self::TAGS_MAX) {
+            $errors['tags'] = sprintf('Au maximum %d tags par point.', self::TAGS_MAX);
+        } elseif (array_filter($tags, static fn (string $t): bool => mb_strlen($t, 'UTF-8') > self::TAG_MAX) !== []) {
+            $errors['tags'] = sprintf('Chaque tag comporte au plus %d caractères.', self::TAG_MAX);
+        }
+
         if ($errors !== []) {
             throw new ValidationException($errors);
         }
@@ -692,7 +730,45 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
             'altitude' => $altitude,
             'address' => $address !== '' ? $address : null,
             'description' => $description !== '' ? $description : null,
+            'tags' => $tags,
         ];
+    }
+
+    /**
+     * Tags saisis dans le formulaire (liste séparée par des virgules ou tableau), dédoublonnés
+     * sans tenir compte de la casse ; « # » initial retiré comme par le service commun.
+     *
+     * @return list<string>
+     */
+    private function parseTags(mixed $input): array
+    {
+        $parts = is_array($input) ? $input : explode(',', is_scalar($input) ? (string) $input : '');
+        $tags = [];
+        $seen = [];
+        foreach ($parts as $part) {
+            if (!is_scalar($part)) {
+                continue;
+            }
+            $name = trim(ltrim(trim((string) $part), '#'));
+            $name = preg_replace('/\s+/u', ' ', $name) ?? $name;
+            $key = Str::normalizeTag($name);
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $tags[] = $name;
+        }
+        return $tags;
+    }
+
+    /** @return list<string> noms des tags partagés d'un point, pour préremplir le formulaire */
+    private function tagNames(int $pointId): array
+    {
+        $info = $this->ctx->shared->registry->find(GeoService::DATASET, (string) $pointId);
+        if ($info === null) {
+            return [];
+        }
+        return array_map(static fn (array $t): string => (string) $t['name'], $this->ctx->shared->tags->tagsOf((string) $info['id'], TagService::SHARED));
     }
 
     /**
@@ -762,10 +838,10 @@ final class GeoModule extends AbstractModule implements TrashProviderInterface
         return trim(preg_replace('/[^a-z0-9-]+/', '-', $header) ?? $header, '-');
     }
 
-    /** Inscrit ou met à jour le point dans le registre commun (libellé « Nom [code] »). */
-    private function registerInfo(int $id, string $name, ?string $code): void
+    /** Inscrit ou met à jour le point dans le registre commun (libellé « Nom [code] ») ; retourne son identifiant global. */
+    private function registerInfo(int $id, string $name, ?string $code): string
     {
-        $this->ctx->shared->registry->register(GeoService::DATASET, (string) $id, GeoService::labelOf(['name' => $name, 'code' => $code]), $this->ctx->auth->userId());
+        return $this->ctx->shared->registry->register(GeoService::DATASET, (string) $id, GeoService::labelOf(['name' => $name, 'code' => $code]), $this->ctx->auth->userId());
     }
 
     /**
