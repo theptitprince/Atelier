@@ -10,6 +10,7 @@
  * @var array<int, array<string, mixed>> $assetsById
  * @var array<int, list<array{id: int, title: string, kind: string}>> $jobsByAsset
  * @var string $today
+ * @var list<string> $tags tags partagés
  * @var string|null $infoId (modification)
  * @var list<array<string, mixed>> $attachments (modification)
  * @var bool $attachmentsModule (modification)
@@ -115,6 +116,11 @@ $lockedJob = $job !== null && $isNew;
                     <div class="field field--full">
                         <label class="field__label" for="ml-notes">Notes</label>
                         <textarea class="textarea" id="ml-notes" name="notes" rows="6" maxlength="20000" data-editor="bbcode" placeholder="Ce qui a été fait, pièces remplacées, observations, prochaine fois…"><?= $e($log['notes'] ?? '') ?></textarea>
+                        <span class="field__error"></span>
+                    </div>
+                    <div class="field field--full">
+                        <label class="field__label" for="ml-tags"><?= $module->icon('tag', 'icon--sm') ?> Tags partagés</label>
+                        <input class="input" type="text" id="ml-tags" name="tags" value="<?= $e(implode(', ', $tags)) ?>" placeholder="Ajouter un tag…" autocomplete="off" data-tags-input data-tags-max="20">
                         <span class="field__error"></span>
                     </div>
                     <?php if ($isNew): ?>

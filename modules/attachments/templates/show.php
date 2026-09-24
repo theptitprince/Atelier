@@ -183,9 +183,12 @@ $folderId = $attachment['folder_id'] !== null ? (int) $attachment['folder_id'] :
                         <p>
                             <strong><?= $e($attachment['info_label'] !== null && $attachment['info_label'] !== '' ? $attachment['info_label'] : $attachment['info_dataset'] . ' #' . $attachment['info_key']) ?></strong><br>
                             <span class="text-muted text-small">module <?= $e($attachment['info_module']) ?> · jeu <?= $e($attachment['info_dataset']) ?></span>
+                            <?php if (($attachment['info_trashed_at'] ?? null) !== null): ?>
+                                <br><span class="badge badge--muted">en corbeille</span> <span class="text-muted text-small">L’élément porteur est en corbeille : restaurez-le depuis la Corbeille pour l’ouvrir.</span>
+                            <?php endif; ?>
                         </p>
                         <div class="flex flex--wrap">
-                            <?php if ($openModule): ?>
+                            <?php if ($openModule && ($attachment['info_trashed_at'] ?? null) === null): ?>
                                 <a class="btn btn--sm" href="#" data-open-module="<?= $e($attachment['info_module']) ?>"<?= $attachment['info_dataset'] === 'geo.point' ? ' data-open-route="show/' . $e($attachment['info_key']) . '"' : '' ?>><svg class="icon" aria-hidden="true"><use href="#i-external"></use></svg> Ouvrir</a>
                             <?php endif; ?>
                             <?php if ($canUpdate && !$inTrash): ?>

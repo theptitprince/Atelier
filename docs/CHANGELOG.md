@@ -2,6 +2,31 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.9.0 — 24/09/2026
+
+Tags et corbeille deviennent réellement universels, et Atelier assume d’être une application à un seul utilisateur.
+
+### Corbeille connue de toute l’application
+- **Le registre commun connaît la corbeille.** Chaque module gérait sa suppression logique dans ses propres tables, mais le registre partagé n’en savait rien : un élément en corbeille restait listé sous ses tags, dans l’Explorateur et dans les éléments liés d’un projet, avec un lien menant à une erreur 404. Le registre porte désormais un état « en corbeille », posé et retiré par chaque module à la suppression et à la restauration, y compris pour les éléments masqués en cascade. Les vues transversales les écartent. Rien n’est effacé : la restauration fait tout réapparaître.
+- **Tous les modules sont branchés** : Budget, Entretien, Coordonnées GPS, Actualités, Bloc-notes, Projets, Pages, Démonstration, ainsi que les fichiers joints du noyau. Une migration par module rattrape les éléments déjà en corbeille.
+- **Démonstration 1.1.0** passe en suppression logique avec sa corbeille. Le module de référence respecte enfin la règle qu’il est censé illustrer.
+- **Cascades.** Un compte du budget en corbeille masque ses opérations et récurrences, un équipement d’entretien ses tâches et interventions. À la restauration, seuls reviennent les éléments qui n’étaient pas en corbeille pour leur propre compte.
+- **Budget 1.2.0 et Entretien 1.3.0.** Restaurer une intervention créait une seconde opération budgétaire et laissait l’ancienne en corbeille ; la restaurer à la main doublait la dépense. C’est désormais l’opération d’origine qui revient. Une intervention dont l’équipement est en corbeille n’est plus modifiable par son adresse directe.
+- On ne peut plus lier à un projet ou à un point GPS une information qui est en corbeille.
+- **Fichiers joints 1.1.1** : un fichier dont l’élément porteur est en corbeille le signale, et n’invite plus à ouvrir un élément introuvable.
+
+### Le tag, lieur universel
+- **Tags 1.1.0.** Une note taguée était introuvable par son tag, même pour son auteur, parce que les notes sont privées. « Privé » veut dire « non exposé aux autres modules » : le module Tags montre désormais à chacun ses propres éléments privés.
+- **Compteurs justes.** Le nombre affiché d’un tag ne compte plus la corbeille. Le total, corbeille comprise, décide seul qu’un tag est inutilisé, pour que « supprimer les tags inutilisés » n’enlève pas son tag à un élément qu’on restaurera.
+- **Explorateur 1.0.1** : recherche, relations, pièces jointes et compteurs écartent la corbeille ; la fiche d’un élément en corbeille dit où le retrouver.
+- **Tags là où ils manquaient** : opérations du budget, interventions d’entretien, et formulaire des points GPS (Coordonnées GPS 1.2.0), comme partout ailleurs. L’import CSV du budget ne pose aucun tag.
+- **Routes d’ouverture complétées** : tâches et interventions d’entretien, comptes et catégories du budget, articles de démonstration. Un élément listé sous un tag s’ouvre désormais dans son module.
+- **Générateur de modules** : un module créé par `module:create` s’inscrit au registre, propose un champ de tags, déclare sa route d’ouverture et signale sa corbeille. Il naît relié au reste de l’application.
+
+### Un seul utilisateur
+- `db:seed` ne crée plus que le compte administrateur. Les trois comptes d’exemple, dont une administratrice, portaient un mot de passe publié dans le dépôt et ne demandaient pas de le changer : lancé sur un serveur, le seed ouvrait trois accès connus de tous.
+- Le moteur de droits reste en place : avec un seul administrateur, chaque contrôle répond déjà « autorisé », sans coût.
+
 ## 0.8.2 — 23/09/2026
 
 Arbitrages laissés ouverts par la revue 0.8.1, tranchés dans le sens le plus cohérent avec le reste de l’application.

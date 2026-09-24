@@ -1,7 +1,7 @@
 {
     "id": "tags",
     "name": "Tags partagés",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Nuage et gestion des tags partagés : recherche, informations taguées, renommage, fusion, doublons et tags inutilisés",
     "author": "Atelier",
     "icon": "tag",

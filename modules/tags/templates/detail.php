@@ -1,7 +1,7 @@
 <?php
 /**
  * Détail d'un tag partagé : métadonnées, actions de gestion, informations portant le tag, tags voisins.
- * Variables : $tag (array), $usage (int), $author (string), $infos (list : label, dataset_name, module_id,
+ * Variables : $tag (array), $usage (int, informations vivantes), $totalUsage (int, corbeille comprise), $author (string), $infos (list : label, dataset_name, module_id,
  *             module_name, open_route|null), $hidden (int), $neighbors (list : id, name, shared_count),
  *             $others (list des autres tags, si gestion), $canManage (bool), $module, $e, $datetime.
  */
@@ -31,7 +31,7 @@ $tagId = (int) $tag['id'];
                         <button type="button" class="btn btn--sm" data-action="rename" data-params='{"id":<?= $tagId ?>}' data-prompt="Nouveau nom du tag" data-prompt-field="name" data-prompt-value="<?= $e($tag['name']) ?>" data-confirm-title="Renommer le tag">
                             <svg class="icon" aria-hidden="true"><use href="#i-edit"></use></svg> Renommer
                         </button>
-                        <button type="button" class="btn btn--sm btn--outline-danger" data-action="delete" data-params='{"id":<?= $tagId ?>}' data-confirm="Supprimer le tag « <?= $e($tag['name']) ?> » ? Il sera retiré de <?= (int) $usage ?> information<?= $usage > 1 ? 's' : '' ?>." data-confirm-title="Supprimer le tag" data-confirm-label="Supprimer" data-danger>
+                        <button type="button" class="btn btn--sm btn--outline-danger" data-action="delete" data-params='{"id":<?= $tagId ?>}' data-confirm="Supprimer le tag « <?= $e($tag['name']) ?> » ? Il sera retiré de <?= (int) $totalUsage ?> information<?= $totalUsage > 1 ? 's' : '' ?><?= $totalUsage > $usage ? ', dont ' . ($totalUsage - $usage) . ' en corbeille' : '' ?>." data-confirm-title="Supprimer le tag" data-confirm-label="Supprimer" data-danger>
                             <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Supprimer
                         </button>
                     </div>
@@ -47,7 +47,7 @@ $tagId = (int) $tag['id'];
                         <?php if ($others === []): ?>
                             <p class="text-muted mb-0">Aucun autre tag partagé : la fusion n’est pas possible.</p>
                         <?php else: ?>
-                            <form data-action="merge" data-confirm="Fusionner « <?= $e($tag['name']) ?> » dans le tag cible ? Le tag « <?= $e($tag['name']) ?> » sera supprimé et ses <?= (int) $usage ?> utilisation<?= $usage > 1 ? 's' : '' ?> reportée<?= $usage > 1 ? 's' : '' ?>." novalidate>
+                            <form data-action="merge" data-confirm="Fusionner « <?= $e($tag['name']) ?> » dans le tag cible ? Le tag « <?= $e($tag['name']) ?> » sera supprimé et ses <?= (int) $totalUsage ?> utilisation<?= $totalUsage > 1 ? 's' : '' ?> reportée<?= $totalUsage > 1 ? 's' : '' ?>." novalidate>
                                 <input type="hidden" name="id" value="<?= $tagId ?>">
                                 <div class="field">
                                     <label class="field__label" for="tags-merge-target-<?= $tagId ?>">Tag cible</label>

@@ -105,6 +105,28 @@ final class DatasetCatalog
     }
 
     /**
+     * Jeux privés dont l'utilisateur retrouve SES PROPRES informations dans le module Tags.
+     *
+     * « Privé » signifie « non exposé aux autres modules », pas « caché à son auteur » : sans
+     * cela, une note taguée restait introuvable par son tag, y compris pour celui qui l'avait
+     * écrite. Il faut pouvoir ouvrir le module producteur ; l'appelant filtre ensuite sur
+     * l'auteur de l'information (`info_registry.created_by`).
+     *
+     * @return list<string>
+     */
+    public function ownPrivateCodes(int $userId): array
+    {
+        $codes = [];
+        $rows = $this->db->select("SELECT code, module_id FROM datasets WHERE visibility = 'private' AND is_present = 1 ORDER BY code");
+        foreach ($rows as $row) {
+            if ($this->acl->can($userId, AclService::module((string) $row['module_id']), 'open')) {
+                $codes[] = (string) $row['code'];
+            }
+        }
+        return $codes;
+    }
+
+    /**
      * Droit de lecture sur le jeu de données d'une information, partagé ou privé.
      * Le noyau s'en sert pour les pièces jointes : le fichier suit les droits de sa fiche.
      */

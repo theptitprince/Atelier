@@ -1,7 +1,8 @@
 <?php
 /**
  * Tableaux : pagination serveur (25/page), tri sur toutes les colonnes, filtres, sélection et
- * actions groupées, actions par ligne, export CSV, états de ligne, état vide.
+ * actions groupées, actions par ligne (dont la mise à la corbeille), export CSV, états de ligne, état vide.
+ * Les articles en corbeille n'apparaissent jamais ici : le dépôt les écarte de toutes les listes.
  * Variables : $rows (list), $total, $filters (ItemFilters), $categories, $rights, $selected (list<int>), $countAll, $module, $e, $datetime.
  */
 $icon = static fn (string $name, string $cls = ''): string => '<svg class="icon' . ($cls !== '' ? ' ' . $cls : '') . '" aria-hidden="true"><use href="#i-' . $name . '"></use></svg>';
@@ -109,6 +110,7 @@ $price = static fn (int $cents): string => number_format($cents / 100, 2, ',', '
                                 <span class="table-actions">
                                     <button type="button" class="btn btn--sm btn--ghost btn--icon" data-action="toggle" data-params='{"id": <?= (int) $row['id'] ?>}' title="<?= $row['active'] ? 'Désactiver' : 'Activer' ?> (data-action → refresh)" aria-label="<?= $row['active'] ? 'Désactiver' : 'Activer' ?>" <?= $canUpdate ? '' : 'disabled' ?>><?= $icon($row['active'] ? 'eye-off' : 'eye') ?></button>
                                     <button type="button" class="btn btn--sm btn--ghost btn--icon" data-action="rename" data-params='{"id": <?= (int) $row['id'] ?>}' data-prompt="Nouveau nom de l’article n° <?= (int) $row['id'] ?>" data-prompt-field="name" data-prompt-value="<?= $e($row['name']) ?>" data-confirm-title="Renommer" title="Renommer (data-prompt)" aria-label="Renommer" <?= $canUpdate ? '' : 'disabled' ?>><?= $icon('edit') ?></button>
+                                    <button type="button" class="btn btn--sm btn--ghost btn--icon" data-action="delete" data-params='{"id": <?= (int) $row['id'] ?>}' data-confirm="Mettre « <?= $e($row['name']) ?> » à la corbeille ? Il restera restaurable depuis l’écran Corbeille." title="Mettre à la corbeille (suppression logique)" aria-label="Mettre à la corbeille" <?= $canDelete ? '' : 'disabled' ?>><?= $icon('trash') ?></button>
                                 </span>
                             </td>
                         </tr>
@@ -121,8 +123,8 @@ $price = static fn (int $cents): string => number_format($cents / 100, 2, ',', '
                 <span class="text-small"><strong data-demo-selected-count>0</strong> sélectionné(s)</span>
                 <button type="submit" class="btn btn--sm" data-demo-bulk="activate" <?= $canUpdate ? '' : 'disabled' ?>><?= $icon('eye') ?> Activer</button>
                 <button type="submit" class="btn btn--sm" data-demo-bulk="deactivate" <?= $canUpdate ? '' : 'disabled' ?>><?= $icon('eye-off') ?> Désactiver</button>
-                <button type="submit" class="btn btn--sm btn--outline-danger" data-demo-bulk="delete" <?= $canDelete ? '' : 'disabled title="Permission delete requise"' ?>><?= $icon('trash') ?> Supprimer</button>
-                <span class="text-small text-muted">Envoi : <code>&lt;form data-action="bulk"&gt;</code> avec <code>ids[]</code> et <code>op</code>. Sans sélection : <code>ActionResult::warning</code>.</span>
+                <button type="submit" class="btn btn--sm btn--outline-danger" data-demo-bulk="delete" <?= $canDelete ? '' : 'disabled title="Permission delete requise"' ?>><?= $icon('trash') ?> Mettre à la corbeille</button>
+                <span class="text-small text-muted">Envoi : <code>&lt;form data-action="bulk"&gt;</code> avec <code>ids[]</code> et <code>op</code>. Sans sélection : <code>ActionResult::warning</code>. La suppression est logique<?= $canDelete ? ' : voir l’écran <a href="#" data-route="trash">Corbeille</a>' : '' ?>.</span>
                 <span class="toolbar__spacer"></span>
                 <a class="btn btn--sm btn--ghost" href="#" data-route="<?= $e($filters->route('tables', ['selected' => implode(',', array_map(static fn (array $r): int => (int) $r['id'], array_slice($rows, 0, 3)))])) ?>" title="Lignes .is-selected posées par le serveur">Sélection serveur (3 premières)</a>
             </div>

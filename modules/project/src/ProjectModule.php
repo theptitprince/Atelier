@@ -382,7 +382,13 @@ final class ProjectModule extends AbstractModule implements TrashProviderInterfa
     public function delete(Request $request, array $params): ActionResult
     {
         $project = $this->requireProject($this->requireId($request));
-        $this->repo()->softDelete((int) $project['id']);
+        $this->ctx->db->transaction(function () use ($project): void {
+            $this->repo()->softDelete((int) $project['id']);
+            // Non-régression : sans ce signalement, le projet restait listé sous ses tags et dans les
+            // éléments liés des autres modules, avec un lien menant à une erreur 404. Ses tâches et
+            // son journal ne sont pas inscrits au registre : aucune cascade à signaler.
+            $this->ctx->shared->registry->trash(ProjectService::DATASET, (string) $project['id']);
+        });
         $this->log('project.delete', 'success', 'project:' . $project['id'], 'Projet mis à la corbeille : ' . $project['title']);
         return ActionResult::ok(null, 'Projet « ' . $project['title'] . ' » mis à la corbeille.')->navigate('list')->dirty(false);
     }
@@ -586,7 +592,9 @@ final class ProjectModule extends AbstractModule implements TrashProviderInterfa
             throw ValidationException::single('type', 'Type de relation inconnu.');
         }
         $to = $this->ctx->shared->registry->get($toId);
-        if ($to === null || !$this->isVisibleCode((string) $to['dataset_code'])) {
+        // Une information en corbeille n'est plus proposée par la recherche : son identifiant global
+        // ne doit pas non plus permettre de la lier (le lien resterait invisible jusqu'à restauration).
+        if ($to === null || $to['trashed_at'] !== null || !$this->isVisibleCode((string) $to['dataset_code'])) {
             throw ValidationException::single('to', 'Information introuvable ou non accessible.');
         }
         $userId = $this->ctx->userId();
@@ -874,9 +882,13 @@ final class ProjectModule extends AbstractModule implements TrashProviderInterfa
     private function restoreTrashed(int $id, string $message): array
     {
         $project = $this->requireTrashed($id);
-        if (!$this->repo()->restore($id)) {
-            throw new NotFoundException('Ce projet n’est pas dans la corbeille.');
-        }
+        $this->ctx->db->transaction(function () use ($id): void {
+            if (!$this->repo()->restore($id)) {
+                throw new NotFoundException('Ce projet n’est pas dans la corbeille.');
+            }
+            // Le projet réapparaît sous ses tags et dans les éléments liés, relations conservées.
+            $this->ctx->shared->registry->restore(ProjectService::DATASET, (string) $id);
+        });
         $this->log('project.restore', 'success', 'project:' . $id, $message . ' : ' . $project['title']);
         return $project;
     }

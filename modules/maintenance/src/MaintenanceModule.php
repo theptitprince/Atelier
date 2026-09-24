@@ -34,10 +34,11 @@ use DateTimeZone;
  *    imprimable ;
  *  - historique des interventions (date, compteur, coût, intervenant) ;
  *  - pièces jointes (factures, notices, photos) sur les équipements, les tâches et les interventions,
- *    via le mécanisme commun et le module Fichiers joints ; tags partagés ;
+ *    via le mécanisme commun et le module Fichiers joints ; tags partagés (équipements, tâches, interventions) ;
  *  - corbeille : équipements, tâches et interventions sont supprimés logiquement (deleted_at), restaurables
  *    depuis la corbeille du module ou la corbeille globale (TrashProviderInterface), purgés après
- *    trash.retention_days.
+ *    trash.retention_days ; chaque mise en corbeille et chaque restauration est signalée au registre
+ *    commun, y compris pour les tâches et interventions masquées par leur équipement.
  */
 final class MaintenanceModule extends AbstractModule implements TrashProviderInterface
 {
@@ -442,7 +443,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
             'cost' => $job['estimated_cost'] ?? null,
             'performed_by' => '',
         ];
-        $content = $this->render('log_form', $this->logFormVars($log, true, $job));
+        $content = $this->render('log_form', $this->logFormVars($log, true, $job, []));
         $title = $job !== null ? 'Intervention · ' . $job['title'] : 'Nouvelle intervention';
         $back = $job !== null ? 'job/' . $job['id'] : ($asset !== null ? 'asset/' . $asset['id'] : 'history');
         $banner = $this->renderCore('banner', ['icon' => 'check', 'title' => $title, 'subtitle' => $asset !== null ? $asset['name'] : 'Enregistrer une intervention réalisée', 'actions' => $this->backLink($back, 'Retour')]);
@@ -455,7 +456,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
         $job = $log['job_id'] !== null ? $this->jobRepo()->find($log['job_id']) : null;
         $info = $this->ctx->shared->registry->find(self::DATASET_LOG, (string) $log['id']);
         $infoId = $info === null ? null : (string) $info['id'];
-        $vars = $this->logFormVars($log, false, $job) + [
+        $vars = $this->logFormVars($log, false, $job, $this->tagNames(self::DATASET_LOG, $log['id'])) + [
             'infoId' => $infoId,
             'attachments' => $infoId === null ? [] : $this->ctx->shared->attachments->listFor($infoId),
             'attachmentsModule' => $this->ctx->modules()->has('attachments'),
@@ -564,7 +565,10 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     public function assetDelete(Request $request, array $params): ActionResult
     {
         $asset = $this->requireAsset($this->requireId($request));
-        $this->assetRepo()->softDelete($asset['id']);
+        $this->ctx->db->transaction(function () use ($asset): void {
+            $this->assetRepo()->softDelete($asset['id']);
+            $this->registryTrash('asset', $asset['id']);
+        });
         $this->log('maintenance.asset_delete', 'success', 'maintenance_asset:' . $asset['id'], 'Équipement mis à la corbeille : ' . $asset['name']);
         return ActionResult::ok(['id' => $asset['id']], 'Équipement « ' . $asset['name'] . ' » mis à la corbeille.')->navigate('assets');
     }
@@ -635,6 +639,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     {
         $job = $this->requireJob($this->requireId($request));
         $this->jobRepo()->softDelete($job['id']);
+        $this->registryTrash('job', $job['id']);
         $this->log('maintenance.job_delete', 'success', 'maintenance_job:' . $job['id'], 'Tâche placée dans la corbeille : ' . $job['title']);
         return ActionResult::ok(['id' => $job['id']], ($job['kind'] === 'corrective' ? 'Panne « ' : 'Tâche « ') . $job['title'] . ' » placée dans la corbeille.')->navigate($job['kind'] === 'corrective' ? 'defects' : 'jobs');
     }
@@ -648,6 +653,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     {
         $id = $request->int('id');
         $data = $this->validateLog($request->all());
+        $tags = $this->tagList($request->input('tags'));
         $asset = $this->requireAsset($data['asset_id']);
         $job = $data['job_id'] !== null ? $this->jobRepo()->find($data['job_id']) : null;
         $isNew = $id === null || $id <= 0;
@@ -673,7 +679,8 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
             return $id;
         });
         $infoId = $this->registerLog($id, $data['title'], $data['done_at'], (string) $asset['name']);
-        $this->log('maintenance.log_' . ($isNew ? 'create' : 'update'), 'success', 'maintenance_log:' . $id, 'Intervention ' . ($isNew ? 'enregistrée' : 'modifiée') . ' : ' . $data['title'], ['asset_id' => $asset['id'], 'job_id' => $data['job_id'], 'cost' => $data['cost']]);
+        $this->applyTags($infoId, $tags);
+        $this->log('maintenance.log_' . ($isNew ? 'create' : 'update'), 'success', 'maintenance_log:' . $id, 'Intervention ' . ($isNew ? 'enregistrée' : 'modifiée') . ' : ' . $data['title'], ['asset_id' => $asset['id'], 'job_id' => $data['job_id'], 'cost' => $data['cost'], 'tags' => count($tags)]);
         $budgetTransactionId = $this->reportCostToBudget($id, $data, (string) $asset['name']);
 
         // Documents déposés avec le formulaire (facture, photos…) : joints à l'intervention tout juste créée.
@@ -711,6 +718,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     {
         $log = $this->requireLog($this->requireId($request));
         $this->logRepo()->softDelete($log['id']);
+        $this->registryTrash('log', $log['id']);
         $this->removeCostFromBudget($log['id']);
         $this->log('maintenance.log_delete', 'success', 'maintenance_log:' . $log['id'], 'Intervention placée dans la corbeille : ' . $log['title']);
         return ActionResult::ok(['id' => $log['id']], 'Intervention « ' . $log['title'] . ' » placée dans la corbeille.')->refresh();
@@ -1124,8 +1132,8 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
         ];
     }
 
-    /** @param array<string, mixed> $log @param array<string, mixed>|null $job @return array<string, mixed> */
-    private function logFormVars(array $log, bool $isNew, ?array $job): array
+    /** @param array<string, mixed> $log @param array<string, mixed>|null $job @param list<string> $tags @return array<string, mixed> */
+    private function logFormVars(array $log, bool $isNew, ?array $job, array $tags): array
     {
         $assets = $this->assetRepo()->all();
         $jobsByAsset = [];
@@ -1139,6 +1147,7 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
             'log' => $log,
             'isNew' => $isNew,
             'job' => $job,
+            'tags' => $tags,
             'assets' => $assets,
             'assetsById' => array_column($assets, null, 'id'),
             'jobsByAsset' => $jobsByAsset,
@@ -1577,10 +1586,10 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     }
 
     /**
-     * Pièces jointes (liste complète) et identifiant de registre par identifiant local d'un jeu.
+     * Pièces jointes (liste complète), tags partagés et identifiant de registre par identifiant local d'un jeu.
      *
      * @param list<int> $ids
-     * @return array<int, array{info_id: ?string, files: list<array<string, mixed>>}>
+     * @return array<int, array{info_id: ?string, files: list<array<string, mixed>>, tags: list<string>}>
      */
     private function attachmentsByItem(string $dataset, array $ids): array
     {
@@ -1588,12 +1597,43 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
         foreach ($ids as $id) {
             $info = $this->ctx->shared->registry->find($dataset, (string) $id);
             $infoId = $info === null ? null : (string) $info['id'];
-            $result[$id] = ['info_id' => $infoId, 'files' => $infoId === null ? [] : $this->ctx->shared->attachments->listFor($infoId)];
+            $result[$id] = [
+                'info_id' => $infoId,
+                'files' => $infoId === null ? [] : $this->ctx->shared->attachments->listFor($infoId),
+                'tags' => $infoId === null ? [] : array_map(static fn (array $t): string => (string) $t['name'], $this->ctx->shared->tags->tagsOf($infoId)),
+            ];
         }
         return $result;
     }
 
     // ----- Corbeille (commun à la vue du module et à la corbeille globale) -----
+
+    /**
+     * Signale au registre commun la mise en corbeille d'un élément. Un équipement masque ses tâches et
+     * ses interventions sans poser leur deleted_at : elles sont signalées avec lui, sinon elles restaient
+     * listées sous leurs tags et parmi les éléments liés, avec un lien menant à une erreur 404.
+     */
+    private function registryTrash(string $type, int $id): void
+    {
+        $registry = $this->ctx->shared->registry;
+        if ($type === 'asset') {
+            $registry->trash(self::DATASET_JOB, array_map('strval', $this->jobRepo()->idsForAsset($id)));
+            $registry->trash(self::DATASET_LOG, array_map('strval', $this->logRepo()->idsForAsset($id)));
+        }
+        $registry->trash(self::TRASH_TYPES[$type], (string) $id);
+    }
+
+    /**
+     * Signale au registre la restauration d'un équipement et de ses tâches et interventions vivantes :
+     * celles qui étaient en corbeille pour leur propre compte y restent.
+     */
+    private function registryRestoreAsset(int $id): void
+    {
+        $registry = $this->ctx->shared->registry;
+        $registry->restore(self::DATASET_ASSET, (string) $id);
+        $registry->restore(self::DATASET_JOB, array_map('strval', $this->jobRepo()->liveIdsForAsset($id)));
+        $registry->restore(self::DATASET_LOG, array_map('strval', $this->logRepo()->liveIdsForAsset($id)));
+    }
 
     private function retentionDays(): int
     {
@@ -1642,7 +1682,14 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     {
         if ($type === 'asset') {
             $asset = $this->assetRepo()->find($id, true);
-            if ($asset === null || $asset['deleted_at'] === null || !$this->assetRepo()->restore($id)) {
+            $restored = $asset !== null && $asset['deleted_at'] !== null && $this->ctx->db->transaction(function () use ($id): bool {
+                if (!$this->assetRepo()->restore($id)) {
+                    return false;
+                }
+                $this->registryRestoreAsset($id);
+                return true;
+            });
+            if (!$restored) {
                 throw new NotFoundException('Cet équipement n’est pas dans la corbeille.');
             }
             $this->log('maintenance.asset_restore', 'success', 'maintenance_asset:' . $id, 'Équipement restauré : ' . $asset['name']);
@@ -1662,6 +1709,13 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
                 $this->jobRepo()->restore($id);
             } else {
                 $this->logRepo()->restore($id);
+            }
+            // L'équipement restauré avec l'élément rend aussi visibles ses autres tâches et interventions
+            // vivantes (dont celui-ci) ; sinon seul l'élément réapparaît.
+            if ($assetRestored) {
+                $this->registryRestoreAsset((int) $row['asset_id']);
+            } else {
+                $this->ctx->shared->registry->restore(self::TRASH_TYPES[$type], (string) $id);
             }
         });
         if ($assetRestored) {
@@ -1786,7 +1840,9 @@ final class MaintenanceModule extends AbstractModule implements TrashProviderInt
     private function requireLog(int $id): array
     {
         $log = $id > 0 ? $this->logRepo()->find($id) : null;
-        if ($log === null) {
+        // Comme pour une tâche : une intervention dont l'équipement est en corbeille est masquée
+        // avec lui. Sans ce contrôle, elle restait modifiable par son adresse directe.
+        if ($log === null || $log['asset_deleted_at'] !== null) {
             throw new NotFoundException('Intervention introuvable.');
         }
         return $log;

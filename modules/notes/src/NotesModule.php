@@ -294,7 +294,11 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
         if ($id <= 0 || $this->repo()->find($id, $userId) === null) {
             throw new NotFoundException('Note introuvable ou déjà supprimée.');
         }
-        $this->repo()->softDelete($id, $userId);
+        $this->ctx->db->transaction(function () use ($id, $userId): void {
+            $this->repo()->softDelete($id, $userId);
+            // Non-régression : sans ce signalement, la note restait listée sous ses tags avec un lien en 404.
+            $this->ctx->shared->registry->trash(self::DATASET, (string) $id);
+        });
         $this->log('notes.delete', 'success', 'note:' . $id, 'Note placée dans la corbeille');
         return ActionResult::ok(['id' => $id], 'Note placée dans la corbeille.')->navigate('list')->dirty(false);
     }
@@ -306,7 +310,7 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
         if ($id <= 0 || $this->repo()->findTrashed($id, $userId) === null) {
             throw new NotFoundException('Cette note n’est pas dans la corbeille.');
         }
-        $this->repo()->restore($id, $userId);
+        $this->restoreOwned($id, $userId);
         $this->log('notes.restore', 'success', 'note:' . $id, 'Note restaurée depuis la corbeille');
         return ActionResult::ok(['id' => $id], 'Note restaurée.')->refresh();
     }
@@ -361,8 +365,18 @@ final class NotesModule extends AbstractModule implements \Atelier\Modules\Trash
         if ($this->repo()->findTrashed((int) $id, $userId) === null) {
             throw new NotFoundException('Cette note n’est pas dans la corbeille.');
         }
-        $this->repo()->restore((int) $id, $userId);
+        $this->restoreOwned((int) $id, $userId);
         $this->log('notes.restore', 'success', 'note:' . $id, 'Note restaurée depuis la corbeille globale');
+    }
+
+    /** Restauration commune (action « restore » et corbeille globale) : table et registre ensemble. */
+    private function restoreOwned(int $id, int $userId): void
+    {
+        $this->ctx->db->transaction(function () use ($id, $userId): void {
+            $this->repo()->restore($id, $userId);
+            // La note réapparaît sous ses tags ; sans cela elle resterait masquée après restauration.
+            $this->ctx->shared->registry->restore(self::DATASET, (string) $id);
+        });
     }
 
     public function purgeTrashItem(string $id): void

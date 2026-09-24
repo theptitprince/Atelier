@@ -17,10 +17,19 @@ final class TagQueries
     {
     }
 
-    /** Nombre d'informations portant le tag. */
+    /** Nombre d'informations portant le tag, corbeille comprise (ce que la suppression ou la fusion touchera). */
     public function usageCount(int $tagId): int
     {
         return $this->db->count('SELECT COUNT(*) FROM info_tags WHERE tag_id = :t', ['t' => $tagId]);
+    }
+
+    /** Nombre d'informations vivantes portant le tag : c'est le chiffre affiché. */
+    public function liveUsageCount(int $tagId): int
+    {
+        return $this->db->count(
+            'SELECT COUNT(*) FROM info_tags it INNER JOIN info_registry r ON r.id = it.info_id WHERE it.tag_id = :t AND r.trashed_at IS NULL',
+            ['t' => $tagId]
+        );
     }
 
     /**
@@ -35,7 +44,8 @@ final class TagQueries
              FROM info_tags a
              INNER JOIN info_tags b ON b.info_id = a.info_id AND b.tag_id <> a.tag_id
              INNER JOIN tags t ON t.id = b.tag_id
-             WHERE a.tag_id = :t AND t.scope = :s
+             INNER JOIN info_registry r ON r.id = a.info_id
+             WHERE a.tag_id = :t AND t.scope = :s AND r.trashed_at IS NULL
              GROUP BY t.id, t.name, t.normalized
              ORDER BY shared_count DESC, t.normalized
              LIMIT ' . max(1, $limit),

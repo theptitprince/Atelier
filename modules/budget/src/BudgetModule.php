@@ -17,6 +17,7 @@ use Atelier\Modules\ModuleContext;
 use Atelier\Modules\ModuleView;
 use Atelier\Modules\RouteCollection;
 use Atelier\Modules\TrashProviderInterface;
+use Atelier\Shared\TagService;
 use Atelier\Support\Clock;
 use Atelier\Support\Str;
 use Atelier\View\BbCode;
@@ -34,7 +35,9 @@ use DateTimeZone;
  *  - objectifs d'épargne et économies réalisées (budget non dépensé + gains enregistrés) ;
  *  - service intermodule : le module Entretien y reporte le coût réel de chaque intervention ;
  *  - corbeille : opérations, comptes, récurrences, objectifs et économies sont supprimés logiquement
- *    (restaurables pendant trash.retention_days) et exposés à la corbeille globale.
+ *    (restaurables pendant trash.retention_days) et exposés à la corbeille globale ; chaque mise en
+ *    corbeille et chaque restauration est signalée au registre commun (cascade d'un compte comprise) ;
+ *  - tags partagés sur les opérations (formulaire de saisie, liste des opérations).
  */
 final class BudgetModule extends AbstractModule implements TrashProviderInterface
 {
@@ -42,9 +45,20 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     public const DATASET_ACCOUNT = 'budget.account';
     public const DATASET_RECURRING = 'budget.recurring';
     public const DATASET_SAVING = 'budget.saving';
+    public const DATASET_CATEGORY = 'budget.category';
 
     /** Types d'éléments de la corbeille : préfixe d'identifiant => jeu de données. */
     private const TRASH_KINDS = ['transaction' => self::DATASET_TRANSACTION, 'account' => self::DATASET_ACCOUNT, 'recurring' => self::DATASET_RECURRING, 'goal' => self::DATASET_SAVING, 'saving' => self::DATASET_SAVING];
+
+    /**
+     * Types d'éléments dont la corbeille est signalée au registre commun. Objectifs et économies
+     * partagent le jeu budget.saving avec des identifiants locaux qui se chevauchent (objectif 3 et
+     * économie 3) : le module ne les inscrit jamais au registre et ne les y signale donc pas, sans
+     * quoi supprimer l'un masquerait l'autre.
+     */
+    private const REGISTRY_KINDS = ['transaction' => self::DATASET_TRANSACTION, 'account' => self::DATASET_ACCOUNT, 'recurring' => self::DATASET_RECURRING];
+    private const TAG_MAX = 60;
+    private const TAGS_MAX_COUNT = 20;
 
     private const IMPORT_RESOURCE = 'action/import';
     private const EXPORT_RESOURCE = 'action/export';
@@ -263,8 +277,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
             'canExport' => $canExport,
             'exportUrl' => $this->url('export.csv') . $this->queryString($this->transactionsRoute($query)),
             'perPageChoices' => self::PER_PAGE_CHOICES,
-            'attachmentCounts' => $this->attachmentCounts(array_map(static fn (array $r): int => $r['id'], $result['rows'])),
-        ]);
+        ] + $this->registryDecorations(array_map(static fn (array $r): int => $r['id'], $result['rows'])));
         $actions = $this->navLinks('transactions');
         if ($rights['create']) {
             $actions .= '<a class="btn btn--primary" href="#" data-route="transaction/new">' . $this->icon('plus') . '<span>Nouvelle opération</span></a>';
@@ -293,6 +306,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         $rights = $this->rights(['update', 'delete']);
         $vars = $this->transactionFormVars($transaction, false, $transaction['amount'] >= 0 ? 'income' : 'expense') + [
             'infoId' => $infoId,
+            'tags' => $infoId === null ? [] : $this->tagNames($infoId),
             'attachments' => $infoId === null ? [] : $this->ctx->shared->attachments->listFor($infoId),
             'attachmentsModule' => $this->ctx->modules()->has('attachments'),
             'rights' => $rights,
@@ -578,16 +592,25 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         $this->require($isNew ? 'create' : 'update', null, 'Vous n’avez pas le droit d’enregistrer des opérations.');
         $existing = $isNew ? null : $this->requireTransaction($id);
         $data = $this->validateTransaction($request->all(), $existing);
+        $tags = $this->tagList($request->input('tags'));
         if ($isNew) {
-            $id = $this->transactionRepo()->create($data, $this->ctx->userId());
-            $this->log('budget.transaction_create', 'success', 'budget_transaction:' . $id, 'Opération créée : ' . $data['label'], ['amount' => $data['amount'], 'account_id' => $data['account_id']]);
+            // Inscrite au registre dès sa création, comme dans les autres modules : elle peut alors
+            // recevoir des tags et être reliée depuis un projet sans attendre une première modification.
+            $id = $this->ctx->db->transaction(function () use ($data, $tags): int {
+                $id = $this->transactionRepo()->create($data, $this->ctx->userId());
+                $this->applyTags($this->registerTransaction($id, $data['label'], $data['done_at']), $tags);
+                return $id;
+            });
+            $this->log('budget.transaction_create', 'success', 'budget_transaction:' . $id, 'Opération créée : ' . $data['label'], ['amount' => $data['amount'], 'account_id' => $data['account_id'], 'tags' => count($tags)]);
             $message = 'Opération « ' . $data['label'] . ' » enregistrée (' . Money::format($data['amount'], '', true) . ').';
             $result = ActionResult::ok(['id' => $id], $message)->dirty(false);
             return $request->bool('again') ? $result->navigate('transaction/new?account=' . $data['account_id'] . '&kind=' . ($data['amount'] >= 0 ? 'income' : 'expense')) : $result->navigate('transactions');
         }
-        $this->transactionRepo()->update($id, $data);
-        $this->registerTransaction($id, $data['label'], $data['done_at']);
-        $this->log('budget.transaction_update', 'success', 'budget_transaction:' . $id, 'Opération modifiée : ' . $data['label'], ['amount' => $data['amount']]);
+        $this->ctx->db->transaction(function () use ($id, $data, $tags): void {
+            $this->transactionRepo()->update($id, $data);
+            $this->applyTags($this->registerTransaction($id, $data['label'], $data['done_at']), $tags);
+        });
+        $this->log('budget.transaction_update', 'success', 'budget_transaction:' . $id, 'Opération modifiée : ' . $data['label'], ['amount' => $data['amount'], 'tags' => count($tags)]);
         return ActionResult::ok(['id' => $id], 'Opération « ' . $data['label'] . ' » enregistrée.')->dirty(false)->navigate('transactions');
     }
 
@@ -596,6 +619,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     {
         $transaction = $this->requireTransaction($this->requireId($request));
         $this->transactionRepo()->softDelete($transaction['id'], $this->ctx->userId());
+        $this->registryTrash('transaction', [$transaction['id']]);
         $this->log('budget.transaction_delete', 'success', 'budget_transaction:' . $transaction['id'], 'Opération placée dans la corbeille : ' . $transaction['label'], ['amount' => $transaction['amount']]);
         return ActionResult::ok(null, 'Opération « ' . $transaction['label'] . ' » placée dans la corbeille.')->navigate('transactions');
     }
@@ -634,6 +658,8 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
             case 'delete':
                 $this->require('delete');
                 $count = $this->transactionRepo()->softDeleteMany($ids, $this->ctx->userId());
+                // Toutes les clés sont signalées : celles déjà en corbeille gardent leur date de retrait.
+                $this->registryTrash('transaction', $ids);
                 $message = $count . ' opération' . ($count > 1 ? 's' : '') . ' placée' . ($count > 1 ? 's' : '') . ' dans la corbeille.';
                 break;
             default:
@@ -771,6 +797,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     {
         $recurring = $this->requireRecurring($this->requireId($request));
         $this->recurringRepo()->softDelete($recurring['id'], $this->ctx->userId());
+        $this->registryTrash('recurring', [$recurring['id']]);
         $this->log('budget.recurring_delete', 'success', 'budget_recurring:' . $recurring['id'], 'Récurrence placée dans la corbeille : ' . $recurring['label']);
         return ActionResult::ok(null, 'Récurrence « ' . $recurring['label'] . ' » placée dans la corbeille. Les opérations déjà postées sont conservées.')->refresh();
     }
@@ -892,6 +919,7 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
     {
         $account = $this->requireAccount($this->requireId($request), true);
         $this->accountRepo()->softDelete($account['id'], $this->ctx->userId());
+        $this->registryTrash('account', [$account['id']]);
         $masked = (int) $account['transaction_count'];
         $this->log('budget.account_delete', 'success', 'budget_account:' . $account['id'], 'Compte placé dans la corbeille : ' . $account['name'], ['transactions' => $masked]);
         return ActionResult::ok(null, 'Compte « ' . $account['name'] . ' » placé dans la corbeille' . ($masked > 0 ? ' avec ses ' . $masked . ' opération' . ($masked > 1 ? 's' : '') : '') . '.')->refresh();
@@ -944,6 +972,8 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
             throw new ConflictException('La catégorie « ' . $category['name'] . ' » est utilisée par ' . implode(', ', $parts) . ' (corbeille comprise) : archivez-la, ou recatégorisez ces données avant de la supprimer.');
         }
         $this->categoryRepo()->delete($category['id']);
+        // Suppression physique : une éventuelle inscription au registre ne doit pas survivre (lien 404).
+        $this->ctx->shared->registry->unregister(self::DATASET_CATEGORY, (string) $category['id']);
         $this->log('budget.category_delete', 'success', 'budget_category:' . $category['id'], 'Catégorie supprimée : ' . $category['name']);
         return ActionResult::ok(null, 'Catégorie « ' . $category['name'] . ' » supprimée.')->refresh();
     }
@@ -1005,13 +1035,20 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         if ($row === null) {
             throw new NotFoundException('Cet élément n’est pas dans la corbeille du budget.');
         }
-        match ($kind) {
-            'transaction' => $this->transactionRepo()->restore($localId),
-            'account' => $this->accountRepo()->restore($localId),
-            'recurring' => $this->recurringRepo()->restore($localId),
-            'goal' => $this->savingsRepo()->restoreGoal($localId),
-            default => $this->savingsRepo()->restoreSaving($localId),
-        };
+        $this->ctx->db->transaction(function () use ($kind, $localId, $row): void {
+            match ($kind) {
+                'transaction' => $this->transactionRepo()->restore($localId),
+                'account' => $this->accountRepo()->restore($localId),
+                'recurring' => $this->recurringRepo()->restore($localId),
+                'goal' => $this->savingsRepo()->restoreGoal($localId),
+                default => $this->savingsRepo()->restoreSaving($localId),
+            };
+            // Une opération ou une récurrence restaurée alors que son compte est encore en corbeille
+            // reste masquée par lui : elle ne réapparaîtra dans le registre qu'avec le compte.
+            if (($row['account_deleted_at'] ?? null) === null) {
+                $this->registryRestore($kind, $localId);
+            }
+        });
         $this->log('budget.restore', 'success', 'budget_' . $kind . ':' . $localId, 'Restauré depuis la corbeille : ' . $row['trash_label']);
     }
 
@@ -1482,13 +1519,18 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
                     foreach ($this->transactionRepo()->idsForAccount($localId) as $transactionId) {
                         $this->ctx->shared->registry->unregister(self::DATASET_TRANSACTION, (string) $transactionId);
                     }
+                    foreach ($this->recurringRepo()->idsForAccount($localId) as $recurringId) {
+                        $this->ctx->shared->registry->unregister(self::DATASET_RECURRING, (string) $recurringId);
+                    }
                     $this->transactionRepo()->deleteForAccount($localId);
                     $this->recurringRepo()->deleteForAccount($localId);
                     $this->savingsRepo()->detachAccount($localId);
                     $this->accountRepo()->purge($localId);
+                    $this->ctx->shared->registry->unregister(self::DATASET_ACCOUNT, (string) $localId);
                     break;
                 case 'recurring':
                     $this->recurringRepo()->purge($localId);
+                    $this->ctx->shared->registry->unregister(self::DATASET_RECURRING, (string) $localId);
                     break;
                 case 'goal':
                     $this->savingsRepo()->purgeGoal($localId);
@@ -1528,15 +1570,104 @@ final class BudgetModule extends AbstractModule implements TrashProviderInterfac
         return $this->ctx->shared->registry->register(self::DATASET_TRANSACTION, (string) $id, $label . ' (' . Period::dayLabel($day) . ')', $this->ctx->auth->userId());
     }
 
-    /** @param list<int> $ids @return array<int, int> */
-    private function attachmentCounts(array $ids): array
+    /**
+     * Justificatifs et tags de chaque opération listée (une seule lecture du registre par ligne).
+     *
+     * @param list<int> $ids
+     * @return array{attachmentCounts: array<int, int>, tagsById: array<int, list<string>>}
+     */
+    private function registryDecorations(array $ids): array
     {
         $counts = [];
+        $tags = [];
         foreach ($ids as $id) {
             $info = $this->ctx->shared->registry->find(self::DATASET_TRANSACTION, (string) $id);
             $counts[$id] = $info === null ? 0 : $this->ctx->shared->attachments->countFor((string) $info['id']);
+            $tags[$id] = $info === null ? [] : $this->tagNames((string) $info['id']);
         }
-        return $counts;
+        return ['attachmentCounts' => $counts, 'tagsById' => $tags];
+    }
+
+    /** @return list<string> noms des tags partagés d'une information du registre */
+    private function tagNames(string $infoId): array
+    {
+        return array_map(static fn (array $t): string => (string) $t['name'], $this->ctx->shared->tags->tagsOf($infoId, TagService::SHARED));
+    }
+
+    /**
+     * Saisie « a, b, #c » (ou tableau) : tags distincts (sans tenir compte de la casse), sans vide ni « # ».
+     *
+     * @return list<string>
+     */
+    private function tagList(mixed $raw): array
+    {
+        $values = is_array($raw) ? $raw : explode(',', (string) (is_scalar($raw) ? $raw : ''));
+        $tags = [];
+        foreach ($values as $value) {
+            $tag = trim(ltrim(trim((string) (is_scalar($value) ? $value : '')), '#'));
+            if ($tag === '') {
+                continue;
+            }
+            if (mb_strlen($tag, 'UTF-8') > self::TAG_MAX) {
+                throw ValidationException::single('tags', sprintf('Un tag comporte au plus %d caractères.', self::TAG_MAX));
+            }
+            $tags[mb_strtolower($tag, 'UTF-8')] ??= $tag;
+        }
+        if (count($tags) > self::TAGS_MAX_COUNT) {
+            throw ValidationException::single('tags', sprintf('Au maximum %d tags par opération.', self::TAGS_MAX_COUNT));
+        }
+        return array_values($tags);
+    }
+
+    /** @param list<string> $tags */
+    private function applyTags(string $infoId, array $tags): void
+    {
+        $this->ctx->shared->tags->replace($infoId, $tags, TagService::SHARED, $this->ctx->userId());
+    }
+
+    // ----- Registre commun : corbeille -----
+
+    /**
+     * Signale au registre commun la mise en corbeille d'éléments du module. Un compte masque ses
+     * opérations et ses récurrences sans poser leur deleted_at : elles sont signalées avec lui, sinon
+     * elles restaient listées sous leurs tags et parmi les éléments liés, avec un lien menant à une 404.
+     *
+     * @param list<int> $ids
+     */
+    private function registryTrash(string $kind, array $ids): void
+    {
+        $registry = $this->ctx->shared->registry;
+        if ($kind === 'account') {
+            foreach ($ids as $accountId) {
+                $registry->trash(self::DATASET_TRANSACTION, $this->localKeys($this->transactionRepo()->idsForAccount($accountId)));
+                $registry->trash(self::DATASET_RECURRING, $this->localKeys($this->recurringRepo()->idsForAccount($accountId)));
+            }
+        }
+        if (isset(self::REGISTRY_KINDS[$kind]) && $ids !== []) {
+            $registry->trash(self::REGISTRY_KINDS[$kind], $this->localKeys($ids));
+        }
+    }
+
+    /**
+     * Signale au registre la restauration d'un élément. Pour un compte, seules ses opérations et
+     * récurrences vivantes réapparaissent : celles qui étaient en corbeille pour leur propre compte y restent.
+     */
+    private function registryRestore(string $kind, int $id): void
+    {
+        $registry = $this->ctx->shared->registry;
+        if ($kind === 'account') {
+            $registry->restore(self::DATASET_TRANSACTION, $this->localKeys($this->transactionRepo()->liveIdsForAccount($id)));
+            $registry->restore(self::DATASET_RECURRING, $this->localKeys($this->recurringRepo()->liveIdsForAccount($id)));
+        }
+        if (isset(self::REGISTRY_KINDS[$kind])) {
+            $registry->restore(self::REGISTRY_KINDS[$kind], (string) $id);
+        }
+    }
+
+    /** @param list<int> $ids @return list<string> clés locales du registre */
+    private function localKeys(array $ids): array
+    {
+        return array_map('strval', $ids);
     }
 
     /** @param array<string, mixed> $transaction @return array<string, mixed> */

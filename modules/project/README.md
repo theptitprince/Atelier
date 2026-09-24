@@ -51,6 +51,8 @@ Version 1.0.0 — dépend du noyau Atelier ≥ 0.7 ; les modules `geo`, `budget`
 
 Suppression logique : un projet supprimé passe dans la corbeille du module **et** dans la corbeille globale (`TrashProviderInterface`, identifiants = id du projet) ; il est purgé après `trash.retention_days` jours (hook `purge()`), avec ses tâches, son journal et son inscription au registre. Le jeu privé `project.task` n'est jamais exposé aux autres modules.
 
+Registre commun (1.0.2) : la mise à la corbeille signale le projet au registre (`registry->trash`), la restauration l'en retire (`registry->restore`) ; un projet en corbeille n'apparaît plus sous ses tags, dans l'Explorateur ni dans les éléments liés des autres modules. Tâches et journal ne sont pas inscrits au registre : aucune cascade à signaler. Réciproquement, la fiche d'un projet et ses compteurs n'affichent plus les éléments liés mis à la corbeille par leur module (une page, un point GPS…), qui reviennent à leur restauration, et `link` refuse une information en corbeille. La migration `002_registry_trash` a marqué les projets déjà en corbeille.
+
 ## Service intermodule (`ProjectService`)
 
 ```php
@@ -78,3 +80,4 @@ curl -s -b cj.txt -H "X-Atelier-Request: json" "http://127.0.0.1:8000/m/project/
 ## Historique
 
 - 1.0.0 — liste, fiche, édition, tâches, journal, documents, éléments liés (recherche transversale), lieux GPS, budget, tags, corbeille (module + globale), badge, service intermodule, données d'exemple.
+- 1.0.2 — corbeille signalée au registre commun (projet masqué sous ses tags et dans les éléments liés, restauré avec eux), éléments liés en corbeille masqués dans la fiche, liaison d’une information en corbeille refusée, migration de rattrapage.

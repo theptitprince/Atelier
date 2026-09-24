@@ -1,7 +1,7 @@
 {
   "id": "attachments",
   "name": "Fichiers joints",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Téléversement, nom d’affichage, tags, dossiers virtuels, rattachement et téléchargement sécurisé des fichiers joints (chiffrés au repos)",
   "author": "Atelier",
   "icon": "paperclip",

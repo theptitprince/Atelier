@@ -64,9 +64,12 @@ final class RelationService
     /**
      * Relations dans les deux sens, avec les informations liées (libellé, jeu de données, module).
      *
+     * Les informations liées qui sont en corbeille sont écartées par défaut : leur lien menait à
+     * une erreur 404. La relation elle-même est conservée et réapparaît à la restauration.
+     *
      * @return list<array<string, mixed>>
      */
-    public function relationsOf(string $infoId): array
+    public function relationsOf(string $infoId, bool $includeTrashed = false): array
     {
         $rows = $this->db->select(
             'SELECT rel.*,
@@ -74,7 +77,7 @@ final class RelationService
                     other.id AS other_id, other.label AS other_label, other.dataset_code AS other_dataset, other.module_id AS other_module, other.local_key AS other_key
              FROM relations rel
              INNER JOIN info_registry other ON other.id = CASE WHEN rel.from_info = :i THEN rel.to_info ELSE rel.from_info END
-             WHERE rel.from_info = :i OR rel.to_info = :i
+             WHERE (rel.from_info = :i OR rel.to_info = :i)' . ($includeTrashed ? '' : ' AND other.trashed_at IS NULL') . '
              ORDER BY rel.type, other.label',
             ['i' => $infoId]
         );
@@ -87,6 +90,11 @@ final class RelationService
 
     public function countFor(string $infoId): int
     {
-        return $this->db->count('SELECT COUNT(*) FROM relations WHERE from_info = :i OR to_info = :i', ['i' => $infoId]);
+        return $this->db->count(
+            'SELECT COUNT(*) FROM relations rel
+             INNER JOIN info_registry other ON other.id = CASE WHEN rel.from_info = :i THEN rel.to_info ELSE rel.from_info END
+             WHERE (rel.from_info = :i OR rel.to_info = :i) AND other.trashed_at IS NULL',
+            ['i' => $infoId]
+        );
     }
 }

@@ -8,7 +8,7 @@
  * @var array{q: string, asset: int, year: int, page: int, per_page: int} $query
  * @var list<array<string, mixed>> $assets
  * @var list<int> $years
- * @var array<int, array{info_id: ?string, files: list<array<string, mixed>>}> $documents pièces jointes par intervention
+ * @var array<int, array{info_id: ?string, files: list<array<string, mixed>>, tags: list<string>}> $documents pièces jointes et tags par intervention
  * @var bool $attachmentsModule
  * @var array<string, bool> $rights
  * @var bool $canExport
@@ -95,7 +95,8 @@ $dash = '<span class="text-muted">—</span>';
                             <strong><?= $e($log['title']) ?></strong>
                             <?php if ($log['job_id'] !== null && $log['job_deleted_at'] === null): ?><a class="text-small text-muted" href="#" data-route="job/<?= (int) $log['job_id'] ?>" title="Tâche : <?= $e($log['job_title'] ?? '') ?>"><?= $module->icon('clock', 'icon--sm') ?></a><?php endif; ?>
                             <?php if ($log['notes'] !== null && $log['notes'] !== ''): ?><div class="text-small text-muted maintenance__excerpt"><?= $e(\Atelier\Support\Str::truncate(\Atelier\View\BbCode::toText($log['notes']), 140)) ?></div><?php endif; ?>
-                            <?php $docs = $documents[$log['id']] ?? ['info_id' => null, 'files' => []]; $docCount = count($docs['files']); ?>
+                            <?php $docs = $documents[$log['id']] ?? ['info_id' => null, 'files' => [], 'tags' => []]; $docCount = count($docs['files']); ?>
+                            <?php if ($docs['tags'] !== []): ?><span class="chips maintenance__tags" title="Tags partagés"><?php foreach ($docs['tags'] as $tag): ?><span class="chip"><?= $e($tag) ?></span><?php endforeach; ?></span><?php endif; ?>
                             <?php if ($docCount > 0 || $rights['update']): ?>
                                 <details class="maintenance__docs">
                                     <summary class="text-small<?= $docCount > 0 ? '' : ' text-muted' ?>"><?= $module->icon('paperclip', 'icon--sm') ?> <?= $docCount > 0 ? $docCount . ' document' . ($docCount > 1 ? 's' : '') : 'Joindre un document' ?></summary>

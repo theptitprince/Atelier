@@ -1,7 +1,7 @@
 <?php
 /**
  * Liste des tags partagés : recherche, tri, nuage et tableau (bascule par onglets internes).
- * Variables : $tags (list décorée : usage_count, level, author), $q, $sort, $dir, $query (array),
+ * Variables : $tags (list décorée : live_count affiché, usage_count corbeille comprise, level, author), $q, $sort, $dir, $query (array),
  *             $total, $canManage, $module, $e, $datetime.
  */
 $sortQuery = array_diff_key($query, ['sort' => 1, 'dir' => 1]);
@@ -69,10 +69,10 @@ $currentSort = 'list?' . http_build_query($sortQuery + ['sort' => $sort, 'dir' =
                     <div class="card__body">
                         <div class="chips tag-cloud">
                             <?php foreach ($tags as $tag): ?>
-                                <a class="chip tag-cloud__item tag-cloud__item--<?= (int) $tag['level'] ?>" href="#" data-route="detail/<?= (int) $tag['id'] ?>" title="<?= $e($tag['usage_count']) ?> utilisation<?= (int) $tag['usage_count'] > 1 ? 's' : '' ?>">
+                                <a class="chip tag-cloud__item tag-cloud__item--<?= (int) $tag['level'] ?>" href="#" data-route="detail/<?= (int) $tag['id'] ?>" title="<?= $e($tag['live_count']) ?> utilisation<?= (int) $tag['live_count'] > 1 ? 's' : '' ?>">
                                     <svg class="icon icon--sm" aria-hidden="true"><use href="#i-tag"></use></svg>
                                     <span><?= $e($tag['name']) ?></span>
-                                    <span class="tag-cloud__count"><?= (int) $tag['usage_count'] ?></span>
+                                    <span class="tag-cloud__count"><?= (int) $tag['live_count'] ?></span>
                                 </a>
                             <?php endforeach; ?>
                         </div>
@@ -104,8 +104,10 @@ $currentSort = 'list?' . http_build_query($sortQuery + ['sort' => $sort, 'dir' =
                                 <td class="col-num">
                                     <?php if ((int) $tag['usage_count'] === 0): ?>
                                         <span class="badge badge--muted">inutilisé</span>
+                                    <?php elseif ((int) $tag['live_count'] === 0): ?>
+                                        <span class="badge badge--muted" title="Porté uniquement par des éléments en corbeille">en corbeille</span>
                                     <?php else: ?>
-                                        <?= (int) $tag['usage_count'] ?>
+                                        <?= (int) $tag['live_count'] ?>
                                     <?php endif; ?>
                                 </td>
                                 <td class="tags__col-date text-nowrap"><?= $e($datetime($tag['created_at'] ?? null)) ?></td>

@@ -24,7 +24,7 @@ final class Console
         'check' => ['check', 'Vérifie PHP, les extensions et les répertoires'],
         'db:migrate' => ['migrate', 'Applique les migrations du noyau et des modules, synchronise les manifestes'],
         'db:reset' => ['reset', 'Supprime la base SQLite puis la recrée avec les données de démonstration (--force requis)'],
-        'db:seed' => ['seed', 'Ajoute les données de démonstration (comptes, groupes, ACL, exemples)'],
+        'db:seed' => ['seed', 'Crée le compte administrateur unique, les groupes, les règles de départ et les exemples des modules'],
         'admin:create' => ['adminCreate', 'Crée un compte administrateur : admin:create <identifiant> [--password=...]'],
         'admin:recover' => ['adminRecover', 'Rétablit temporairement l’accès du compte administrateur initial (confirmation requise)'],
         'user:password' => ['userPassword', 'Réinitialise le mot de passe d’un utilisateur : user:password <identifiant>'],

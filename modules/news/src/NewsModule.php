@@ -470,7 +470,12 @@ final class NewsModule extends AbstractModule implements TrashProviderInterface
     public function archiveDelete(Request $request, array $params): ActionResult
     {
         $item = $this->requireArchived($this->requireId($request));
-        $this->repository()->softDeleteItem((int) $item['id'], $this->ctx->userId());
+        $this->ctx->db->transaction(function () use ($item): void {
+            $this->repository()->softDeleteItem((int) $item['id'], $this->ctx->userId());
+            // Non-régression : sans ce signalement, le fait archivé restait listé sous ses tags et dans
+            // les éléments liés des autres modules, avec un lien menant à une erreur 404.
+            $this->ctx->shared->registry->trash(NewsService::DATASET, (string) $item['id']);
+        });
         $this->log('news.archive_delete', 'success', 'news_item:' . $item['id'], 'Fait archivé placé dans la corbeille : ' . $item['title']);
         return ActionResult::ok(['id' => (int) $item['id']], '« ' . mb_substr((string) $item['title'], 0, 80, 'UTF-8') . ' » placé dans la corbeille.')->navigate('archives');
     }
@@ -581,7 +586,14 @@ final class NewsModule extends AbstractModule implements TrashProviderInterface
     public function feedDelete(Request $request, array $params): ActionResult
     {
         $feed = $this->requireFeed($this->requireId($request));
-        $this->repository()->softDeleteFeed((int) $feed['id'], $this->ctx->userId());
+        $this->ctx->db->transaction(function () use ($feed): void {
+            $this->repository()->softDeleteFeed((int) $feed['id'], $this->ctx->userId());
+            // Le flux lui-même n'est pas inscrit au registre aujourd'hui (signalement sans effet), mais
+            // le jeu news.feed est déclaré : toute inscription future sera ainsi masquée. Pas de cascade :
+            // les faits archivés du flux restent consultables, et ses entrées non archivées ne sont
+            // jamais inscrites au registre (le désarchivage les en retire).
+            $this->ctx->shared->registry->trash(self::DATASET_FEED, (string) $feed['id']);
+        });
         $this->log('news.feed_delete', 'success', 'news_feed:' . $feed['id'], 'Flux placé dans la corbeille : ' . $feed['title'], ['url' => $feed['url']]);
         return ActionResult::ok(null, 'Flux « ' . $feed['title'] . ' » placé dans la corbeille ; ses faits archivés restent consultables.')->refresh();
     }
@@ -704,11 +716,15 @@ final class NewsModule extends AbstractModule implements TrashProviderInterface
         if ($row === null) {
             throw new NotFoundException('Cet élément n’est pas dans la corbeille des actualités.');
         }
-        if ($kind === 'feed') {
-            $this->repository()->restoreFeed($localId);
-        } else {
-            $this->repository()->restoreItem($localId);
-        }
+        $this->ctx->db->transaction(function () use ($kind, $localId): void {
+            if ($kind === 'feed') {
+                $this->repository()->restoreFeed($localId);
+            } else {
+                $this->repository()->restoreItem($localId);
+            }
+            // L'élément réapparaît sous ses tags et dans les éléments liés, relations conservées.
+            $this->ctx->shared->registry->restore(self::TRASH_KINDS[$kind], (string) $localId);
+        });
         $this->log('news.restore', 'success', 'news_' . ($kind === 'feed' ? 'feed' : 'item') . ':' . $localId, 'Restauré depuis la corbeille : ' . $row['trash_label']);
     }
 

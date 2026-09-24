@@ -1,7 +1,7 @@
 {
   "id": "geo",
   "name": "Coordonnées GPS",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Référentiel de points GPS réutilisable par les autres modules comme clé de rattachement des informations",
   "author": "Atelier",
   "icon": "map-pin",

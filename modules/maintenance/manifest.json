@@ -1,7 +1,7 @@
 {
   "id": "maintenance",
   "name": "Entretien",
-  "version": "1.2.2",
+  "version": "1.3.0",
   "description": "GMAO domestique : équipements (voiture, chaudière…), tâches d’entretien planifiées, pannes, rappels anticipés, fiches d’intervention, historique avec documents joints et corbeille",
   "author": "Atelier",
   "icon": "tool",
@@ -58,6 +58,7 @@
     },
     {
       "code": "maintenance.job",
+      "openRoute": "job/{key}",
       "name": "Tâches d’entretien",
       "description": "Entretiens planifiés (périodicité par jours ou compteur, rappel anticipé) et pannes à corriger, avec fiche d’intervention (descriptif, pièces, contacts, outillage)",
       "visibility": "shared",
@@ -83,6 +84,7 @@
     },
     {
       "code": "maintenance.log",
+      "openRoute": "log/{key}/edit",
       "name": "Interventions",
       "description": "Historique des interventions réalisées (date, compteur, coût, intervenant, factures jointes)",
       "visibility": "shared",

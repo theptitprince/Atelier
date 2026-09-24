@@ -47,7 +47,8 @@ final class ExplorerQueries
             return ['rows' => [], 'total' => 0];
         }
         [$in, $params] = $this->inList('c', $codes);
-        $where = ['r.dataset_code IN (' . $in . ')'];
+        // Les informations en corbeille dans leur module ne sont plus présentées comme vivantes.
+        $where = ['r.dataset_code IN (' . $in . ')', 'r.trashed_at IS NULL'];
         if ($term !== '') {
             $where[] = $this->db->lower("COALESCE(r.label, '')") . ' LIKE :term';
             $params['term'] = '%' . mb_strtolower($term, 'UTF-8') . '%';
@@ -89,7 +90,7 @@ final class ExplorerQueries
             return [];
         }
         [$in, $params] = $this->inList('c', $codes);
-        $rows = $this->db->select("SELECT dataset_code, COUNT(*) AS n FROM info_registry WHERE dataset_code IN ($in) GROUP BY dataset_code", $params);
+        $rows = $this->db->select("SELECT dataset_code, COUNT(*) AS n FROM info_registry WHERE dataset_code IN ($in) AND trashed_at IS NULL GROUP BY dataset_code", $params);
         $result = [];
         foreach ($rows as $row) {
             $result[(string) $row['dataset_code']] = (int) $row['n'];
@@ -146,7 +147,7 @@ final class ExplorerQueries
         [$inFrom, $params] = $this->inList('f', $codes);
         [$inTo, $paramsTo] = $this->inList('t', $codes);
         $params += $paramsTo;
-        $where = ["f.dataset_code IN ($inFrom)", "t.dataset_code IN ($inTo)"];
+        $where = ["f.dataset_code IN ($inFrom)", "t.dataset_code IN ($inTo)", 'f.trashed_at IS NULL', 't.trashed_at IS NULL'];
         if ($type !== null && $type !== '') {
             $where[] = 'rel.type = :type';
             $params['type'] = $type;
@@ -185,7 +186,7 @@ final class ExplorerQueries
         $rows = $this->db->select(
             "SELECT rel.type, COUNT(*) AS n FROM relations rel
              INNER JOIN info_registry f ON f.id = rel.from_info INNER JOIN info_registry t ON t.id = rel.to_info
-             WHERE f.dataset_code IN ($inFrom) AND t.dataset_code IN ($inTo) GROUP BY rel.type ORDER BY rel.type",
+             WHERE f.dataset_code IN ($inFrom) AND t.dataset_code IN ($inTo) AND f.trashed_at IS NULL AND t.trashed_at IS NULL GROUP BY rel.type ORDER BY rel.type",
             $params
         );
         $result = [];
@@ -209,7 +210,7 @@ final class ExplorerQueries
             return ['rows' => [], 'total' => 0, 'size' => 0];
         }
         [$in, $params] = $this->inList('c', $codes);
-        $where = ['a.deleted_at IS NULL', "r.dataset_code IN ($in)"];
+        $where = ['a.deleted_at IS NULL', "r.dataset_code IN ($in)", 'r.trashed_at IS NULL'];
         if ($dataset !== null && $dataset !== '') {
             $where[] = 'r.dataset_code = :dataset';
             $params['dataset'] = $dataset;
@@ -234,7 +235,7 @@ final class ExplorerQueries
     /** Sous-requêtes de comptage des relations et des pièces jointes d'une ligne r. */
     private function countColumns(): string
     {
-        return '(SELECT COUNT(*) FROM relations rel WHERE rel.from_info = r.id OR rel.to_info = r.id) AS relation_count, '
+        return '(SELECT COUNT(*) FROM relations rel INNER JOIN info_registry o ON o.id = CASE WHEN rel.from_info = r.id THEN rel.to_info ELSE rel.from_info END WHERE (rel.from_info = r.id OR rel.to_info = r.id) AND o.trashed_at IS NULL) AS relation_count, '
             . '(SELECT COUNT(*) FROM attachments a WHERE a.info_id = r.id AND a.deleted_at IS NULL) AS attachment_count';
     }
 

@@ -17,7 +17,7 @@ final class RecurringRepository
     public const TABLE = 'budget_recurring';
     public const UNITS = ['day' => 'jour(s)', 'week' => 'semaine(s)', 'month' => 'mois', 'year' => 'an(s)'];
 
-    private const COLUMNS = 'r.id, r.account_id, r.category_id, r.label, r.payee, r.amount, r.interval_unit, r.interval_count, r.next_at, r.ends_at, r.active, r.notes, r.created_by, r.created_at, r.updated_at, r.deleted_at, r.deleted_by, a.name AS account_name, a.archived AS account_archived, c.name AS category_name, p.name AS category_parent_name';
+    private const COLUMNS = 'r.id, r.account_id, r.category_id, r.label, r.payee, r.amount, r.interval_unit, r.interval_count, r.next_at, r.ends_at, r.active, r.notes, r.created_by, r.created_at, r.updated_at, r.deleted_at, r.deleted_by, a.name AS account_name, a.archived AS account_archived, a.deleted_at AS account_deleted_at, c.name AS category_name, p.name AS category_parent_name';
     private const FROM = ' FROM budget_recurring r INNER JOIN budget_account a ON a.id = r.account_id LEFT JOIN budget_category c ON c.id = r.category_id LEFT JOIN budget_category p ON p.id = c.parent_id';
     private const ALIVE = 'r.deleted_at IS NULL AND a.deleted_at IS NULL';
 
@@ -98,6 +98,18 @@ final class RecurringRepository
     public function purge(int $id): bool
     {
         return $this->db->delete(self::TABLE, 'id = :id AND deleted_at IS NOT NULL', ['id' => $id]) > 0;
+    }
+
+    /** @return list<int> identifiants de toutes les récurrences d'un compte, corbeille comprise */
+    public function idsForAccount(int $accountId): array
+    {
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE account_id = :a', ['a' => $accountId]));
+    }
+
+    /** @return list<int> récurrences d'un compte qui ne sont pas en corbeille pour leur propre compte (restauration du compte) */
+    public function liveIdsForAccount(int $accountId): array
+    {
+        return array_map(static fn (array $r): int => (int) $r['id'], $this->db->select('SELECT id FROM ' . self::TABLE . ' WHERE account_id = :a AND deleted_at IS NULL', ['a' => $accountId]));
     }
 
     /** Suppression physique des récurrences d'un compte (purge du compte). */
