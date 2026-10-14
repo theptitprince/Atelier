@@ -10,7 +10,7 @@
 ![JavaScript](https://img.shields.io/badge/JavaScript-vanilla-F7DF1E?logo=javascript&logoColor=black)
 ![Apache](https://img.shields.io/badge/Apache-2.4-D22128?logo=apache&logoColor=white)
 ![Platform](https://img.shields.io/badge/platform-web-0078D6)
-![License](https://img.shields.io/badge/license-GPL--3.0--only-blue)
+![License](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)
 
 </div>
 
@@ -359,8 +359,8 @@ root certificate. Place the Mozilla `cacert.pem` bundle (<https://curl.se/docs/c
 
 ## 9. License
 
-Atelier is **free software**, distributed under the **GNU General Public License, version 3**
-(GPL-3.0-only).
+Atelier is **free software**, distributed under the **GNU General Public License, version 3 or later**
+(GPL-3.0-or-later).
 
 Copyright © 2026 ETDEL.
 
@@ -382,4 +382,4 @@ The full text of the license is in the repository's `LICENSE` file and at
 
 ---
 
-*Atelier — ETDEL 2026 — GPL-3.0-only*
+*Atelier — ETDEL 2026 — GPL-3.0-or-later*
