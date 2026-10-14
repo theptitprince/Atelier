@@ -44,5 +44,5 @@
 
 ## Jeux de tests
 
-- Automatisés : `php tests/run.php` — 74 tests, 236 assertions (noyau).
+- Automatisés : suite de tests du noyau — 74 tests, 236 assertions à la version 0.2.0 ; les noms de tests cités dans le tableau ci-dessus en relèvent. Cette suite n’est pas fournie dans la distribution publiée.
 - Manuels : parcours navigateur décrits ci-dessus ; les modules `demo` et `users` servent de scénarios de référence.

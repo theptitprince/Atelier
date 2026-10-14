@@ -72,7 +72,6 @@ Chaque méthode vérifie `catalog->canAccess($viewerId, 'project.project', 'read
 ## Vérification rapide
 
 ```bash
-php tests/run.php Project
 curl -s -b cj.txt -H "X-Atelier-Request: json" http://127.0.0.1:8000/m/project/list
 curl -s -b cj.txt -H "X-Atelier-Request: json" "http://127.0.0.1:8000/m/project/lookup?q=Accueil"
 ```

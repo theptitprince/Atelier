@@ -187,7 +187,7 @@ modules/demo/
   sélection), export CSV (`text/csv`, `Content-Disposition`), directives `refresh`/`navigate`/`close`/`status`/`banner`,
   action réservée `secret`, registre, tag attaché/détaché, relation créée/supprimée (auto-relation refusée par le noyau),
   téléversement d'un fichier texte puis téléchargement `/files/{id}` et `?inline=1`, refus d'un `.exe`, suppression logique.
-- Depuis la 1.1.0, `tests/Modules/DemoTrashTest.php` couvre la corbeille : suppression unitaire et groupée,
+- Depuis la 1.1.0, des tests automatisés couvrent la corbeille : suppression unitaire et groupée,
   disparition des listes, compteurs, recherche, export, service intermodule et de `tags->infosWithTag()`,
   restauration et purge depuis le module et depuis la corbeille globale, droits côté serveur (routes et appel direct
   du fournisseur), `openRoute`, réinitialisation et rétention.

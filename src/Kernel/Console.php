@@ -40,7 +40,7 @@ final class Console
         'attachments:verify' => ['attachmentsVerify', 'Vérifie l’intégrité de toutes les pièces jointes (authentification du chiffré, empreinte SHA-256)'],
         'attachments:encrypt' => ['attachmentsEncrypt', 'Chiffre les pièces jointes encore stockées en clair'],
         'mariadb:export' => ['mariadbExport', 'Exporte les données SQLite vers une base MariaDB configurée : mariadb:export --to=config/env.mariadb.php'],
-        'test' => ['test', 'Exécute la suite de tests'],
+        'test' => ['test', 'Exécute la suite de tests lorsqu’elle est présente (non fournie dans cette distribution)'],
     ];
 
     /** @var array<string, string|bool> */
@@ -476,8 +476,9 @@ final class Console
     {
         $runner = $this->rootPath . '/tests/run.php';
         if (!is_file($runner)) {
-            $this->error('Suite de tests introuvable.');
-            return 1;
+            // La suite de tests n'est pas publiée avec l'application : son absence n'est pas une erreur.
+            $this->line('Suite de tests non fournie dans cette distribution.');
+            return 0;
         }
         passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($runner), $code);
         return $code;
