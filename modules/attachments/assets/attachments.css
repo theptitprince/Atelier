@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* Styles propres au module Fichiers joints, limités à sa racine. */
 .module-attachments .attachments__layout { display: grid; grid-template-columns: minmax(220px, 260px) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
 .module-attachments .attachments__folders .card { margin-bottom: 0; position: sticky; top: var(--sp-3); }

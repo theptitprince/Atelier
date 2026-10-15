@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Sprite d'icônes SVG communes (traits 2px, boîte 24x24). Usage :
  *   <svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg>

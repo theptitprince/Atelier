@@ -1,5 +1,11 @@
 <?php
 
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+
 declare(strict_types=1);
 
 namespace Atelier\Kernel;
@@ -17,8 +23,9 @@ use Atelier\Support\Str;
 use Throwable;
 
 /**
- * Points d'entrée du noyau : interface générale, connexion, déconnexion, services /core/*,
- * ressources statiques des modules et téléchargement des pièces jointes.
+ * Points d'entrée du noyau : interface générale, connexion, déconnexion, services /core/*
+ * (dont le journal des versions et les mentions légales « À propos »), ressources statiques
+ * des modules et téléchargement des pièces jointes.
  */
 final class CoreController
 {
@@ -116,6 +123,8 @@ final class CoreController
             'expired' => $request->query('expired') === '1',
             'loggedOut' => $request->query('logout') === '1',
             'storageOk' => $this->app->db->isAvailable(),
+            // Mention légale écrite en dur, indépendante du nom affiché de l'application.
+            'legalHtml' => LegalNotice::lineHtml(),
         ]);
         return Response::html($html, $error !== null ? 422 : 200);
     }
@@ -233,6 +242,15 @@ final class CoreController
                 return Response::json([
                     'version' => $this->app->config->string('app.version'),
                     'html' => $this->changelogHtml(),
+                ]);
+
+            case 'about':
+                // Mentions légales écrites en dur (LegalNotice), jamais construites à partir du nom
+                // affiché de l'application, qui est configurable.
+                return Response::json([
+                    'version' => $this->app->config->string('app.version'),
+                    'mention' => LegalNotice::MENTION,
+                    'html' => LegalNotice::html($this->app->config->rootPath()),
                 ]);
 
             default:

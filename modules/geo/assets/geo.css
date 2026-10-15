@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* Styles propres au module Coordonnées GPS, limités à sa racine. */
 .module-geo .geo__filters { margin-bottom: var(--sp-3); }
 .module-geo .geo__per-page { width: auto; min-width: 5rem; }

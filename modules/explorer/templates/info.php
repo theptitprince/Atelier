@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Détail d'une information du registre : identité, tags, relations, pièces jointes, historique.
  * Variables : $info (array décoré), $creator (array|null), $canUpdate (bool), $tags (list), $relations (list),

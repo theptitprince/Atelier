@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Formulaires : formulaire complet validé côté serveur, filtre instantané (data-auto-submit),
  * formulaire avec confirmation (data-confirm), bouton avec saisie préalable (data-prompt).

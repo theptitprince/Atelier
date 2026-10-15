@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Création / édition d'un groupe, membres, règles ACL du groupe et duplication.
  * @var array $group @var bool $isNew @var list<array> $members @var list<array> $candidates @var list<array> $rules

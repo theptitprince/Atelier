@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Module Fichiers joints : compléments côté client, sans logique métier.
  *  - zone de dépôt (glisser-déposer) et file d'attente des fichiers choisis ;

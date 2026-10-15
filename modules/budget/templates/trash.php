@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Corbeille du budget : opérations, comptes, récurrences, objectifs et économies supprimés depuis moins de N jours.
  * @var list<array<string, mixed>> $rows lignes décorées (trash_kind, trash_id, trash_label, trash_type, deleted_at, expires_in_days)

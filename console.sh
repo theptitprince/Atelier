@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Atelier, par ETDEL -- https://github.com/theptitprince/Atelier
+# Copyright (C) 2026 ETDEL -- licence GPL-3.0-or-later
+# Conditions additionnelles (article 7) : voir le fichier NOTICE.
 # Console d'administration Atelier (Linux/macOS) : ./console.sh help
 cd "$(dirname "$0")"
 PHP="php"

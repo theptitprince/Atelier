@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* Styles propres au module Mon profil, limités à sa racine. */
 .module-profile .profile__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--sp-4); align-items: start; }
 .module-profile .profile__grid .card { margin-bottom: 0; }

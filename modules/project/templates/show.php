@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Fiche d'un projet : en-tête (statut, dates, priorité, budget), description, tâches, journal de bord,
  * documents, éléments liés (groupés par module), lieux GPS, budget, tags.

@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Tableau paginé des pièces jointes rattachées à des informations visibles.
  * Variables : $rows (list), $total, $size (octets), $dataset, $datasets (array code => meta), $page, $perPage,

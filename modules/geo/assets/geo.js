@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Module Coordonnées GPS : compléments côté client, sans logique métier.
  *  - aperçu de l'interprétation des coordonnées saisies (action « parse ») ;

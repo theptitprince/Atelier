@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Téléversement de fichiers (un ou plusieurs) : nom d'affichage, tags, dossier, description et rattachement facultatifs.
  * @var array{id: string, label: string, dataset: string, module: string}|null $target

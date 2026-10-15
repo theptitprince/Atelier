@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Historique des versions d'une page.
  * @var array<string, mixed> $page @var list<array<string, mixed>> $revisions @var bool $canUpdate @var int $kept

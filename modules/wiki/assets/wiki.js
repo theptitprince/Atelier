@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Module Pages : compléments d'édition côté client, sans logique métier.
  *  - insertion de [[Titre]], [file=…] et [point=…] à la position du curseur de l'éditeur ;

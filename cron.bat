@@ -1,4 +1,7 @@
 @echo off
+REM Atelier, par ETDEL -- https://github.com/theptitprince/Atelier
+REM Copyright (C) 2026 ETDEL -- licence GPL-3.0-or-later
+REM Conditions additionnelles (article 7) : voir le fichier NOTICE.
 setlocal
 REM Taches de fond Atelier (Windows) : a planifier toutes les 5 a 15 minutes avec le Planificateur de taches, par exemple :
 REM   schtasks /Create /SC MINUTE /MO 10 /TN "Atelier cron" /TR "\"%~dp0cron.bat\"" /F

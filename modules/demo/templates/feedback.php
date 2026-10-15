@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Notifications et états : toasts (client et serveur), barre d'état, progression, indicateur
  * d'occupation, dialogues, blocs d'état, annonce aux lecteurs d'écran.

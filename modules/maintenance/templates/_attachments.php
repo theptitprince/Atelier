@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Partiel : pièces jointes d'un équipement, d'une tâche ou d'une intervention, avec téléversement direct
  * et lien vers le module Fichiers joints (rattachement par identifiant de registre).

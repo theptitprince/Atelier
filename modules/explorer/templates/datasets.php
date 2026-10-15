@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Cartes des jeux de données partagés lisibles par l'utilisateur.
  * Variables : $datasets (list : code, name, description, module_id, module_name, fields, operations, structure_version,

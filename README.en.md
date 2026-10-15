@@ -4,7 +4,7 @@
 
 **A common, secure foundation on which independent feature modules are added without touching the core.**
 
-![Version](https://img.shields.io/badge/version-0.9.0-2ea44f)
+![Version](https://img.shields.io/badge/version-0.9.1-2ea44f)
 ![PHP](https://img.shields.io/badge/PHP-8.4%2B-777BB4?logo=php&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-vanilla-F7DF1E?logo=javascript&logoColor=black)
@@ -41,8 +41,10 @@ dropping its directory into `modules/`.
 - **Target**: desktop computers (width ≥ 1280 px), recent browsers (Firefox, Chrome, Edge).
 - **Specification**: [docs/cahier-des-charges.md](docs/cahier-des-charges.md) (v0.8, in French).
 
-Current version: 0.9.0 — the release history is in [docs/CHANGELOG.md](docs/CHANGELOG.md) (in French). In
-the application, this changelog is displayed by clicking the version number in the status bar.
+Current version: 0.9.1 — the release history is in [docs/CHANGELOG.md](docs/CHANGELOG.md) (in French). In
+the application, this changelog is displayed by clicking the version number in the status bar; the *À propos*
+button (the "i" icon at the bottom of the left-hand column) displays the legal notices: license, additional
+terms and third-party libraries.
 
 ## Contents
 
@@ -120,6 +122,7 @@ chmod +x start.sh console.sh cron.sh
 | `docs/` | documentation: specification, installation, operations, developer's guide, module contract, manifest, shared data, acceptance testing, CHANGELOG |
 | `_tools/` | optional, not versioned: portable PHP on Windows (`_tools/php84/php.exe`) |
 | `LICENSE` | full text of the GNU GPL version 3 |
+| `NOTICE` | the additional license terms (section 7): the notice to keep |
 
 ---
 
@@ -265,7 +268,7 @@ Most modules describe how they work in their own `README.md` (in French).
 
 | Command | Purpose |
 |---|---|
-| `help` | displays the help |
+| `help` | displays the help, preceded by the license notice |
 | `check` | checks PHP, the extensions and the directories |
 | `db:migrate` | applies the core and module migrations, synchronizes the manifests |
 | `db:seed` | creates the single administrator account, the groups, the initial rules and the modules' sample data |
@@ -368,10 +371,31 @@ In practical terms, you may use the program freely, study it, modify it and redi
 that any redistributed version, modified or not, remains under the same license, with its source code and the
 copyright notice. The program is provided **without any warranty**.
 
+### Additional terms (section 7)
+
+The GPL v3 lets the author add a few terms (section 7). Atelier's are in the
+[`NOTICE`](NOTICE) file, in French and in English:
+
+- **Attribution**: every copy or modified version must keep, visible to the user (an "About"
+  window or equivalent) and in its documentation, the notice:
+
+  > Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+
+  A modified version may prefix it with "D'après" (or "Based on") and add its own credits,
+  but may neither remove nor hide it.
+- **Origin**: a modified version must state clearly that it has been modified, and must not
+  present itself as the original or as endorsed by ETDEL.
+
+In Atelier, this notice is shown on the login page and in the *À propos* window (sidebar).
+
 The full text of the license is in the repository's `LICENSE` file and at
-<https://www.gnu.org/licenses/gpl-3.0.html>.
+<https://www.gnu.org/licenses/gpl-3.0.html>. Each Atelier source file (PHP, JavaScript, CSS, launchers and
+`.htaccess`) carries a header that restates the notice and the license, and points to `NOTICE`.
 
 ### Third-party libraries
+
+This third-party material keeps its own license: Atelier's additional terms do not apply to it, and its
+files do not carry Atelier's header.
 
 - **Leaflet 1.9.4** (Carte module), © 2010-2023 Volodymyr Agafonkin, © 2010-2011 CloudMade, under the
   BSD-2-Clause license: text in `modules/map/assets/vendor/leaflet/LICENSE`.

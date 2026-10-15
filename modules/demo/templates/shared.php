@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Données partagées : registre commun, tags, relations typées, pièces jointes, catalogue.
  * Variables : $items (list), $item (array|null), $info (array|null), $tags (list), $relations (list),

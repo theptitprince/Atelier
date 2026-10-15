@@ -1,4 +1,9 @@
 /*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+/*
  * Corbeille — comportements complémentaires (JavaScript natif).
  *
  * Le noyau prend en charge les actions unitaires (data-action, data-confirm, data-prompt),

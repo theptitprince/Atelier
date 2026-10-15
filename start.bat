@@ -1,4 +1,7 @@
 @echo off
+REM Atelier, par ETDEL -- https://github.com/theptitprince/Atelier
+REM Copyright (C) 2026 ETDEL -- licence GPL-3.0-or-later
+REM Conditions additionnelles (article 7) : voir le fichier NOTICE.
 setlocal
 REM Lanceur Windows d'Atelier : verifie PHP, initialise la base si besoin, demarre le serveur integre.
 cd /d "%~dp0"

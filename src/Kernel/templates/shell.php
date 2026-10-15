@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Interface générale d'Atelier (chargée une seule fois par session de navigation).
  * Variables : $appName, $version, $baseUrl, $user, $tree, $clientConfig (JSON), $csrfToken, $minWidth, $e.
@@ -43,6 +48,9 @@
                 </button>
                 <button type="button" class="btn btn--icon btn--ghost" data-core-action="password" title="Changer le mot de passe" aria-label="Changer le mot de passe">
                     <svg class="icon" aria-hidden="true"><use href="#i-key"></use></svg>
+                </button>
+                <button type="button" class="btn btn--icon btn--ghost" data-core-action="about" title="À propos : licence et mentions légales" aria-label="À propos" aria-haspopup="dialog">
+                    <svg class="icon" aria-hidden="true"><use href="#i-info"></use></svg>
                 </button>
                 <form method="post" action="<?= $e($baseUrl) ?>/logout" class="inline" id="logout-form">
                     <input type="hidden" name="_token" value="<?= $e($csrfToken) ?>">

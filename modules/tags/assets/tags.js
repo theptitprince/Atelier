@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Module « Tags partagés » : comportements de la vue Gestion.
  *  - case « tout sélectionner » (data-select-all) qui coche/décoche les lignes (data-select-item) ;

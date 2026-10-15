@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Paramètres du module Pages : page d'arrivée (liste ou page d'accueil) et choix de la page d'accueil.
  * @var string $landing @var string $homeSlug @var bool $homeMissing @var list<array<string, mixed>> $pages

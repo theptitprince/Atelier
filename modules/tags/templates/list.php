@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Liste des tags partagés : recherche, tri, nuage et tableau (bascule par onglets internes).
  * Variables : $tags (list décorée : live_count affiché, usage_count corbeille comprise, level, author), $q, $sort, $dir, $query (array),

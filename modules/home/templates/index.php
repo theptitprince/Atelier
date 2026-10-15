@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /** @var array $user @var list<\Atelier\Modules\ModuleDescriptor> $modules @var list<array> $recent @var array|null $stats @var string $lastLogin */
 ?>
 <div class="module module-home">

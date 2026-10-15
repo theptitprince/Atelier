@@ -1,7 +1,12 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Page de connexion (seule page publique).
- * Variables : $appName, $version, $baseUrl, $csrfField, $error, $username, $next, $expired, $loggedOut, $storageOk, $e.
+ * Variables : $appName, $version, $baseUrl, $csrfField, $error, $username, $next, $expired, $loggedOut, $storageOk, $legalHtml, $e.
  */
 ?>
 <!DOCTYPE html>
@@ -74,6 +79,7 @@
         <p class="login__help">Mot de passe oublié ? Adressez-vous à un administrateur.</p>
     </form>
     <p class="login__version">Atelier v<?= $e($version) ?></p>
+    <p class="login__legal"><?= $legalHtml ?></p>
 </main>
 </body>
 </html>

@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Composants du CSS commun : typographie, boutons, badges, alertes, cartes, listes, onglets internes,
  * menus, arbre, indicateurs. Une seule règle propre au module (.demo-gauge) pour illustrer la frontière.

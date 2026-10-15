@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+# Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+# Conditions additionnelles (article 7) : voir le fichier NOTICE.
 # Lanceur Linux/macOS d'Atelier : vérifie PHP, initialise la base si besoin, démarre le serveur intégré.
 set -euo pipefail
 cd "$(dirname "$0")"

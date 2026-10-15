@@ -1,5 +1,11 @@
 <?php
 
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+
 declare(strict_types=1);
 
 namespace Atelier\Kernel;
@@ -91,6 +97,7 @@ final class Console
     private function help(): int
     {
         $this->line('Atelier — console d’administration');
+        $this->line(LegalNotice::line());
         $this->line('Usage : php tools/console.php <commande> [arguments] [--option=valeur]');
         $this->line('');
         foreach (self::COMMANDS as $name => [, $description]) {

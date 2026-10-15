@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Corbeille du module : équipements, tâches et interventions supprimés logiquement,
  * restauration ou suppression définitive. Les identifiants d'action sont préfixés (asset:12, job:5, log:9),

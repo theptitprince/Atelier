@@ -1,5 +1,11 @@
 <?php
 
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+
 declare(strict_types=1);
 
 /**
@@ -14,7 +20,7 @@ return [
     'app' => [
         'name' => 'Atelier',
         'id' => 'atelier',
-        'version' => '0.9.0',
+        'version' => '0.9.1',
         // Ce fichier étant versionné, il est réglé pour la production : un dépôt déployé tel quel
         // ne divulgue ni trace d'appel, ni chemin de fichier, ni requête SQL au client.
         // Le serveur de développement (start.bat, tools/dev-router.php) rebascule en dev + debug.

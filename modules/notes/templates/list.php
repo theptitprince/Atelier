@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Liste des notes de l'utilisateur : recherche, tri, pagination.
  * Variables : $notes (list), $total, $search, $sort, $direction, $page, $perPage, $query (array), $rights (array), $module, $e, $datetime.

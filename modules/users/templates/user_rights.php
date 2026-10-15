@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Onglet « Droits » d'un utilisateur : règles directes et droits effectifs expliqués.
  * @var array $user @var list<array> $directRules @var list<array> $resources @var array|null $selected

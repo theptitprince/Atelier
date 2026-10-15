@@ -4,7 +4,7 @@
 
 **Un socle commun et sécurisé, sur lequel des modules métier indépendants s’ajoutent sans toucher au noyau.**
 
-![Version](https://img.shields.io/badge/version-0.9.0-2ea44f)
+![Version](https://img.shields.io/badge/version-0.9.1-2ea44f)
 ![PHP](https://img.shields.io/badge/PHP-8.4%2B-777BB4?logo=php&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![JavaScript](https://img.shields.io/badge/JavaScript-natif-F7DF1E?logo=javascript&logoColor=black)
@@ -39,8 +39,10 @@ s’ajoute en déposant son répertoire dans `modules/`.
 - **Cible** : ordinateurs de bureau (largeur ≥ 1280 px), navigateurs récents (Firefox, Chrome, Edge).
 - **Cahier des charges** : [docs/cahier-des-charges.md](docs/cahier-des-charges.md) (v0.8).
 
-Version actuelle : 0.9.0 — l’historique des livraisons est dans [docs/CHANGELOG.md](docs/CHANGELOG.md). Dans
-l’application, ce journal s’affiche en cliquant sur le numéro de version de la barre d’état.
+Version actuelle : 0.9.1 — l’historique des livraisons est dans [docs/CHANGELOG.md](docs/CHANGELOG.md). Dans
+l’application, ce journal s’affiche en cliquant sur le numéro de version de la barre d’état ; le bouton
+*À propos* (icône « i » au pied de la colonne de gauche) affiche les mentions légales : licence, conditions
+additionnelles et bibliothèques tierces.
 
 ## Sommaire
 
@@ -118,6 +120,7 @@ chmod +x start.sh console.sh cron.sh
 | `docs/` | documentation : cahier des charges, installation, exploitation, guide du développeur, contrat de module, manifeste, données partagées, recette, CHANGELOG |
 | `_tools/` | facultatif, non versionné : PHP portable sous Windows (`_tools/php84/php.exe`) |
 | `LICENSE` | texte intégral de la GNU GPL version 3 |
+| `NOTICE` | les conditions additionnelles de la licence (article 7) : la mention à conserver |
 
 ---
 
@@ -263,7 +266,7 @@ La plupart des modules décrivent leur fonctionnement dans leur propre `README.m
 
 | Commande | Rôle |
 |---|---|
-| `help` | affiche l’aide |
+| `help` | affiche l’aide, précédée de la mention de licence |
 | `check` | vérifie PHP, les extensions et les répertoires |
 | `db:migrate` | applique les migrations du noyau et des modules, synchronise les manifestes |
 | `db:seed` | crée le compte administrateur unique, les groupes, les règles de départ et les exemples des modules |
@@ -363,10 +366,31 @@ Concrètement, vous pouvez utiliser le programme librement, l’étudier, le mod
 condition que toute version redistribuée, modifiée ou non, reste sous la même licence, avec son code source et la
 mention de copyright. Le programme est fourni **sans aucune garantie**.
 
+### Conditions additionnelles (article 7)
+
+La GPL v3 permet à l’auteur d’ajouter quelques conditions (article 7). Celles d’Atelier sont dans
+le fichier [`NOTICE`](NOTICE), en français et en anglais :
+
+- **Attribution** : toute copie ou version modifiée doit garder, visible pour l’utilisateur
+  (fenêtre « À propos » ou équivalent) et dans sa documentation, la mention :
+
+  > Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+
+  Une version modifiée peut la faire précéder de « D’après » et ajouter ses propres crédits,
+  sans la retirer ni la masquer.
+- **Origine** : une version modifiée doit dire clairement qu’elle est modifiée, et ne doit se
+  présenter ni comme l’original, ni comme approuvée par ETDEL.
+
+Dans Atelier, cette mention s’affiche sur la page de connexion et dans la fenêtre *À propos* (barre latérale).
+
 Le texte intégral de la licence est dans le fichier `LICENSE` du dépôt et sur
-<https://www.gnu.org/licenses/gpl-3.0.html>.
+<https://www.gnu.org/licenses/gpl-3.0.html>. Chaque fichier source d’Atelier (PHP, JavaScript, CSS, lanceurs et
+`.htaccess`) porte un en-tête qui rappelle la mention et la licence, et renvoie à `NOTICE`.
 
 ### Bibliothèques tierces
+
+Ces éléments tiers gardent leur propre licence : les conditions additionnelles d’Atelier ne s’appliquent pas
+à eux, et leurs fichiers ne portent pas l’en-tête d’Atelier.
 
 - **Leaflet 1.9.4** (module Carte), © 2010-2023 Volodymyr Agafonkin, © 2010-2011 CloudMade, sous licence
   BSD-2-Clause : texte dans `modules/map/assets/vendor/leaflet/LICENSE`.

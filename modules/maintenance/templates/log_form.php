@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Enregistrement / modification d'une intervention réalisée. À la création depuis une tâche, la tâche
  * est replanifiée (ou clôturée) et le compteur de l'équipement mis à jour. Les documents (facture, photos)

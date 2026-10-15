@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Écran ACL : arborescence des ressources protégées (gauche) et règles de la ressource sélectionnée (droite).
  * @var array|null $tree @var array|null $selected @var string $selectedPath @var list<string> $openPaths @var list<array> $rules

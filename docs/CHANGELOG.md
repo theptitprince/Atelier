@@ -2,6 +2,18 @@
 
 Ce fichier est affiché dans l’application en cliquant sur le numéro de version de la barre d’état. Format : une section par version, la plus récente en premier.
 
+## 0.9.1 — 15/10/2026
+
+Les conditions de la licence sont précisées et les mentions légales deviennent visibles dans l’application ; aucune fonction métier ne change.
+
+### Licence et mentions légales
+- **Fichier `NOTICE`** à la racine : les conditions additionnelles de la GPL v3 (article 7), en français et en anglais. Toute copie ou version modifiée doit garder, visible pour l’utilisateur et dans sa documentation, la mention « Atelier, par ETDEL — https://github.com/theptitprince/Atelier » (article 7 b) ; une version modifiée doit le dire et ne pas se présenter comme l’original, ni comme approuvée par ETDEL (article 7 c). Les éléments tiers (Leaflet, mini-sparkline, fonds de carte OpenStreetMap et OpenSeaMap) gardent leur propre licence.
+- **Fenêtre « À propos »**, ouverte par le nouveau bouton « i » du pied de la colonne de gauche : mention, copyright, licence GPL-3.0-or-later, absence de garantie, liens vers le texte de la licence et vers `NOTICE`, éléments tiers et texte complet de `NOTICE` (service `/core/about`). Ces textes sont écrits en dur : ils ne suivent pas le nom affiché de l’application, qui reste configurable.
+- **Page de connexion** : la mention s’affiche sous le numéro de version, avec la licence et l’absence de garantie, sans avoir à se connecter.
+- La mention figure aussi dans l’aide de la console (`help`). **Paramètres généraux 1.0.1** : une ligne « Licence » la reprend dans la liste en lecture seule des paramètres.
+- **En-tête de licence** en tête de chaque fichier source d’Atelier (PHP, JavaScript, CSS, lanceurs et `.htaccess`) : la mention, le copyright et le renvoi vers `NOTICE`. Les bibliothèques tierces ne sont pas modifiées, et les modules produits par `module:create` n’en reçoivent pas.
+- README français et anglais : la section Licence décrit les conditions additionnelles et l’endroit où la mention s’affiche.
+
 ## 0.9.0 — 24/09/2026
 
 Tags et corbeille deviennent réellement universels, et Atelier assume d’être une application à un seul utilisateur.

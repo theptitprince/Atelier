@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Tableau de bord : rappels (à faire / en retard, bientôt), pannes ouvertes, dernières interventions, indicateurs.
  * @var list<array<string, mixed>> $overdue tâches à faire ou en retard (avec state)

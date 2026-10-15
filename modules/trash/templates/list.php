@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Corbeille globale : filtres, tableau paginé des éléments supprimés, sélection multiple et actions groupées.
  * Variables : $items (list), $total, $countAll, $counts (par source), $warnings (list<string>), $modules (id => nom),

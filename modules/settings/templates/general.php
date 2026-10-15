@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /** @var array $definitions @var array $values @var list<string> $timezones @var list<int> $pageSizes @var array $readonly @var bool $canEdit */
 ?>
 <div class="module module-settings">

@@ -6,7 +6,7 @@ Administration des valeurs modifiables depuis l’application, des sauvegardes e
 
 | Route | Permission | Contenu |
 |---|---|---|
-| `general` | `open` (modification : `admin`) | Paramètres dynamiques stockés en base (table `settings`, portée `core`) : nom affiché, message d’accueil, fuseau d’affichage, rétentions, taille de page par défaut. Rappel en lecture seule de la configuration d’environnement. |
+| `general` | `open` (modification : `admin`) | Paramètres dynamiques stockés en base (table `settings`, portée `core`) : nom affiché, message d’accueil, fuseau d’affichage, rétentions, taille de page par défaut. Rappel en lecture seule de la configuration d’environnement et de la licence (mention d’attribution, conditions additionnelles). |
 | `backups` | `admin` | Liste des sauvegardes de `var/backups`, création d’une sauvegarde complète (base, pièces jointes, configuration des modules). La restauration reste réservée à la console. |
 | `maintenance` | `admin` | Indicateurs (taille de la base, pièces jointes, journal, sessions…), application des rétentions, vidage du cache des manifestes. |
 

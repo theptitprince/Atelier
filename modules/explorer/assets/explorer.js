@@ -1,4 +1,9 @@
 /*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+/*
  * Explorateur — comportements complémentaires (JavaScript natif).
  *
  * Le noyau gère déjà les formulaires data-action, la soumission automatique, la saisie de tags,

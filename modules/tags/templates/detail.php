@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Détail d'un tag partagé : métadonnées, actions de gestion, informations portant le tag, tags voisins.
  * Variables : $tag (array), $usage (int, informations vivantes), $totalUsage (int, corbeille comprise), $author (string), $infos (list : label, dataset_name, module_id,

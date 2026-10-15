@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Corbeille : notes supprimées depuis moins de N jours, restauration et suppression définitive.
  * Variables : $notes (list avec expires_in_days, excerpt), $retention (int), $rights (array), $module, $e, $datetime.

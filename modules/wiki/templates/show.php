@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Lecture d'une page : contenu rendu, tags, lieux, pièces jointes, rétroliens, pages à créer, relations.
  * @var array<string, mixed> $page @var string $html @var list<string> $tags @var list<array<string, mixed>> $points

@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* =========================================================================
    Atelier — feuille de style commune (chargée en permanence)
    Thème clair, neutre et sobre. Toutes les valeurs passent par des variables.
@@ -258,6 +263,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .changelog h3 { font-size: var(--fs-md); margin-top: var(--sp-3); }
 .changelog h4 { margin-top: var(--sp-2); }
 .changelog ul { margin-bottom: var(--sp-2); }
+.about__mention { font-size: var(--fs-lg); }
+.about h3 { font-size: var(--fs-md); margin-top: var(--sp-4); }
+.about ul { margin-bottom: var(--sp-2); }
+.about__notice { margin-top: var(--sp-3); }
+.about__notice summary { cursor: pointer; }
+.about__notice pre { white-space: pre-wrap; max-height: 320px; font-size: var(--fs-xs); margin-top: var(--sp-2); }
 
 /* ---------- Boutons ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); height: var(--control-h); padding: 0 var(--sp-3); border: 1px solid var(--c-border-strong); border-radius: var(--radius); background: var(--c-surface); color: var(--c-text); font-weight: 500; cursor: pointer; white-space: nowrap; text-decoration: none; transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast); user-select: none; }

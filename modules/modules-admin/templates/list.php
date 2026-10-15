@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Liste des modules installés.
  * @var list<array{descriptor: \Atelier\Modules\ModuleDescriptor, groupLabel: string, consumedByOthers: list<string>, isSelf: bool}> $rows

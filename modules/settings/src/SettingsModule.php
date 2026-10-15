@@ -1,5 +1,11 @@
 <?php
 
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+
 declare(strict_types=1);
 
 namespace Atelier\Modules\Settings;
@@ -7,6 +13,7 @@ namespace Atelier\Modules\Settings;
 use Atelier\Error\ValidationException;
 use Atelier\Http\Request;
 use Atelier\Kernel\Backup;
+use Atelier\Kernel\LegalNotice;
 use Atelier\Modules\AbstractModule;
 use Atelier\Modules\ActionResult;
 use Atelier\Modules\ModuleView;
@@ -57,6 +64,7 @@ final class SettingsModule extends AbstractModule
             'Environnement' => $config->string('app.env'),
             'Mode débogage' => $config->isDebug() ? 'activé' : 'désactivé',
             'Version' => $config->string('app.version'),
+            'Licence' => LegalNotice::LICENSE . ', conditions additionnelles (article 7, fichier NOTICE), sans garantie · ' . LegalNotice::MENTION,
             'Pilote de base de données' => $this->ctx->db->driver(),
             'Fichier SQLite' => $this->ctx->db->sqlitePath() ?? '—',
             'Répertoire var' => $config->path('var'),

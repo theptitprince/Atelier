@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Création / édition d'un compte utilisateur.
  * @var array $user @var bool $isNew @var list<array> $groups @var list<int> $memberGroupIds @var array<string, bool> $rights

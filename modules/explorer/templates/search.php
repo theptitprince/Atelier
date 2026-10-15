@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Recherche dans le registre des informations partagées.
  * Variables : $rows (list), $total, $q, $dataset, $moduleFilter, $tagName, $sort, $page, $perPage, $query (array),

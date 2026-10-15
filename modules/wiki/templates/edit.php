@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Éditeur de page : titre, contenu (BBCode + syntaxe wiki), tags, lieux GPS, fichiers à insérer.
  * @var array<string, mixed> $page @var bool $isNew @var list<string> $tags @var list<array<string, mixed>> $points

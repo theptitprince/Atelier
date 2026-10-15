@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Module Entretien : compléments côté client, sans logique métier.
  *  - formulaire d'équipement : affiche le relevé seulement si une unité de compteur est choisie ;

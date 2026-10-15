@@ -1,4 +1,9 @@
 /*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+/*
  * Module Démonstration — JavaScript du module (natif, sans dépendance).
  *
  * Le noyau prend déjà en charge : data-route, data-action (+ confirm/prompt), form[data-action],

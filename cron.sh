@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+# Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+# Conditions additionnelles (article 7) : voir le fichier NOTICE.
 # Tâches de fond Atelier (Linux/macOS) : à planifier toutes les 5 à 15 minutes, par exemple dans crontab -e :
 #   */10 * * * * /chemin/vers/atelier/cron.sh >> /chemin/vers/atelier/var/logs/cron.log 2>&1
 cd "$(dirname "$0")"

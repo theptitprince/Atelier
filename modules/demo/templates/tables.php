@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Tableaux : pagination serveur (25/page), tri sur toutes les colonnes, filtres, sélection et
  * actions groupées, actions par ligne (dont la mise à la corbeille), export CSV, états de ligne, état vide.

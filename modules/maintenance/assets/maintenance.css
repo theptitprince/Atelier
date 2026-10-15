@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* Styles propres au module Entretien, limités à sa racine. */
 .module-maintenance .maintenance__filters { margin-bottom: var(--sp-3); }
 .module-maintenance .maintenance__select { width: auto; min-width: 9rem; max-width: 16rem; }

@@ -1,4 +1,9 @@
 /*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
+/*
  * Atelier — noyau JavaScript (natif, sans dépendance).
  *
  * Responsabilités : appels fetch avec enveloppe commune et CSRF, colonne des modules,
@@ -1753,6 +1758,18 @@
     }
   }
 
+  // Fenêtre « À propos » : mentions légales (licence, conditions additionnelles, éléments tiers).
+  // Le texte est écrit en dur côté serveur (LegalNotice) et ne dépend pas du nom affiché de l'application.
+  async function showAbout(button) {
+    button.classList.add('is-busy');
+    try {
+      const envelope = await api.get('/core/about');
+      const body = util.el('div', { class: 'about prose' });
+      body.innerHTML = envelope.data.html; // HTML produit et échappé côté serveur
+      dialog.open({ title: 'À propos — Atelier v' + envelope.data.version, body, wide: true, buttons: [{ label: 'Fermer', value: 'ok', primary: true }] });
+    } catch (err) { toast.fromError(err); } finally { button.classList.remove('is-busy'); }
+  }
+
   function init() {
     nav.render();
     status.touch();
@@ -1762,6 +1779,7 @@
         const action = button.dataset.coreAction;
         if (action === 'password') session.passwordDialog(false);
         if (action === 'profile') { if (nav.moduleInfo('profile')) tabs.open('profile', null, { push: true }); else session.passwordDialog(false); }
+        if (action === 'about') showAbout(button);
       });
     });
     const versionButton = document.getElementById('status-version');

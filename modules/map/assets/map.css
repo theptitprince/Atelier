@@ -1,3 +1,8 @@
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /* Styles propres au module Carte, limités à sa racine. */
 .module-map .map__layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--sp-4); align-items: start; height: calc(100vh - 170px); min-height: 420px; }
 .module-map .map__side { display: flex; flex-direction: column; gap: var(--sp-3); min-height: 0; height: 100%; }

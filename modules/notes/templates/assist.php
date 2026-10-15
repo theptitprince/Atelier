@@ -1,4 +1,9 @@
 <?php
+/*
+ * Atelier, par ETDEL — https://github.com/theptitprince/Atelier
+ * Copyright (C) 2026 ETDEL — licence GPL-3.0-or-later
+ * Conditions additionnelles (article 7) : voir le fichier NOTICE.
+ */
 /**
  * Assistance : lecture seule des notes d'un autre utilisateur (chaque consultation est journalisée).
  * Variables : $users (list), $target (array|null), $notes (list), $note (array|null), $tags (list<string>),
